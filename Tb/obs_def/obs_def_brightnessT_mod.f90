@@ -78,6 +78,8 @@ use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler,     &
 use typesizes
 use netcdf
 
+use radiative_transfer_mod, only : ss_model
+
 implicit none
 private
 
@@ -127,6 +129,20 @@ character(len=8), parameter ::  IGBPSTRING = 'igbp'
 
 integer :: MAXamsrekey = 24*366  ! one year of hourly data - to start
 integer ::    amsrekey = 0       ! useful length of metadata arrays
+
+!----------------------------------------------------------------------
+! Properties required for a snow layer
+!----------------------------------------------------------------------
+
+type snowprops
+   private
+   real(r4) :: thickness      !  LAYER THICKNESS [M]
+   real(r4) :: density        !  LAYER DENSITY [KG/M3]
+   real(r4) :: grain_diameter !  LAYER GRAIN DIAMETER [M]
+   real(r4) :: liquid_water   !  LAYER LIQUID WATER CONTENT [FRAC]
+   real(r4) :: temperature    !  LAYER TEMPERATURE [K]
+   integer  :: nprops = 5
+end type snowprops
 
 !----------------------------------------------------------------------
 ! namelist items
@@ -369,10 +385,81 @@ type(time_type),     intent(in)  :: obs_time   ! time of observation
 real(r8),            intent(out) :: obs_val    ! model estimate of observation value
 integer,             intent(out) :: istatus    ! status of the calculation
 
+integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
+integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
+
+integer  :: ctrl(4)        ! N_LYRS, N_AUX_INS, N_SNOW_INS, N_FREQ
+real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
+real(r4) :: tetad(N_FREQ)
+real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
+real(r4) :: aux_ins(5)     ! SOIL properties
+real(r4), allocatable, dimension(:,:) :: y ! 2D array 
+real(r4), allocatable, dimension(:,:) :: tb_out
+
+integer  :: ilayer, nlayers
+
+type(snowprops) :: snow
+
 istatus = 1
 obs_val = MISSING_R8
 
-! a wee bit of work left ...
+allocate(y(nlayers,snow%nprops), tb_out(N_POL,N_FREQ))
+
+nlayers  = 1
+freq(:)  = 23.8   ! Ally (GHz?)    6.9, 10.7, 18.7, 23.8, 36.5, 89.0
+tetad(:) = 55.0   ! incidence angle (degrees)
+
+! Ally ... if you have a better way to specify/determine tb_ubc,
+! do it here. Call your atmospheric model to calculate it.
+tb_ubc(:,1) = (/ 2.7, 2.7 /)
+
+ctrl(1) = nlayers
+ctrl(2) = 0              ! not used as far as I can tell
+ctrl(3) = snow%nprops
+ctrl(4) = N_FREQ
+
+do ilayer = 1,nlayers
+   ! For now, just make something up
+
+   snow%thickness      = 0.30   ! meters
+   snow%density        = 230.0  ! kg/m3
+   snow%grain_diameter = 0.003  ! m   (3 mm)
+   snow%liquid_water   = 0.0    ! dry snow (fraction)
+   snow%temperature    = 260.0  ! K
+
+   y(ilayer,1) = snow%thickness
+   y(ilayer,2) = snow%density
+   y(ilayer,3) = snow%grain_diameter
+   y(ilayer,4) = snow%liquid_water
+   y(ilayer,5) = snow%temperature
+enddo
+
+! aux_ins array specifies some auxiliary inputs: (in order): 
+!   n_lyrs,                   number of snow layers
+!   soil temperature [K],     T_GRND
+!   soil saturation [frac], 
+!   soil porosity [frac], 
+!   and the constant of proportionality between the grain size and the correlation length.
+!
+! SNORDSL top snow layer effective grain radius ('m^-6')
+! SNOWGR  effective snow grain radius           ('m^-6, microns')
+
+! FIXME There is a better relationship for the effective snow grain radius
+! from fct_CLM_Output_Quality_Control.m:
+! pci: snow correlation length [mm]
+! pci      = 0.5.*eff_gr_size.*(1-ice_frac);
+
+
+aux_ins = (/ real(nlayers,r4), 273.16, 0.3, 0.4, 0.5 /) ! FIXME These must be replaced by real values. 
+
+! the tb_out array contains the calculated brightness temperature outputs
+! at each polarization (rows) and frequency (columns).
+
+call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+
+write(*,*)'tb_out is ',tb_out
+
+deallocate(y,tb_out)
 
 end subroutine get_brightness_temperature
 
@@ -924,9 +1011,6 @@ endif
 if (obs_val /= MISSING_R8) istatus = 0
 
 end subroutine get_scalar_from_2Dhistory
-
-
-!======================================================================
 
 
 !======================================================================
