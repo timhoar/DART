@@ -4,10 +4,14 @@
 
 module radiative_transfer_mod
 
+use types_mod, only : digits12
+
 implicit none
 private
 
 public :: ss_model
+
+logical :: debug = .true.
 
 contains
 
@@ -38,7 +42,7 @@ SUBROUTINE SS_MODEL(CTRL,FREQ,TETAD,Y,TB_UBC,AUX_INS,TB_OUT)
 !     THE Y ARRAY SPECIFIES SNOW INPUTS.  THERE IS ONE ROW FOR EACH SNOW
 !       LAYER SPECIFIED IN CTRL(1), ONE COLUMN SPECIFIED FOR EACH SNOW
 !       VARIABLE,IN ORDER: LAYER THICKNESS [M], LAYER DENSITY [KG/M3],
-!       LAYER GRAIN DIAMETER [M], LAYER LIQUID WATER CONTENT [FRAC],
+!       LAYER *specific* GRAIN DIAMETER [M], LAYER LIQUID WATER CONTENT [FRAC],
 !       LAYER TEMPERATURE [K].
 !     THE TB_UBC ARRAY SPECIFIES THE UPPER BOUNDARY CONDITION BRIGHTNESS
 !       TEMPERATURE (SKY, VEGETATION, COSMIC).  IT HAS TWO ROWS (FOR H AND V
@@ -50,6 +54,9 @@ SUBROUTINE SS_MODEL(CTRL,FREQ,TETAD,Y,TB_UBC,AUX_INS,TB_OUT)
 !
 !     THE TB_OUT ARRAY CONTAINS THE CALCULATED BRIGHTNESS TEMPERATURE OUTPUTS
 !       AT EACH POLARIZATION (ROWS) AND FREQUENCY (COLUMNS).
+!
+!     *modified 2 July 2013 by Ally Toure to use specific grain diameter instead of
+!     measured grain diameter.
 !            
 ! ----------------------------------------------------------------------------
 !
@@ -142,7 +149,18 @@ REAL TCAN_V,TCAN_H,CAN_LOSS_H,CAN_LOSS_V,EFSG_H,EFSG_V,TFSG_H,&
 
 integer :: pixel,replicate,rank,meas !dummy arguments for outputting
 
+real, allocatable, dimension(:) :: ice_frac
+
 !  B. CONTROL STATEMENTS 
+
+if ( debug ) then
+   write(*,*)'ss_model:    ctrl ',ctrl
+   write(*,*)'ss_model:    freq ',freq
+   write(*,*)'ss_model:   tetad ',tetad
+   write(*,*)'ss_model:       y ',y
+   write(*,*)'ss_model:  tb_ubc ',tb_ubc
+   write(*,*)'ss_model: aux_ins ',aux_ins
+endif
 
 NFREQ=CTRL(4)  ! THIS CODE LOOPS OVER THE NUMBER OF FREQUENCIES FOR ONE SET
                ! OF SNOW PROPERTIES.
@@ -153,16 +171,19 @@ NUM=ctrl(1) ! NUMBER OF LAYERS IN THE SNOWPACK
 
 ALLOCATE(DI(1:NUM),ROIKG(1:NUM),GDI(1:NUM),WIFR(1:NUM),TI(1:NUM))
 
-DI(1:NUM)=   Y(1:NUM,1)
-ROIKG(1:NUM)=Y(1:NUM,2)
-GDI(1:NUM)=  Y(1:NUM,3)
-WIFR(1:NUM)= Y(1:NUM,4)
-TI(1:NUM)=   Y(1:NUM,5)
+DI(   1:NUM)   = Y(1:NUM,1)    ! snow thickness
+ROIKG(1:NUM)   = Y(1:NUM,2)    ! snow density
+GDI(  1:NUM)   = Y(1:NUM,3)    ! specific grain diameter
+WIFR( 1:NUM)   = Y(1:NUM,4)    ! liquid water fraction
+TI(   1:NUM)   = Y(1:NUM,5)    ! snow temperature
 
-GND_TEMP=AUX_INS(2)
-SOILSATURATION=AUX_INS(3)
-SASTPOROS=AUX_INS(4)
-SNGDPCI=AUX_INS(5)
+GND_TEMP       = AUX_INS(2)    ! Ground temperature
+SOILSATURATION = AUX_INS(3)    ! soil saturation
+SASTPOROS      = AUX_INS(4)    ! soil porosity (fraction)
+SNGDPCI        = AUX_INS(5)    ! proportionality constant
+
+write(*,*)'ss_model: Y  is ',y
+write(*,*)'ss_model: TI is ',ti
 
 GND_MV=SOILSATURATION*SASTPOROS
 
@@ -206,14 +227,24 @@ DO K=1,NFREQ
 
   PI=3.14159
 
-
   !  A.2. ALLOCATE AND UNIT CONVERSION STATEMENTS
-  ALLOCATE(ROI(1:NUM),GDIMM(1:NUM),PCI(1:NUM))
+  ALLOCATE(ROI(1:NUM),GDIMM(1:NUM),PCI(1:NUM),ice_frac(1:NUM))
   
-  ROI=ROIKG/1000
-  TETA=TETAD(K)*PI/180
-  GDIMM=GDI*1000
-  PCI=GDIMM*SNGDPCI
+  ROI  = ROIKG/1000
+  TETA = TETAD(K)*PI/180
+
+  ! Original correlation length used GDI as 'measured' grain diameter (Dmax).
+  ! Code modified 2 July 2013 to use 'effective' grain diameter. TJH 
+  ! FIXME ... there may be a better algorithm for correlation length.
+
+  GDIMM = GDI*1000
+  ! PCI   = GDIMM*SNGDPCI   ! TJH
+
+  ! ice_frac = snow_density/ice_density
+  ice_frac = ROI(:) / 0.917
+  pci(:)   = 0.5 * GDIMM * (1.0 - ice_frac)
+
+  deallocate(ice_frac)
 
   !  A.3. DETERMINE WHICH SCATTERING COEFFICIENT COMPUTATION METHOD TO 
   !  USE THE VALUE OF 0.33 USED HERE FROM PERSONAL CORRESPONDENCE WITH 
@@ -230,7 +261,7 @@ DO K=1,NFREQ
 !DURING MY WORK WITH SSIB3+MEMLS TO MODEL GBMR-7 TB, I NEEDED TO USE SCCHO=2
 !SCCHO=2
 !IN ORDER TO SAVE TIME FOR THE SYNTHETIC TESTS, HOWEVER, I USED SCCHO=1
-SCCHO=1
+  SCCHO=1
 
   ! B.  COMPUTE RADIATIVE TRANSFER PROPERTIES OF SNOW
 
@@ -239,6 +270,7 @@ SCCHO=1
     XEPSI(1:NUM),XEPSII(1:NUM),XTEI(1:NUM+1),XSIH(1:NUM),&
     XSIV(1:NUM),XDI(1:NUM),XDEI(1:NUM),XTI(1:NUM),XPCI(1:NUM),&
     XWIFR(1:NUM),XGAI(1:NUM))
+
 
   CALL RO2EPSD(ROI,TI,FREQ(K),EPSI,EPSII,NUM,pixel,replicate,rank,meas,k)
   CALL MIXMOD(FREQ(K),TI,WIFR,EPSI,EPSII,NUM)
@@ -346,6 +378,7 @@ END DO
 
 END SUBROUTINE SS_MODEL
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE ABSCOEFF(EPSI,EPSII,TI,FREQ,WIFR,GAI,NUM)
@@ -385,6 +418,7 @@ PI=3.14159
 GAI=((2*PI*10*FREQ)*EPSII)/(C*(EPSI-(EPSII**2/4*EPSI))**0.5)
 
 END SUBROUTINE ABSCOEFF
+
 
 ! -------------------------------------------------------------------------
 !
@@ -426,6 +460,7 @@ KSI=ATAN(REAL(NUMERATOR)/REAL(DENOMINATOR))
 TETAD_SOIL=KSI/PI*180
 
 END SUBROUTINE AOT
+
 
 ! -------------------------------------------------------------------------
 !
@@ -611,6 +646,7 @@ EV=1-(TBV100-TBV0)/100
 
 END SUBROUTINE EMISSIVITY
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE EPSICE(TI,FREQ,EICE,NUM)
@@ -638,21 +674,23 @@ SUBROUTINE EPSICE(TI,FREQ,EICE,NUM)
 
 IMPLICIT NONE
 
-INTEGER, INTENT(IN) :: NUM
-REAL, INTENT(IN) :: TI(NUM),FREQ
-REAL, INTENT(OUT) ::  EICE(NUM)
-REAL PP(NUM),B,B1,B2,DB(NUM),BETA(NUM),ALPHA(NUM)
+integer, intent(in)  :: num
+real,    intent(in)  :: ti(num),freq
+real,    intent(out) :: eice(num)
 
-PP=(300/TI)-1
-B=335.25
-B1=0.0207
-B2=1.16E-11
-DB=EXP(-10.02+0.0364*(TI-273))
-BETA=((B1*EXP(B/TI))/(TI*(EXP(B/TI)-1)**2))+B2*FREQ**2+DB
-ALPHA=(0.00504+0.0062*PP)*EXP(-22.1*PP)
-EICE=ALPHA/FREQ+BETA*FREQ
+real(digits12) :: pp(num),b,b1,b2,db(num),beta(num),alpha(num)
 
-END SUBROUTINE EPSICE
+pp    = (300.0_digits12/ti) - 1.0_digits12
+b     = 335.25_digits12
+B1    = 0.0207_digits12
+B2    = 1.16E-11_digits12
+db    = exp(-10.02_digits12 + 0.0364_digits12*(ti - 273.0_digits12))
+beta  = ((b1*exp(b/ti))/(ti*(exp(b/ti)-1.0_digits12)**2))+b2*freq**2+db
+alpha = (0.00504_digits12+0.0062_digits12*pp)*exp(-22.1_digits12*pp)
+eice  = alpha/freq+beta*freq
+
+end subroutine epsice
+
 
 ! -------------------------------------------------------------------------
 !
@@ -708,6 +746,7 @@ END DO
 DEALLOCATE(VFI)
 
 END SUBROUTINE EPSR
+
 
 ! -------------------------------------------------------------------------
 !
@@ -835,6 +874,7 @@ EW_I=(EW0-EW_INF)*2*PI*F*TW/(1+(2*PI*F*TW)**2)+SIGMA/(2*PI*E0*F)
 
 END SUBROUTINE EPSW
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE FRESNELC(TEI,EPSI,SIH,SIV,NUM)
@@ -892,6 +932,7 @@ DEALLOCATE(EPSI_LOCAL)
 
 END SUBROUTINE FRESNELC
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE FRESNELRC(TEI,EPSI,FH,FV,NUM)
@@ -944,6 +985,7 @@ END DO
 
 END SUBROUTINE FRESNELRC
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE GAMMAH(EPSS,THETA,GAMMAH_VAR)
@@ -975,6 +1017,7 @@ GAMMAH_VAR=(ABS((COSTHETA-NELIO)/(COSTHETA+NELIO)))**2
 
 END SUBROUTINE GAMMAH
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE GAMMAV(EPSS,THETA,GAMMAV_VAR)
@@ -1005,6 +1048,7 @@ NELIO=SQRT(EPSS-SIN(THETA_RAD)**2)
 GAMMAV_VAR=(ABS((EPSS*COSTHETA-NELIO)/(EPSS*COSTHETA+NELIO)))**2
 
 END SUBROUTINE GAMMAV
+
 
 ! -------------------------------------------------------------------------
 !
@@ -1068,6 +1112,7 @@ DEALLOCATE( X2,SII,SIO,COSTE,SI2CHI,FUNC )
 
 END SUBROUTINE INTEGRFI
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE INTEGRMUI(XX,MINI,MAXI,MINO,MAXO,STEPS,NUM,INTEGR,ARG_LENGTH)
@@ -1121,6 +1166,7 @@ INTEGR=INTEGR/DMU
 DEALLOCATE( DMU,DELTA,F0,MUI,FUNC )
 
 END SUBROUTINE INTEGRMUI
+
 
 ! -------------------------------------------------------------------------
 !
@@ -1189,6 +1235,7 @@ INTEGR=INTEGR/2
 DEALLOCATE( DMU,DELTA,F0,MUO,FUNC )
 
 END SUBROUTINE INTEGRMUO
+
 
 ! -------------------------------------------------------------------------
 !
@@ -1364,6 +1411,7 @@ END FUNCTION EYEI
 
 END SUBROUTINE LAYER
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE MIXMOD(FREQ,TI,WIFR,EPSI,EPSII,NUM)
@@ -1454,6 +1502,7 @@ DEALLOCATE( ESA,ESB,ESC,EUA, EUB,EUC,FA,FB,FC,EEA,EEB,EEC,FWA,FWB,&
 
 END SUBROUTINE MIXMOD
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE PFADC(TETA,DI,EPSI,GS6,DEI,TEI,TSCAT,NUM)
@@ -1515,6 +1564,7 @@ DEALLOCATE (  NS,COSTETASN,COSC,COSTETASC,TAUSCAT,COSTETA )
 
 END SUBROUTINE PFADC
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE PFADI(TEI,DI,DEI,NUM)
@@ -1548,6 +1598,7 @@ REAL, INTENT(OUT) :: DEI(NUM)
 DEI=DI/COS(TEI(1:NUM))
 
 END SUBROUTINE PFADI
+
 
 ! -------------------------------------------------------------------------
 !
@@ -1601,6 +1652,7 @@ END DO
   
 END SUBROUTINE POLDER
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE POLMIX(TSCAT,SIH,SIV,NUM)
@@ -1649,6 +1701,7 @@ DEALLOCATE( TSCATLONG,SMEAN,DELTAS )
 
 END SUBROUTINE POLMIX
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE RO2EPSD(ROI,TI,FREQ,EPSI,EPSII,NUM,pixel,replicate,rank,meas,fn)
@@ -1694,6 +1747,11 @@ integer,intent(in) :: pixel,replicate,rank,meas,fn
 ALLOCATE( EICE(NUM),F(NUM),A(NUM),EPSP(NUM),A3(NUM),EA(NUM),EA3(NUM), & 
      K1(NUM),K3(NUM),KSQ(NUM) )
 
+write(*,*)'RO2EPSD: ti   ',ti
+write(*,*)'RO2EPSD: freq ',freq
+write(*,*)'RO2EPSD: eice ',eice
+write(*,*)'RO2EPSD: num  ',num
+
 CALL EPSICE(TI,FREQ,EICE,NUM)
 
 CALL EPSR(ROI,NUM,EPSI)
@@ -1726,6 +1784,7 @@ EPSII=EPSI**0.5*EICE*KSQ*F
 DEALLOCATE( EICE,F,A,EPSP,A3,EA,EA3,K1,K3,KSQ )
 
 END SUBROUTINE RO2EPSD
+
 
 ! -------------------------------------------------------------------------
 !
@@ -1784,6 +1843,7 @@ DEALLOCATE( MYGAMMA,T0I,R0I,T02,R02 )
 
 END SUBROUTINE RT
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE RUFFSOIL(F,MV,T,KSIGMA,THETA,EPS_TOP,&
@@ -1840,6 +1900,7 @@ ELSE
 END IF
 
 END SUBROUTINE RUFFSOIL
+
 
 ! -------------------------------------------------------------------------
 !
@@ -1947,6 +2008,7 @@ GBIV=(GB6+DGB0V)+GTR*GC6
 DEALLOCATE( VFI,KP,GB6,GC6,GF6,GTR,OMEGA )
 
 END SUBROUTINE SCCOEFF
+
 
 ! -------------------------------------------------------------------------
 !
@@ -2395,6 +2457,7 @@ DEALLOCATE( NS,FI, X )
  
 END SUBROUTINE SLRED
 
+
 ! -------------------------------------------------------------------------
 !
 SUBROUTINE SNOWAO(V,A,NUM)
@@ -2437,6 +2500,542 @@ DO I=1,NUM
 END DO
 
 END SUBROUTINE SNOWAO
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE INVERT_MATRIX(MA,INV,N)
+!
+! -------------------------------------------------------------------------
+!     
+!     MATRIX INVERSION ALGORITHM OBTAINED FROM GOTOP FORTRAN 90 TEXT,
+!     ISBN:957-566-172-9
+!
+!     COPIED FROM THE COMPANION CD TO THAT TEXT BY MIKE, 1 APRIL 2005
+
+IMPLICIT NONE
+
+INTEGER,INTENT(IN) :: N
+REAL,INTENT(IN) :: MA(N,N)
+REAL,INTENT(OUT) :: INV(N,N)
+REAL,dimension(:,:),allocatable :: temp
+INTEGER I,J
+ 
+allocate(temp(n,n))
+
+DO I=1,N
+  DO J=1,N
+    TEMP(I,J)=MA(I,J)
+    INV(I,J)=0.
+  END DO
+  INV(I,I)=1.
+END DO
+
+!print *, 'before upper call'
+CALL UPPER(TEMP,INV,N)
+!print *, 'before lower call'
+CALL LOWER(TEMP,INV,N)
+
+!print *, 'before inv calc'
+DO I=1,N
+  DO J=1,N
+    INV(I,J)=INV(I,J)/TEMP(I,I)
+  END DO
+END DO
+
+!print *, 'before deallocation'
+deallocate(temp)
+
+CONTAINS
+
+SUBROUTINE UPPER(M,S,N)
+INTEGER,INTENT(IN):: N
+INTEGER I,J,K
+REAL E
+REAL,INTENT(INOUT):: M(N,N)
+REAL,INTENT(INOUT):: S(N,N)
+
+DO I=1,N-1
+  DO J=I+1,N            
+    E=M(J,I)/M(I,I)
+    DO K=1,N
+      M(J,K)=M(J,K)-M(I,K)*E
+      S(J,K)=S(J,K)-S(I,K)*E
+    END DO
+  END DO
+END DO
+
+END SUBROUTINE UPPER
+
+SUBROUTINE LOWER(M,S,N)
+INTEGER,INTENT(IN):: N
+REAL,INTENT(INOUT):: M(N,N)
+REAL,INTENT(INOUT):: S(N,N)
+INTEGER I,J,K
+REAL E
+
+DO I=N,2,-1
+  DO J=I-1,1,-1         
+    E=M(J,I)/M(I,I)
+    DO K=1,N
+      M(J,K)=M(J,K)-M(I,K)*E
+      S(J,K)=S(J,K)-S(I,K)*E 
+    END DO
+  END DO
+END DO
+
+END SUBROUTINE LOWER
+
+END SUBROUTINE INVERT_MATRIX
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE ATM_MODEL(N_F,N_INS,FREQ,THETAD,ATM_IN,TSKY,TRAN)
+!
+! -------------------------------------------------------------------------
+
+!     CODE ORIGINALLY OBTAINED IN MATLAB FROM PULLIAINEN AS SKYTEMP 
+!
+!
+!     FUNCTION FOR CALCULATING THE ATMOSPHERIC BRIGHTNESS TEMPERATURE
+!      AND TRANSMISSIVITY
+!     
+!     BY K. TIGERSTEDT 1997
+!
+!     [TSKY,TRAN] = SKYTEMP(FREQ,THETAD,STEP,P0,T0,MONTH,MOIST0) 
+!
+!       FREQ RANGE; FREQ=[1 5 10 15 19:24 30 40 50 55:65 70 80 90 100]  [GHZ]
+!       STEP SIZE; TYP.  STEP = 0.05 [KM] (NOW HARDCODED IN)
+!       GROUND PRESSURE; TYP. P0 = 1013 [MBAR] : ATM_IN(1)
+!       GROUND TEMP.; TYP. T0 = 293.15 [K] : ATM_IN(2)
+!       SEASON (MONTH) [1..12]; : ATM_IN(3)
+!       GROUND-LEVEL WATER-VAPOUR; TYP. MOIST0 = 7.5 [G/M^3] ATM_IN(4)
+!
+!       NOTE: CLOUD DATA NOT USED YET: HERE IS OLD COMMENT:
+!       CLOUD DATA: CLOUD_DATA = [CLOUD_ANAL CL_LOWER CL_UPPER MV RC ALFA GAMMA]
+!
+!       NOTE: THIS BIT ABOUT CLOUDS IRRELEVANT, SINCE CLOUDS NOT INCLUDED HERE.
+!
+!       WHERE 
+!             CLOUD_ANAL  = 0/1   INCLUSION OF CLOUD ANALYSIS
+!             CL_LOWER    = LOWER BOUNDARY OF CLOUD [KM]
+!             CL_UPPER    = UPPER BOUNDARY OF CLOUD [KM]
+!             MV          = LIQUID WATER CONTENT OF CLOUD [G/M^3]
+!             RC          = MEAN DROP RADIUS 
+!             ALFA, GAMMA = SHAPE PARAMETERS
+!
+!       1.0   KT  ? ??? 97
+!       2.0   MD  2 JUN 05  TRANSLATED TO FORTRAN
+!       2.1   MD 19 SEP 05  MODIFIED TO TAKE INPUTS AS ARRAYS,HARDCODE 'STEPS'
+!   
+!   USES: PRES
+!         TEMP
+!         WVPROF
+!         OXABSORP
+!         WVABSORB
+!
+
+IMPLICIT NONE
+
+INTEGER,INTENT(IN) :: N_F,N_INS
+REAL, INTENT(IN) :: ATM_IN(N_INS),FREQ(N_F),THETAD(N_F)
+REAL :: STEP,P0,T0,MOIST0
+REAL, INTENT(INOUT) :: TSKY(N_F),TRAN(N_F)
+INTEGER I,J,N_STEPS,MONTH
+REAL MYCEILING,TCOSMIC,T0K,PI,ATTCO,TAU_Z,TATM,KAPPA_DZ_OLD,&
+       H,P,T,WV,CLOUD_SCA,CLOUD_EXT,CLOUD_ABS,K_O2,K_WV,KAPPA_DZ,&
+       TOTAL_TAU_Z,TOTAL_ATTCO
+real,dimension(:),allocatable :: theta
+
+allocate(theta(n_f))
+
+! EXTRACT INPUT DATA
+P0=ATM_IN(1)
+T0=ATM_IN(2)
+MONTH=ATM_IN(3)
+MOIST0=ATM_IN(4)
+
+STEP=0.05 ! THIS LINE ADDED BY MIKE 9/19/05: HARDCODE STEP
+
+MYCEILING=20.
+TCOSMIC=2.7
+T0K=273.15
+PI=3.14159
+THETA=THETAD/180*PI
+
+N_STEPS=MYCEILING/STEP+1
+
+DO I=1,N_F
+  ATTCO=0.0
+  TAU_Z=0.0
+  TATM=0.0
+  KAPPA_DZ_OLD=0.0
+
+  DO J=1,N_STEPS
+    H=MYCEILING-STEP*(J-1)
+    CALL PRES(P0,H,P)
+    CALL TEMP(T0,H,MONTH,T)
+    CALL WVPROF(MOIST0,H,WV)
+    ! FOR NOW, ASSUME THAT THERE ARE NO CLOUDS
+    CLOUD_SCA=0.0
+    CLOUD_EXT=0.0
+    CLOUD_ABS=0.0
+
+    ! NOTE THAT WE APPROXIMATE T_UP AS T_DOWN... SEE TEXT ON P.283
+    CALL OXABSORP(FREQ(I),T,P,K_O2)
+    CALL WVABSORB(FREQ(I),T,P,WV,K_WV)  
+    ! PART OF THE INTEGRAND IN 5.44
+    KAPPA_DZ=(K_O2+K_WV)*STEP/(10*LOG10(EXP(1.0)))+CLOUD_ABS*STEP*1000
+    ! PART OF THE INTEGRAND IN 5.44
+    TAU_Z=TAU_Z+KAPPA_DZ_OLD/COS(THETA(I))
+    ! THIS IS 5.47, L_THETA
+    ATTCO=EXP(-TAU_Z)
+    ! THIS MAY BE 5.49
+    TATM=TATM+(1-EXP(-KAPPA_DZ/COS(THETA(I))))*T*ATTCO
+    KAPPA_DZ_OLD=KAPPA_DZ+CLOUD_SCA*STEP*1000
+  END DO
+  TOTAL_TAU_Z=TAU_Z+KAPPA_DZ_OLD/COS(THETA(I))
+  TOTAL_ATTCO=EXP(-TOTAL_TAU_Z)
+   
+  TSKY(I) = TATM
+  TRAN(I) = TOTAL_ATTCO       
+END DO
+
+deallocate(theta)
+
+END SUBROUTINE ATM_MODEL
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE PRES(P0,Z,P)
+!
+! -------------------------------------------------------------------------
+!     FUNCTION FOR CALCULATING VERTICAL PRESSURE PROFILES
+!     ASSUME EXPONETIAL PRESSURE PROFILE
+!     P0 = SEA LEVEL PRESSURE
+!     Z = HEIGHT [KM]
+!
+!     HISTORY
+!       1.0   KT ? ??? ??
+!       2.0   MD 6 JUN 05  TRANSLATED TO FORTRAN
+!
+!     CODE ORIGINALLY OBTAINED IN MATLAB FROM PULLIAINEN
+
+
+IMPLICIT NONE
+
+REAL,INTENT(IN)::P0,Z
+REAL,INTENT(OUT)::P
+REAL ZP
+   
+ZP=7.7 ! PRESSURE SCALE HEIGHT 7.7 KM
+P=P0*EXP(-Z/ZP)
+
+END SUBROUTINE PRES
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE TEMP(T0,Z,MONTH,T)
+!
+! -------------------------------------------------------------------------
+!     FUNCTION FOR CALCULATING VERTICAL TEMPERATURE PROFILE
+!     T0 = GROUND TEMPERATURE [K]
+!     Z = HEIGHT [KM]
+!     MONTH = [1..12]
+!
+!     HISTORY
+!       1.0   KT ? MAR 97  PROGRAMMED
+!       1.1   KT ? DEC 97  UPDATED
+!       2.0   MD 6 JUN 05  TRANSLATED TO FORTRAN
+!
+!     CODE ORIGINALLY OBTAINED IN MATLAB FROM PULLIAINEN
+
+INTEGER,INTENT(IN) :: MONTH
+REAL,   INTENT(IN) :: T0,Z
+REAL,   INTENT(OUT):: T
+
+REAL :: H1,H2,G2,K1,K2,K3 
+
+real :: T1, T2
+
+H1=8
+
+IF (MONTH.EQ.1)THEN
+        K1 = 2.958E-3
+        K2 = -5.832E-3
+        K3 = 3.771E-4
+        T2 = 217
+        H2 = 8.5
+ELSEIF (MONTH.EQ.2)THEN
+        K1 = -2.196E-3
+        K2 = -4.419E-3
+        K3 = 2.673E-4
+        T2 = 218.33
+        H2 = 8.75
+ELSEIF (MONTH.EQ.3)THEN
+        K1 = -1.717E-2
+        K2 = -4.056E-4
+        K3 = -4.252E-5
+        T2 = 219.67
+        H2 = 9
+ELSEIF (MONTH.EQ.4)THEN
+        K1 = -2.702E-2
+        K2 = 2.327E-3
+        K3 = -2.521E-4
+        T2 = 221.00
+        H2 = 9.25
+ELSEIF (MONTH.EQ.5)THEN
+        K1 = -3.33E-2
+        K2 = 3.915E-3
+        K3 = -3.616E-4
+        T2 = 222.33
+        H2 = 9.5
+ELSEIF (MONTH.EQ.6)THEN
+        K1 = -3.461E-2
+        K2 = 4.154E-3
+        K3 = -3.632E-4
+        T2 = 223.67
+        H2 = 9.75
+ELSEIF (MONTH.EQ.7)THEN
+        K1 = -3.213E-2
+        K2 = 3.69E-3
+        K3 = -3.317E-4
+        T2 = 225
+        H2 = 10.0
+ELSEIF (MONTH.EQ.8)THEN
+        K1 = -3.05E-2
+        K2 = 3.423E-3
+        K3 = -3.182E-4
+        T2 = 223.67
+        H2 = 9.75
+ELSEIF (MONTH.EQ.9)THEN
+        K1 = -2.928E-2
+        K2 = 3.543E-3
+        K3 = -3.472E-4
+        T2 = 222.33
+        H2 = 9.5
+ELSEIF (MONTH.EQ.10)THEN
+        K1 = -1.997E-2
+        K2 = 1.777E-3
+        K3 = -2.621E-4
+        T2 = 221
+        H2 = 9.25
+ELSEIF (MONTH.EQ.11)THEN
+        K1 = -1.533E-2
+        K2 = 8.062E-4
+        K3 = -2.24E-4
+        T2 = 219.67
+        H2 = 9.0
+ELSEIF (MONTH.EQ.12)THEN
+        K1 = -5.856E-3
+        K2 = -2.773E-3
+        K3 = 1.086E-4
+        T2 = 218.33
+        H2 = 8.75
+END IF
+
+T1 = T0*(1 + K1*H1 + K2*H1**2 + K3*H1**3)
+
+IF (Z.LT.8) THEN
+        T = T0*(1 + K1*Z + K2*Z**2 + K3*Z**3)
+ELSEIF (Z.GE.8.AND.Z.LT.H2)THEN
+        T = (T1-T2)*(Z-H2) / (H1 - H2) + T2
+ELSEIF (Z.GE.H2.AND.Z.LE.20) THEN
+        T = T2
+END IF      
+ 
+END SUBROUTINE TEMP
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE WVPROF(M0,Z,M)
+!
+! -------------------------------------------------------------------------
+!     FUNCTION FOR CALCULATING VERTICAL WATER VAPOUR PROFILES
+!     ASSUME EXPONETIAL PRESSURE PROFILE
+!     M0 = SEA LEVEL PRESSURE
+!     Z = HEIGHT [KM]
+!
+!     HISTORY
+!       1.0   KT ? ??? ??
+!       2.0   MD 6 JUN 05  TRANSLATED TO FORTRAN
+!
+!     CODE ORIGINALLY OBTAINED IN MATLAB FROM PULLIAINEN
+
+IMPLICIT NONE
+
+REAL,INTENT(IN)::M0,Z
+REAL,INTENT(OUT)::M
+REAL ZM
+   
+ZM=2.35 ! WATER VAPOUR SCALE HEIGHT 2.35 KM
+M=M0*EXP(-Z/ZM)
+
+END SUBROUTINE WVPROF
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE OXABSORP(F,T,P,K_O2)
+!
+! -------------------------------------------------------------------------
+!     FUNCTION FOR CALCULATING OXYGEN ABSORPTION COEFFICIENT [DB/KM]
+!     F IS FREQUENCY IN GHZ
+!     T IS TEMPERATURE IN KELVINS
+!     P IS PRESSURE IN MILLIBARS
+!
+!     HISTORY
+!       1.0   KT ? NOV 96  PROGRAMMED
+!       1.1   ?? ? FEB 98  ABSORPTION DATA NOW INCLUDED IN FUNCTION
+!       2.0   MD 6 JUN 05  TRANSLATED TO FORTRAN
+!
+!     CODE ORIGINALLY OBTAINED IN MATLAB FROM PULLIAINEN
+
+ IMPLICIT NONE
+
+ REAL,INTENT(IN):: F,T,P
+ REAL,INTENT(OUT)::K_O2
+ INTEGER I
+ REAL OXFIC(20,4),FNP(20),FNM(20),YNP(20),YNM(20),SIGMA,&
+        GAN,GAB,DNP,DNM,GNPLUSF,GNPLUSMF,GNMINUSF,GNMINUSMF,&
+        THETAN,FDOT,NR
+ INTEGER N
+ 
+
+ ! THESE DATA IN TABLE 5.4 IN ULABLY (1981) 
+ OXFIC=RESHAPE((/&
+ 56.2648,118.7503,4.51e-4,-2.14e-5,& 
+ 58.4466,62.4863,4.94e-4,-3.78e-4,& 
+ 59.5910,60.3061,3.52e-4,-3.92e-4,&
+ 60.4348,59.1642,1.86e-4,-2.68e-4,&
+ 61.1506,58.3239,3.30e-5,-1.13e-4,&
+ 61.8002,57.6125,-1.03e-4,3.44e-5,&
+ 62.4112,56.9682,-2.23e-4,1.65e-4,&
+ 62.9980,56.3634,-3.32e-4,2.84e-4,&
+ 63.5685,55.7838,-4.32e-4,3.91e-4,&
+ 64.1278,55.2214,-5.26e-4,4.93e-4,&
+ 64.6789,54.6711,-6.13e-4,5.84e-4,&
+ 65.2241,54.1300,-6.99e-4,6.76e-4,&
+ 65.7647,53.5957,-7.74e-4,7.55e-4,&
+ 66.3020,53.0668,-8.61e-4,8.47e-4,&
+ 66.8367,52.5422,-9.11e-4,9.01e-4,&
+ 67.3694,52.0212,-1.03e-3,1.03e-3,&
+ 67.9007,51.5030,-9.87e-4,9.86e-4,&
+ 68.4308,50.9873,-1.32e-3,1.33e-3,&
+ 68.9601,50.4736,-7.07e-4,7.01e-4,&
+ 69.4887,49.9618,-2.58e-3,2.64e-3/),&
+ (/20,4/),ORDER=(/2,1/))
+
+ FNP=OXFIC(:,1)
+ FNM=OXFIC(:,2)
+ YNP=OXFIC(:,3)
+ YNM=OXFIC(:,4)
+ 
+ SIGMA=0
+
+ DO N=1,39,2
+   I=(N-1)/2+1
+   
+   ! THESE NEXT FOUR STATEMENTS ARE FROM 5.37-5.39 IN ULABLY (1981)
+   GAN = 1.18*(P/1013)*(300/T)**0.85
+   GAB = 0.49*(P/1013)*(300/T)**0.89
+
+   ! THIS PART JUST CHANGED... MD
+   NR=REAL(N)
+   DNP = SQRT(NR*(2.*NR+3.)/((NR+1.)*(2.*NR+1.)))
+   DNM = SQRT((NR+1.)*(2.*NR-1)/(NR*(2.*NR+1.)))
+
+   !THESE CORRESPOND TO 5.35
+   GNPLUSF=(GAN*DNP**2+P*(F-FNP(I))*YNP(I))/((F-FNP(I))**2+GAN**2)
+   GNPLUSMF=(GAN*DNP**2+P*(-F-FNP(I))*YNP(I))/((-F-FNP(I))**2+GAN**2)
+   GNMINUSF=(GAN*DNM**2+P*(F-FNM(I))*YNM(I))/((F-FNM(I))**2+GAN**2)
+   GNMINUSMF=(GAN*DNM**2+P*(-F-FNM(I))*YNM(I))/((-F-FNM(I))**2+GAN**2)
+
+   !THIS CORRESPONDS TO 5.36
+   THETAN = 4.6E-3*(300/T)*(2*N+1)*EXP(-6.89E-3*N*(N+1)*(300/T))
+
+   ! THIS CORRESPONDS TO THE SECOND TERM ON RHS OF 5.34
+   SIGMA = SIGMA + THETAN*(GNPLUSF + GNPLUSMF + GNMINUSF + GNMINUSMF)
+ END DO
+
+ !THIS CORRESPONDS TO 5.34
+ FDOT = 0.7*GAB/(F**2 + GAB**2) + SIGMA
+
+ !THIS CORRESPONDS TO 5.33
+ K_O2 = 1.61E-2*F**2*(P/1013)*(300/T)**2*FDOT
+
+ END SUBROUTINE OXABSORP
+
+
+! -------------------------------------------------------------------------
+!
+SUBROUTINE WVABSORB(F,T,P,PV,K_WV)
+!
+! -------------------------------------------------------------------------
+!     FUNCTION FOR CALCULATING WATER-VAPOR ABSORPTION [DB/KM]
+!
+!     F IS FREQUENCY IN GHZ
+!     T IS TEMPERATURE IN KELVINS
+!     P IS PRESSURE IN MILLIBARS
+!     PV = WATER-VAPOR DENSITY IN G/M^3
+!
+!     HISTORY
+!       1.0   KT ? NOV 96
+!       2.0   MD 6 JUN 05  TRANSLATED TO FORTRAN
+!
+!     CODE ORIGINALLY OBTAINED IN MATLAB FROM PULLIAINEN
+
+REAL,INTENT(IN)::F,T,P,PV
+REAL,INTENT(OUT)::K_WV
+INTEGER I
+REAL WVLINE(10,6),FI(10),EI(10),AI(10),GI0(10),AI_LC(10),XI(10),&
+       GI,SIGMA,KH2O,DKAPPA
+
+!     TABLE 5.3 IN ULABLY (1981)
+WVLINE=RESHAPE((/&
+22.23515,  644.0,  1.0,   2.85, 1.75, 0.626,&
+183.31012, 196.0,  41.9,  2.68, 2.03, 0.649,&
+323.00000, 1850.0, 334.4, 2.30, 1.95, 0.420,&
+325.15380, 454.0,  115.7, 3.03, 1.85, 0.619,&
+380.19680, 306.0,  651.8, 3.19, 1.82, 0.630,&
+390.00000, 2199.0, 127.0, 2.11, 2.03, 0.330,&
+436.00000, 1507.0, 191.4, 1.50, 1.97, 0.290,&
+438.00000, 1070.0, 697.6, 1.94, 2.01, 0.360,&
+442.00000, 1507.0, 590.2, 1.51, 2.02, 0.332,&
+448.00080, 412.0,  973.1, 2.47, 2.19, 0.510/),&
+ (/10,6/),ORDER=(/2,1/))
+
+FI = WVLINE(:,1)
+EI = WVLINE(:,2)
+AI = WVLINE(:,3)
+GI0 = WVLINE(:,4)
+AI_LC = WVLINE(:,5)
+XI = WVLINE(:,6)
+
+SIGMA = 0.
+
+DO I=1,10
+  !THIS CORRESPONDS TO 5.29
+  GI=GI0(I)*(P/1013.)*(300./T)**XI(I)*(1.+10.**(-2.)*AI_LC(I)*PV*T/P)
+
+  !THIS CORRESPONDS TO SUMMATION TERM IN 5.28
+  SIGMA=SIGMA+AI(I)*EXP(-EI(I)/T)*GI/((FI(I)**2-F**2)**2+4*F**2*GI**2)
+END DO
+
+!THIS CORRESPONDS TO 5.28
+KH2O = 2*F**2*PV*(300/T)**2.5*SIGMA
+
+!THIS CORRESPONDS TO 5.31
+DKAPPA = 4.69E-6*PV*(300/T)**2.1*(P/1000)*F**2
+
+!THIS CORRESPONDS TO 5.30
+K_WV = KH2O+DKAPPA
+
+END SUBROUTINE WVABSORB
 
 
 end module radiative_transfer_mod

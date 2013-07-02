@@ -7,7 +7,7 @@
 ! Banner for checking maximum lengths (i.e. 32)
 !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 ! BEGIN DART PREPROCESS KIND LIST
-! AMSRE_BRIGHNTESS_T,             KIND_BRIGHTNESS_TEMPERATURE
+! AMSRE_BRIGHTNESS_T,             KIND_BRIGHTNESS_TEMPERATURE
 ! END DART PREPROCESS KIND LIST
 
 !-----------------------------------------------------------------------------
@@ -22,7 +22,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!  case(AMSRE_BRIGHNTESS_T)
+!  case(AMSRE_BRIGHTNESS_T)
 !     call get_brightness_temperature(state, state_time, ens_index, location, obs_time, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
@@ -30,7 +30,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-!  case(AMSRE_BRIGHNTESS_T)
+!  case(AMSRE_BRIGHTNESS_T)
 !     call read_amsre_metadata(obs_def%key, key, ifile, fform)
 ! END DART PREPROCESS READ_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -38,7 +38,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-!  case(AMSRE_BRIGHNTESS_T)
+!  case(AMSRE_BRIGHTNESS_T)
 !     call write_amsre_metadata(obs_def%key, ifile, fform)
 ! END DART PREPROCESS WRITE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -46,7 +46,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!  case(AMSRE_BRIGHNTESS_T)
+!  case(AMSRE_BRIGHTNESS_T)
 !     call interactive_amsre_metadata(obs_def%key)
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -403,15 +403,15 @@ type(snowprops) :: snow
 istatus = 1
 obs_val = MISSING_R8
 
-allocate(y(nlayers,snow%nprops), tb_out(N_POL,N_FREQ))
-
-nlayers  = 1
-freq(:)  = 23.8   ! Ally (GHz?)    6.9, 10.7, 18.7, 23.8, 36.5, 89.0
+nlayers  = 5
+freq(:)  = 89.0   ! GHz    6.9, 10.7, 18.7, 23.8, 36.5, 89.0
 tetad(:) = 55.0   ! incidence angle (degrees)
+
+allocate(y(nlayers,snow%nprops), tb_out(N_POL,N_FREQ))
 
 ! Ally ... if you have a better way to specify/determine tb_ubc,
 ! do it here. Call your atmospheric model to calculate it.
-tb_ubc(:,1) = (/ 2.7, 2.7 /)
+tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)
 
 ctrl(1) = nlayers
 ctrl(2) = 0              ! not used as far as I can tell
@@ -421,22 +421,49 @@ ctrl(4) = N_FREQ
 do ilayer = 1,nlayers
    ! For now, just make something up
 
-   snow%thickness      = 0.30   ! meters
-   snow%density        = 230.0  ! kg/m3
-   snow%grain_diameter = 0.003  ! m   (3 mm)
-   snow%liquid_water   = 0.0    ! dry snow (fraction)
-   snow%temperature    = 260.0  ! K
+   if ( ilayer == 1) then
+      snow%thickness      = 0.6213     ! meters
+      snow%density        = 270.5943   ! kg/m3
+      snow%grain_diameter = 0.0931651  ! m   (93 mm)
+      snow%liquid_water   = 0.0        ! dry snow (fraction)
+      snow%temperature    = 266.1220   ! K
+   elseif (ilayer == 2) then
+      snow%thickness      = 0.2071     ! meters
+      snow%density        = 150.7856   ! kg/m3
+      snow%grain_diameter = 0.0840811  ! m
+      snow%liquid_water   = 0.0        ! dry snow (fraction)
+      snow%temperature    = 256.7763   ! K
+   elseif (ilayer == 3) then
+      snow%thickness      = 0.1033     ! meters
+      snow%density        = 96.1940    ! kg/m3
+      snow%grain_diameter = 0.0676715  ! m
+      snow%liquid_water   = 0.0        ! dry snow (fraction)
+      snow%temperature    = 247.9525   ! K
+   elseif (ilayer == 4) then
+      snow%thickness      = 0.0497     ! meters
+      snow%density        = 66.4903    ! kg/m3
+      snow%grain_diameter = 0.0668529  ! m
+      snow%liquid_water   = 0.0        ! dry snow (fraction)
+      snow%temperature    = 240.4609   ! K
+   elseif (ilayer == 5) then
+      snow%thickness      = 0.0200     ! meters
+      snow%density        = 58.0377    ! kg/m3
+      snow%grain_diameter = 0.0656391  ! m
+      snow%liquid_water   = 0.0        ! dry snow (fraction)
+      snow%temperature    = 235.8929   ! K
+   endif
 
    y(ilayer,1) = snow%thickness
    y(ilayer,2) = snow%density
    y(ilayer,3) = snow%grain_diameter
    y(ilayer,4) = snow%liquid_water
    y(ilayer,5) = snow%temperature
+
 enddo
 
 ! aux_ins array specifies some auxiliary inputs: (in order): 
 !   n_lyrs,                   number of snow layers
-!   soil temperature [K],     T_GRND
+!   ground temperature [K],     T_GRND
 !   soil saturation [frac], 
 !   soil porosity [frac], 
 !   and the constant of proportionality between the grain size and the correlation length.
@@ -449,8 +476,7 @@ enddo
 ! pci: snow correlation length [mm]
 ! pci      = 0.5.*eff_gr_size.*(1-ice_frac);
 
-
-aux_ins = (/ real(nlayers,r4), 273.16, 0.3, 0.4, 0.5 /) ! FIXME These must be replaced by real values. 
+aux_ins = (/ real(nlayers,r4), 271.1123, 0.3, 0.4, 0.5 /) ! FIXME replace by real values.
 
 ! the tb_out array contains the calculated brightness temperature outputs
 ! at each polarization (rows) and frequency (columns).

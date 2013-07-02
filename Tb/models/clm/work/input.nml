@@ -150,7 +150,7 @@
                                 'TOWER_SENSIBLE_HEAT_FLUX',
                                 'MODIS_SNOWCOVER_FRAC',
                                 'COSMOS_NEUTRON_INTENSITY',
-                                'AMSRE_BRIGHNTESS_T',
+                                'AMSRE_BRIGHTNESS_T',
    evaluate_these_obs_types   = 'null'
    /
 
