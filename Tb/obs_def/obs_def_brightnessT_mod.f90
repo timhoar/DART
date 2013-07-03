@@ -424,31 +424,37 @@ do ilayer = 1,nlayers
    if ( ilayer == 1) then
       snow%thickness      = 0.6213     ! meters
       snow%density        = 270.5943   ! kg/m3
-      snow%grain_diameter = 0.0931651  ! m   (93 mm)
+      !snow%grain_diameter = 0.0931651  ! m   (93 mm)
+      snow%grain_diameter = 93.1651E-06  ! m   (93 mm)
       snow%liquid_water   = 0.0        ! dry snow (fraction)
       snow%temperature    = 266.1220   ! K
    elseif (ilayer == 2) then
       snow%thickness      = 0.2071     ! meters
       snow%density        = 150.7856   ! kg/m3
       snow%grain_diameter = 0.0840811  ! m
+      !snow%grain_diameter = 0.0840811  ! m
+      snow%grain_diameter =84.0811E-06    ! m
       snow%liquid_water   = 0.0        ! dry snow (fraction)
       snow%temperature    = 256.7763   ! K
    elseif (ilayer == 3) then
       snow%thickness      = 0.1033     ! meters
       snow%density        = 96.1940    ! kg/m3
-      snow%grain_diameter = 0.0676715  ! m
+      !snow%grain_diameter = 0.0676715  ! m
+      snow%grain_diameter = 67.6715E-06  ! m
       snow%liquid_water   = 0.0        ! dry snow (fraction)
       snow%temperature    = 247.9525   ! K
    elseif (ilayer == 4) then
       snow%thickness      = 0.0497     ! meters
       snow%density        = 66.4903    ! kg/m3
-      snow%grain_diameter = 0.0668529  ! m
+      !snow%grain_diameter = 0.0668529  ! m
+      snow%grain_diameter = 66.8529E-06  ! m
       snow%liquid_water   = 0.0        ! dry snow (fraction)
       snow%temperature    = 240.4609   ! K
    elseif (ilayer == 5) then
       snow%thickness      = 0.0200     ! meters
       snow%density        = 58.0377    ! kg/m3
-      snow%grain_diameter = 0.0656391  ! m
+      !snow%grain_diameter = 0.0656391  ! m
+      snow%grain_diameter = 65.6391E-06  ! m
       snow%liquid_water   = 0.0        ! dry snow (fraction)
       snow%temperature    = 235.8929   ! K
    endif

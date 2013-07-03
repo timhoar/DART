@@ -243,6 +243,14 @@ DO K=1,NFREQ
   ! ice_frac = snow_density/ice_density
   ice_frac = ROI(:) / 0.917
   pci(:)   = 0.5 * GDIMM * (1.0 - ice_frac)
+  !pci(:)   = .67*GDIMM * (1.0 - ice_frac)
+
+  write(*,*)'Specific grain size : GDIMM   ', GDIMM
+  write(*,*)'Snow density : ROI   ', ROI
+  write(*,*)'ice fraction : ice_frac   ', ice_frac
+
+  write(*,*)'Correlation length: pci   ', pci
+
 
   deallocate(ice_frac)
 
