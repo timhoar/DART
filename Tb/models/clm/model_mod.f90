@@ -107,8 +107,7 @@ public :: get_gridsize,                 &
           DART_get_var,                 &
           get_model_time,               &
           get_ncols_in_gridcell,        &
-          get_colids_in_gridcell,       &
-          get_clm_instance_filename
+          get_colids_in_gridcell
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -3339,25 +3338,6 @@ end function set_model_time_step
 
 
 !------------------------------------------------------------------
-
-
-subroutine get_clm_instance_filename( filename )
-
-character(len=*), intent(OUT) :: filename
-
-if ( .not. module_initialized ) call static_init_model
-
-
-
-filename = trim(clm_restart_filename)
-
-stop
-
-! TJH FIXME ... routine not written ... needs to return unique filename
-! for each ensemble member
-
-end subroutine get_clm_instance_filename
-
 
 
 subroutine get_clm_restart_filename( filename )

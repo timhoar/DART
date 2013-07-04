@@ -78,7 +78,6 @@ use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler,     &
 use        model_mod, only : get_ncols_in_gridcell, &
                              get_colids_in_gridcell, &
                              get_clm_restart_filename, &
-                             get_clm_instance_filename, &
                              get_gridsize, get_grid_arrays
 
 use typesizes
@@ -113,6 +112,7 @@ character(len=129), allocatable, dimension(:) :: fname   ! instances of CLM rest
 integer,            allocatable, dimension(:) :: ncid    ! instances of CLM restart files
 real(r8),           allocatable, dimension(:) :: lon, lat, levgrnd, area
 integer,            allocatable, dimension(:) :: cols1d_ityplun
+real(r8),           allocatable, dimension(:) :: cols1d_wtxy
 
 real(r8), PARAMETER :: RAD2KM = 40030.0_r8/(2.0_r8 * PI) ! (mean radius of earth ~6371km)
 
@@ -413,12 +413,16 @@ real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
 real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
 
-integer  :: ilayer, ilon, ilat, icol, ncols
+integer  :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
+integer  :: ilayer, ilon, ilat, icol, ncols, lccode
 integer,  allocatable, dimension(:) :: columns_to_get
 real(r4), allocatable, dimension(:) :: tb
+real(r8), allocatable, dimension(:) :: weights
 real(r8), dimension(LocationDims)   :: loc
 real(r8)  :: loc_lon, loc_lat
 character :: pol    ! observation polarization
+
+character(len=256) :: filename
 
 istatus  = 1
 obs_val  = MISSING_R8
@@ -426,33 +430,49 @@ obs_val  = MISSING_R8
 tetad(:) = AMSRE_inc_angle
 freq(:)  = observation_metadata(key)%frequency
 pol      = observation_metadata(key)%polarization
+lccode   = observation_metadata(key)%landcovercode
+
+! FIXME ... determine lon/lat indices
+! Poor method ... will not work for single column case nor
+! for irregular/unstructured grids might not work well over poles ...
 loc      = get_location(location)
-loc_lon  = loc(1)
-loc_lat  = loc(2)
+loc_lon  = loc(1)   ! longitude of observation (in degrees)
+loc_lat  = loc(2)   ! latitude  of observation (in degrees)
+ilonmin  = minloc( abs(loc_lon-LON) )
+ilatmin  = minloc( abs(loc_lat-LAT) )
+ilon     = ilonmin(1)
+ilat     = ilatmin(1)
 
-! FIXME ... dynamically determine lon/lat indices
-! FIXME ... dynamically generate filenames for get_column_snow
+ncols    = get_ncols_in_gridcell(ilon,ilat)
 
-ilon = 73    ! lon( 73) == 90.0
-ilat = 161   ! lat(161) == 60.78534 ... Siberia
-
-ncols = get_ncols_in_gridcell(ilon,ilat)
-
+! Early return if there are no CLM columns at this location.
+! Forward operator returns 'failed', but life goes on.
 if ((ncols == 0) .and. do_output() ) then
    write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has no CLM columns.'
    write(string2, '(''lon,lat ('',f12.6,'','',f12.6,'')'')')
    call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
+   return
 endif
 
-allocate( columns_to_get(ncols), tb(ncols) )
+allocate( columns_to_get(ncols), tb(ncols), weights(ncols) )
+columns_to_get(:) = -1
+tb(:)             = 0.0_r4
+weights(:)        = 0.0_r8
 call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 
-! Loop over all columns in gridcell that has the right location.
-! Skip the lake columns, the columns without snow ... others ...
-! the columns with no layered snow - but might have a trace ...
+! FIXME Presently skipping gridcells with lakes.
+! get_column_snow() must also modified to use bulk snow formulation for lakes.
+if ( any(cols1d_ityplun(columns_to_get) == LAKEUNIT)) return
+
+! need to know which restart file to use to harvest information
+call build_clm_instance_filename(ens_index, filename)
+
+! Loop over all columns in the gridcell that has the right location.
 
 SNOWCOLS : do icol = 1,ncols
-   call get_column_snow('clm_restart.nc', columns_to_get(icol))
+
+   weights(icol) = cols1d_wtxy(columns_to_get(icol)) ! relative weight of column
+   call get_column_snow(filename, columns_to_get(icol))
 
    if ( debug .and. do_output() ) then
       if (snowcolumn%nlayers < 1) then
@@ -475,38 +495,59 @@ SNOWCOLS : do icol = 1,ncols
 
    nlevsno  = snowcolumn%nlayers
 
-   allocate( y(nlevsno, snowcolumn%nprops) )
-
-   ! FIXME Ally ... if you have a better way to specify/determine,
-   ! tb_ubc do it here. Call your atmospheric model to calculate it.
-   tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)
-
-   ctrl(1) = nlevsno
+   if ( nlevsno == 0 ) then
+      ! If there is no snow, the ss_model will calculate the brightness 
+      ! temperature of the bare soil. To indicate this, aux_ins(1) must
+      ! be 0 and ctrl(1) must be 1
+      ctrl(1) = 1
+   else
+      ctrl(1) = nlevsno
+   endif
    ctrl(2) = 0              ! not used as far as I can tell
    ctrl(3) = snowcolumn%nprops
    ctrl(4) = N_FREQ
-
-   y(:,1)  = snowcolumn%thickness
-   y(:,2)  = snowcolumn%density
-   y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need microns
-   y(:,4)  = snowcolumn%liquid_water
-   y(:,5)  = snowcolumn%temperature
 
    aux_ins(1) = real(nlevsno,r4)
    aux_ins(2) = snowcolumn%t_grnd
    aux_ins(3) = snowcolumn%soilsat
    aux_ins(4) = snowcolumn%soilporos
    aux_ins(5) = 0.5_r4                ! FIXME - hardwired
-    
-   ! the tb_out array contains the calculated brightness temperature outputs
-   ! at each polarization (rows) and frequency (columns).
-    
-   call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+
+   allocate( y(ctrl(1), snowcolumn%nprops) )
+   if ( aux_ins(1) > 0 ) then
+      y(:,1)  = snowcolumn%thickness
+      y(:,2)  = snowcolumn%density
+      y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need meters (from microns)
+      y(:,4)  = snowcolumn%liquid_water
+      y(:,5)  = snowcolumn%temperature
+   else ! dummy values for bare ground
+      y(:,1)  = 0.0_r4
+      y(:,2)  = 0.0_r4
+      y(:,3)  = 0.0_r4
+      y(:,4)  = 0.0_r4
+      y(:,5)  = 0.0_r4
+   endif
+
+   ! FIXME Ally ... if you have a better way to specify/determine,
+   ! tb_ubc do it here. Call your atmospheric model to calculate it.
+   tb_ubc(:,N_FREQ) = (/ 2.7_r4, 2.7_r4 /)
+
+   ! If the landcovercode (lccode) indicates that you want to use
+   ! a different radiative transfer model ... implement it here.
+   ! this will involve changing the following 'if' statement.
+ 
+   if (lccode > 0 ) then
+      ! the tb_out array contains the calculated brightness temperature outputs
+      ! at each polarization (rows) and frequency (columns).
+      call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+   else
+      ! call to alternative radiative transfer model goes here.
+   endif
     
    write(*,*)'tb_out is ',tb_out
 
    ! FIXME ... which is which
-   if (pol == 'H') then
+   if (pol == 'V') then
       tb(icol) = tb_out(1,1)   ! second dimension is only 1 frequency
    else
       tb(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
@@ -517,16 +558,18 @@ SNOWCOLS : do icol = 1,ncols
 
 enddo SNOWCOLS
 
+! FIXME ... account for heterogeneity somehow ...
+! must aggregate all columns in the gridcell
+! area-weight the average
+obs_val = sum(tb * weights) / sum(weights)
+
 if (debug .and. do_output()) then
-   write(*,*)'tb for all columns is ',tb
+   write(*,*)'tb      for all columns is ',tb
+   write(*,*)'weights for all columns is ',weights
+   write(*,*)'(weighted) obs value    is ',obs_val
 endif
 
-! FIXME ... account for heterogeneity somehow ...
-! must aggregate all columns in the gridcell ... I think.
-! area-weight the average, at least - what is below is stupid
-obs_val = sum(tb) / real(ncols,r4)
-
-deallocate( columns_to_get, tb )
+deallocate( columns_to_get, tb, weights )
 
 istatus = 0
 
@@ -592,6 +635,13 @@ call nc_check(nf90_inq_varid(myncid,'cols1d_ityplun', varid), &
               'obs_def_brightnessT_mod.initialize_routine', 'inq_varid cols1d_ityplun')
 call nc_check(nf90_get_var(  myncid, varid, cols1d_ityplun ), &
               'obs_def_brightnessT_mod.initialize_routine', 'get_var   cols1d_ityplun')
+
+! Read in the column weight relative to corresponding gridcell
+allocate( cols1d_wtxy(ncolumns) )
+call nc_check(nf90_inq_varid(myncid,'cols1d_wtxy', varid), &
+              'obs_def_brightnessT_mod.initialize_routine', 'inq_varid cols1d_wtxy')
+call nc_check(nf90_get_var(  myncid, varid, cols1d_wtxy ), &
+              'obs_def_brightnessT_mod.initialize_routine', 'get_var   cols1d_wtxy')
 
 ! Read in the current model time
 call nc_check(nf90_inq_varid(myncid, 'timemgr_rst_curr_ymd', varid), &
@@ -886,6 +936,53 @@ end subroutine check_iostat
 !======================================================================
 
 
+subroutine build_clm_instance_filename(instance, filename)
+! If the instance is 1, it could be a perfect model scenario
+! or it could be the first instance of many. CLM has a different
+! naming scheme for these.
+!
+! the model time is part of the initialization ... module storage
+! the casename is part of the module namelist
+
+integer,          intent(in)  :: instance
+character(len=*), intent(out) :: filename
+
+integer :: year, month, day, hour, minute, second
+
+100 format (A,'.clm2_',I4.4,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
+110 format (A,'.clm2'      ,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
+
+call get_date(model_time, year, month, day, hour, minute, second)
+second = second + minute*60 + hour*3600
+
+write(filename,110) trim(casename),year,month,day,second
+
+! Check if in a perfect model scenario
+if( file_exist(filename) ) then
+   ens_size = 1
+   if (debug .and. do_output()) then
+      write(string1,*)'Running in a perfect model configuration with ',trim(filename)
+      call error_handler(E_MSG, 'obs_def_brightnessT:build_clm_instance_filename', string1)
+   endif
+   return
+endif
+
+! 'normal' situation
+write(filename,100) trim(casename),instance,year,month,day,second
+if( file_exist(filename) ) then
+   return
+else
+   write(string1,*)'Unable to create viable CLM restart filename:'
+   call error_handler(E_ERR, 'obs_def_brightnessT:build_clm_instance_filename', &
+        string1, text2=trim(filename))
+endif
+
+end subroutine build_clm_instance_filename
+
+
+!======================================================================
+
+
 subroutine test_block
 ! Defining the region if running in a single column is tricky.
 ! We have lat, lon, and the area of the gridcell which we assume to be basically square.
@@ -969,7 +1066,7 @@ integer  :: ityplun   ! type of column unit (lake, etc.)
 real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
 real(r8), allocatable, dimension(:) :: dzsno, zsno, zisno, snw_rds
 
-integer               :: myncid, varid, ilayer, nlayers
+integer               :: myncid, varid, ilayer, nlayers, ij
 integer, dimension(2) :: ncstart, nccount
 
 call nc_check(nf90_open(trim(filename), NF90_NOWRITE, myncid), &
@@ -1079,12 +1176,14 @@ snowcolumn%soilsat   = 0.3       ! aux_ins(3) soil saturation [fraction]
 snowcolumn%soilporos = 0.4       ! aux_ins(4) soil porosity [fraction]
 snowcolumn%propconst = 0.5       ! aux_ins(5) proportionality between grain size & correlation length.
 
-do ilayer = 1,nlayers
-   snowcolumn%thickness(ilayer) = dzsno(ilayer) 
-   snowcolumn%density(ilayer) = ( h2osoi_liq(ilayer) + h2osoi_ice(ilayer)) / dzsno(ilayer)
-   snowcolumn%grain_diameter(ilayer) = snw_rds(ilayer)
-   snowcolumn%liquid_water(ilayer) = h2osoi_liq(ilayer)
-   snowcolumn%temperature(ilayer) = t_soisno(ilayer)
+ij = 0
+do ilayer = (nlevsno-nlayers+1),nlevsno
+   ij = ij + 1
+   snowcolumn%thickness(ij)      = dzsno(ilayer) 
+   snowcolumn%density(ij)        = (h2osoi_liq(ilayer) + h2osoi_ice(ilayer)) / dzsno(ilayer)
+   snowcolumn%grain_diameter(ij) = snw_rds(ilayer)
+   snowcolumn%liquid_water(ij)   = h2osoi_liq(ilayer)
+   snowcolumn%temperature(ij)    = t_soisno(ilayer)
 enddo
 
 end subroutine get_column_snow
@@ -1147,6 +1246,16 @@ character :: pol    ! observation polarization
 !TJHilon = 73    ! lon( 73) == 90.0
 !TJHilat = 161   ! lat(161) == 60.78534 ... Siberia
 !TJH
+loc_lon = 260.0
+loc_lat = 45.7
+write(*,*)'minloc is ',minloc( abs(loc_lon-LON) ), 'should be 209'
+write(*,*)'minloc is ',minloc( abs(loc_lat-LAT) ), 'should be 145'
+
+ilon = 73    ! lon( 73) == 90.0
+ilat = 161   ! lat(161) == 60.78534 ... Siberia
+
+ilon = 209   ! lon(209) == 260.0000
+ilat = 145   ! lat(145) == 45.70681 ... Nebraska prarie
 !TJHncols = get_ncols_in_gridcell(ilon,ilat)
 !TJHallocate (columns_to_get(ncols))
 !TJHcall get_colids_in_gridcell(ilon, ilat, columns_to_get)
