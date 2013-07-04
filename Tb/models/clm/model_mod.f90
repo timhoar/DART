@@ -96,6 +96,7 @@ public :: get_model_size,         &
 ! the interfaces here can be changed as appropriate.
 
 public :: get_gridsize,                 &
+          get_grid_arrays,              &
           restart_file_to_sv,           &
           sv_to_restart_file,           &
           get_clm_restart_filename,     &
@@ -104,7 +105,10 @@ public :: get_gridsize,                 &
           compute_gridcell_value,       &
           find_gridcell_Npft,           &
           DART_get_var,                 &
-          get_model_time
+          get_model_time,               &
+          get_ncols_in_gridcell,        &
+          get_colids_in_gridcell,       &
+          get_clm_instance_filename
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -252,6 +256,14 @@ real(r8), allocatable, dimension(:)  :: cols1d_wtxy    ! column   weight relativ
 real(r8), allocatable, dimension(:)  :: pfts1d_wtxy    ! pft      weight relative to corresponding gridcell
 real(r8), allocatable, dimension(:)  :: levtot
 real(r8), allocatable, dimension(:,:):: zsno           ! (column,levsno) ... snow layer midpoint
+
+
+type gridcellcolumns !  given a gridcell, which columns contribute
+   private
+   integer  :: ncols
+   integer, pointer, dimension(:) :: columnids
+end type gridcellcolumns
+type(gridcellcolumns), allocatable, dimension(:,:) :: gridCellInfo
 
 !------------------------------------------------------------------------------
 ! These are the metadata arrays that are the same size as the state vector.
@@ -499,6 +511,11 @@ allocate(levtot(Nlevtot))
 if (Nlevsno > 0) allocate(zsno(Nlevsno,Ncolumn))
 
 call get_sparse_geog(ncid, clm_restart_filename, 'open')
+
+!---------------------------------------------------------------
+! Generate list of columns in each gridcell
+allocate(gridCellInfo(nlon,nlat))
+call SetLocatorArrays()
 
 !---------------------------------------------------------------
 ! Compile the list of clm variables to use in the creation
@@ -1702,9 +1719,24 @@ if ( .not. module_initialized ) call static_init_model
 
  num_lon = nlon
  num_lat = nlat
- num_lev = nlevtot
+ num_lev = nlevgrnd
 
 end subroutine get_gridsize
+
+
+
+subroutine get_grid_arrays(longitudes, latitudes, levels)
+real(r8), dimension(:), intent(out) :: longitudes, latitudes, levels
+!------------------------------------------------------------------
+! public utility routine.
+
+if ( .not. module_initialized ) call static_init_model
+
+longitudes = LON(:)
+latitudes  = LAT(:)
+levels     = LEVGRND(:)
+
+end subroutine get_grid_arrays
 
 
 
@@ -3309,6 +3341,25 @@ end function set_model_time_step
 !------------------------------------------------------------------
 
 
+subroutine get_clm_instance_filename( filename )
+
+character(len=*), intent(OUT) :: filename
+
+if ( .not. module_initialized ) call static_init_model
+
+
+
+filename = trim(clm_restart_filename)
+
+stop
+
+! TJH FIXME ... routine not written ... needs to return unique filename
+! for each ensemble member
+
+end subroutine get_clm_instance_filename
+
+
+
 subroutine get_clm_restart_filename( filename )
 
 character(len=*), intent(OUT) :: filename
@@ -3982,6 +4033,96 @@ if (findVarindex < 1) then
 endif
 
 end function findVarindex
+
+
+
+subroutine SetLocatorArrays()
+! This function will create the relational table that will indicate how many
+! and which columns pertain to the gridcells. A companion function will
+! return the column indices that are needed to recreate the gridcell value.
+!
+! This fills the gridCellInfo(:,:) structure.
+! given a gridcell, the gridCellInfo(:,:) structure will indicate how many and
+! which columns are part of the gridcell.
+
+integer :: ilon, ilat, ij
+integer :: icol, currenticol(nlon,nlat)
+
+gridCellInfo(:,:)%ncols = 0
+
+! Count up how many columns are in each gridcell
+do ij = 1,Ncolumn
+   ilon = cols1d_ixy(ij)
+   ilat = cols1d_jxy(ij)
+   gridCellInfo(ilon,ilat)%ncols = gridCellInfo(ilon,ilat)%ncols + 1
+enddo
+
+! Create storage for the list of column indices
+do ilon = 1,nlon
+do ilat = 1,nlat
+   if ( gridCellInfo(ilon,ilat)%ncols > 0 ) then
+      allocate( gridCellInfo(ilon,ilat)%columnids( gridCellInfo(ilon,ilat)%ncols ))
+   endif
+enddo
+enddo
+
+currenticol(:,:) = 0
+
+! Fill the pointer arrays
+do ij = 1,Ncolumn
+
+   ilon = cols1d_ixy(ij)
+   ilat = cols1d_jxy(ij)
+
+   ! current length of each pointer array
+   currenticol(ilon,ilat) = currenticol(ilon,ilat) + 1
+   icol = currenticol(ilon,ilat) 
+
+   ! FIXME should also check for allocation status ... perhaps overkill
+   if ( icol <= gridCellInfo(ilon,ilat)%ncols ) then
+      gridCellInfo(ilon,ilat)%columnids(icol) = ij
+   else
+      write(string1,'(''gridcell('',i4,'','',i4,'') has at most '',i4,'' columns.'')') &
+         ilon,ilat, gridCellInfo(ilon,ilat)%ncols
+      write(string2,'(''Found '',i8,'' at dart index '',i12)') icol, ij
+      call error_handler(E_ERR,'SetLocatorArrays',string1,source,revision,revdate,text2=string2)
+   endif
+enddo
+
+if ((debug > 8) .and. do_output()) then
+   do ilon = 1,nlon
+   do ilat = 1,nlat
+      write(*,*)'gridcell ',ilon,ilat,' has ', gridCellInfo(ilon,ilat)%ncols,' columns.'
+      write(*,*)'   they are:',gridCellInfo(ilon,ilat)%columnids
+   enddo
+   enddo
+endif
+
+end subroutine SetLocatorArrays
+
+
+function get_ncols_in_gridcell(ilon,ilat)
+integer, intent(in) :: ilon, ilat
+integer :: get_ncols_in_gridcell
+
+get_ncols_in_gridcell = gridCellInfo(ilon,ilat)%ncols
+
+end function get_ncols_in_gridcell
+
+
+subroutine get_colids_in_gridcell(ilon,ilat,colids)
+integer,               intent(in)  :: ilon, ilat
+integer, dimension(:), intent(out) :: colids
+
+if (size(colids) == size(gridCellInfo(ilon,ilat)%columnids) ) then
+   colids(:) = gridCellInfo(ilon,ilat)%columnids
+else
+   write(string1,*)'lengths are wrong',size(colids)
+   call error_handler(E_ERR,'get_colids_in_gridcell',string1,source,revision,revdate)
+endif
+
+end subroutine get_colids_in_gridcell
+
 
 !===================================================================
 ! End of model_mod

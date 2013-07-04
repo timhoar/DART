@@ -23,7 +23,7 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(AMSRE_BRIGHTNESS_T)
-!     call get_brightness_temperature(state, state_time, ens_index, location, obs_time, obs_val, istatus)
+!     call get_brightness_temperature(state, state_time, ens_index, location, obs_time, obs_key, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 
@@ -67,7 +67,7 @@ module obs_def_brightnessT_mod
 !
 use        types_mod, only : r4, r8, digits12, MISSING_R8, MISSING_I, PI, deg2rad
 use     location_mod, only : location_type, get_location, get_dist, &
-                             set_location, VERTISUNDEF
+                             set_location, VERTISUNDEF, LocationDims
 use time_manager_mod, only : time_type, get_date, set_date, print_date, print_time, &
                              get_time, set_time, operator(-), operator(/=)
 use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler,     &
@@ -75,6 +75,12 @@ use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler,     &
                              nmlfileunit, do_output, do_nml_file, do_nml_term, &
                              nc_check, file_exist, is_longitude_between,       &
                              ascii_file_format
+use        model_mod, only : get_ncols_in_gridcell, &
+                             get_colids_in_gridcell, &
+                             get_clm_restart_filename, &
+                             get_clm_instance_filename, &
+                             get_gridsize, get_grid_arrays
+
 use typesizes
 use netcdf
 
@@ -99,15 +105,16 @@ character(len=128), parameter :: revdate  = "$Date$"
 logical            :: module_initialized = .false.
 logical            :: unstructured = .false.
 character(len=129) :: string1, string2, string3
-integer            :: nlon, nlat, ntime, ens_size
-type(time_type)    :: initialization_time
+integer            :: nlon, nlat, nlevgrnd, ncolumns, nlevtot, nlevsno, ens_size
+type(time_type)    :: model_time
+integer, PARAMETER :: LAKEUNIT = 3
 
-character(len=129), allocatable, dimension(:) :: fname
-integer,            allocatable, dimension(:) :: ncid
-real(r8),           allocatable, dimension(:) :: lon, lat, area
-real(digits12),     allocatable, dimension(:) :: rtime
+character(len=129), allocatable, dimension(:) :: fname   ! instances of CLM restart files
+integer,            allocatable, dimension(:) :: ncid    ! instances of CLM restart files
+real(r8),           allocatable, dimension(:) :: lon, lat, levgrnd, area
+integer,            allocatable, dimension(:) :: cols1d_ityplun
 
-real(r8), parameter :: RAD2KM = 40030.0_r8/(2.0_r8 * PI) ! (mean radius of earth ~6371km)
+real(r8), PARAMETER :: RAD2KM = 40030.0_r8/(2.0_r8 * PI) ! (mean radius of earth ~6371km)
 
 !----------------------------------------------------------------------
 ! Metadata for AMSR-E observations.
@@ -126,23 +133,31 @@ type(amsre_metadata) :: missing_metadata
 
 character(len=8), parameter :: AMSRESTRING = 'amsr-e'
 character(len=8), parameter ::  IGBPSTRING = 'igbp'
+real(r4),         parameter :: AMSRE_inc_angle = 55.0_r4 ! incidence angle (degrees)
 
 integer :: MAXamsrekey = 24*366  ! one year of hourly data - to start
 integer ::    amsrekey = 0       ! useful length of metadata arrays
 
 !----------------------------------------------------------------------
-! Properties required for a snow layer
+! Properties required for a snow column
 !----------------------------------------------------------------------
 
 type snowprops
    private
-   real(r4) :: thickness      !  LAYER THICKNESS [M]
-   real(r4) :: density        !  LAYER DENSITY [KG/M3]
-   real(r4) :: grain_diameter !  LAYER GRAIN DIAMETER [M]
-   real(r4) :: liquid_water   !  LAYER LIQUID WATER CONTENT [FRAC]
-   real(r4) :: temperature    !  LAYER TEMPERATURE [K]
-   integer  :: nprops = 5
+   integer  :: nlayers         ! aux_ins(1)
+   real(r4) :: t_grnd          ! aux_ins(2) ground temperature [K]
+   real(r4) :: soilsat         ! aux_ins(3) soil saturation [fraction]
+   real(r4) :: soilporos       ! aux_ins(4) soil porosity [fraction]
+   real(r4) :: propconst       ! aux_ins(5) proportionality between grain size & correlation length.
+   integer  :: nprops          ! [thickness, density, diameter, liqwater, temperature]
+   real(r4), pointer, dimension(:) :: thickness      !  LAYER THICKNESS [M]
+   real(r4), pointer, dimension(:) :: density        !  LAYER DENSITY [KG/M3]
+   real(r4), pointer, dimension(:) :: grain_diameter !  LAYER GRAIN DIAMETER [M]
+   real(r4), pointer, dimension(:) :: liquid_water   !  LAYER LIQUID WATER CONTENT [FRAC]
+   real(r4), pointer, dimension(:) :: temperature    !  LAYER TEMPERATURE [K]
 end type snowprops
+
+type(snowprops) :: snowcolumn
 
 !----------------------------------------------------------------------
 ! namelist items
@@ -373,7 +388,7 @@ end subroutine interactive_amsre_metadata
 !======================================================================
 
 
-subroutine get_brightness_temperature(state, state_time, ens_index, location, obs_time, obs_val, istatus)
+subroutine get_brightness_temperature(state, state_time, ens_index, location, obs_time, key, obs_val, istatus)
 
 ! This is THE forward observation operator. Given the state and a location, return the value
 
@@ -382,116 +397,138 @@ type(time_type),     intent(in)  :: state_time ! valid time of DART state
 integer,             intent(in)  :: ens_index  ! Ensemble member number
 type(location_type), intent(in)  :: location   ! target location (i.e. obs)
 type(time_type),     intent(in)  :: obs_time   ! time of observation
+integer,             intent(in)  :: key        ! pointer for obs custom metadata
 real(r8),            intent(out) :: obs_val    ! model estimate of observation value
 integer,             intent(out) :: istatus    ! status of the calculation
 
 integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
 
+! variables required by ss_snow() routine
+real(r4), allocatable, dimension(:,:) :: y ! 2D array 
+real(r4) :: aux_ins(5) ! properties: [nlyrs, ground_T, soilsat, poros, proportionality]
 integer  :: ctrl(4)        ! N_LYRS, N_AUX_INS, N_SNOW_INS, N_FREQ
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
-real(r4) :: tetad(N_FREQ)
+real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
-real(r4) :: aux_ins(5)     ! SOIL properties
-real(r4), allocatable, dimension(:,:) :: y ! 2D array 
-real(r4), allocatable, dimension(:,:) :: tb_out
+real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
 
-integer  :: ilayer, nlayers
+integer  :: ilayer, ilon, ilat, icol, ncols
+integer,  allocatable, dimension(:) :: columns_to_get
+real(r4), allocatable, dimension(:) :: tb
+real(r8), dimension(LocationDims)   :: loc
+real(r8)  :: loc_lon, loc_lat
+character :: pol    ! observation polarization
 
-type(snowprops) :: snow
+istatus  = 1
+obs_val  = MISSING_R8
 
-istatus = 1
-obs_val = MISSING_R8
+tetad(:) = AMSRE_inc_angle
+freq(:)  = observation_metadata(key)%frequency
+pol      = observation_metadata(key)%polarization
+loc      = get_location(location)
+loc_lon  = loc(1)
+loc_lat  = loc(2)
 
-nlayers  = 5
-freq(:)  = 89.0   ! GHz    6.9, 10.7, 18.7, 23.8, 36.5, 89.0
-tetad(:) = 55.0   ! incidence angle (degrees)
+! FIXME ... dynamically determine lon/lat indices
+! FIXME ... dynamically generate filenames for get_column_snow
 
-allocate(y(nlayers,snow%nprops), tb_out(N_POL,N_FREQ))
+ilon = 73    ! lon( 73) == 90.0
+ilat = 161   ! lat(161) == 60.78534 ... Siberia
 
-! Ally ... if you have a better way to specify/determine tb_ubc,
-! do it here. Call your atmospheric model to calculate it.
-tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)
+ncols = get_ncols_in_gridcell(ilon,ilat)
 
-ctrl(1) = nlayers
-ctrl(2) = 0              ! not used as far as I can tell
-ctrl(3) = snow%nprops
-ctrl(4) = N_FREQ
+if ((ncols == 0) .and. do_output() ) then
+   write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has no CLM columns.'
+   write(string2, '(''lon,lat ('',f12.6,'','',f12.6,'')'')')
+   call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
+endif
 
-do ilayer = 1,nlayers
-   ! For now, just make something up
+allocate( columns_to_get(ncols), tb(ncols) )
+call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 
-   if ( ilayer == 1) then
-      snow%thickness      = 0.6213     ! meters
-      snow%density        = 270.5943   ! kg/m3
-      !snow%grain_diameter = 0.0931651  ! m   (93 mm)
-      snow%grain_diameter = 93.1651E-06  ! m   (93 mm)
-      snow%liquid_water   = 0.0        ! dry snow (fraction)
-      snow%temperature    = 266.1220   ! K
-   elseif (ilayer == 2) then
-      snow%thickness      = 0.2071     ! meters
-      snow%density        = 150.7856   ! kg/m3
-      snow%grain_diameter = 0.0840811  ! m
-      !snow%grain_diameter = 0.0840811  ! m
-      snow%grain_diameter =84.0811E-06    ! m
-      snow%liquid_water   = 0.0        ! dry snow (fraction)
-      snow%temperature    = 256.7763   ! K
-   elseif (ilayer == 3) then
-      snow%thickness      = 0.1033     ! meters
-      snow%density        = 96.1940    ! kg/m3
-      !snow%grain_diameter = 0.0676715  ! m
-      snow%grain_diameter = 67.6715E-06  ! m
-      snow%liquid_water   = 0.0        ! dry snow (fraction)
-      snow%temperature    = 247.9525   ! K
-   elseif (ilayer == 4) then
-      snow%thickness      = 0.0497     ! meters
-      snow%density        = 66.4903    ! kg/m3
-      !snow%grain_diameter = 0.0668529  ! m
-      snow%grain_diameter = 66.8529E-06  ! m
-      snow%liquid_water   = 0.0        ! dry snow (fraction)
-      snow%temperature    = 240.4609   ! K
-   elseif (ilayer == 5) then
-      snow%thickness      = 0.0200     ! meters
-      snow%density        = 58.0377    ! kg/m3
-      !snow%grain_diameter = 0.0656391  ! m
-      snow%grain_diameter = 65.6391E-06  ! m
-      snow%liquid_water   = 0.0        ! dry snow (fraction)
-      snow%temperature    = 235.8929   ! K
+! Loop over all columns in gridcell that has the right location.
+! Skip the lake columns, the columns without snow ... others ...
+! the columns with no layered snow - but might have a trace ...
+
+SNOWCOLS : do icol = 1,ncols
+   call get_column_snow('clm_restart.nc', columns_to_get(icol))
+
+   if ( debug .and. do_output() ) then
+      if (snowcolumn%nlayers < 1) then
+         write(string1, *) 'column (',columns_to_get(icol),') has no snow'
+         call error_handler(E_MSG,'get_brightness_temperature',string1)
+      else
+         write(*,*)'nprops   ',snowcolumn%nprops
+         write(*,*)'nlayers  ',snowcolumn%nlayers
+         write(*,*)'t_grnd   ',snowcolumn%t_grnd
+         write(*,*)'soilsat  ',snowcolumn%soilsat
+         write(*,*)'soilpor  ',snowcolumn%soilporos
+         write(*,*)'proconst ',snowcolumn%propconst
+         write(*,*)'thickness',snowcolumn%thickness
+         write(*,*)'density  ',snowcolumn%density
+         write(*,*)'diameter ',snowcolumn%grain_diameter
+         write(*,*)'liqwater ',snowcolumn%liquid_water
+         write(*,*)'temp     ',snowcolumn%temperature
+      endif
    endif
 
-   y(ilayer,1) = snow%thickness
-   y(ilayer,2) = snow%density
-   y(ilayer,3) = snow%grain_diameter
-   y(ilayer,4) = snow%liquid_water
-   y(ilayer,5) = snow%temperature
+   nlevsno  = snowcolumn%nlayers
 
-enddo
+   allocate( y(nlevsno, snowcolumn%nprops) )
 
-! aux_ins array specifies some auxiliary inputs: (in order): 
-!   n_lyrs,                   number of snow layers
-!   ground temperature [K],     T_GRND
-!   soil saturation [frac], 
-!   soil porosity [frac], 
-!   and the constant of proportionality between the grain size and the correlation length.
-!
-! SNORDSL top snow layer effective grain radius ('m^-6')
-! SNOWGR  effective snow grain radius           ('m^-6, microns')
+   ! FIXME Ally ... if you have a better way to specify/determine,
+   ! tb_ubc do it here. Call your atmospheric model to calculate it.
+   tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)
 
-! FIXME There is a better relationship for the effective snow grain radius
-! from fct_CLM_Output_Quality_Control.m:
-! pci: snow correlation length [mm]
-! pci      = 0.5.*eff_gr_size.*(1-ice_frac);
+   ctrl(1) = nlevsno
+   ctrl(2) = 0              ! not used as far as I can tell
+   ctrl(3) = snowcolumn%nprops
+   ctrl(4) = N_FREQ
 
-aux_ins = (/ real(nlayers,r4), 271.1123, 0.3, 0.4, 0.5 /) ! FIXME replace by real values.
+   y(:,1)  = snowcolumn%thickness
+   y(:,2)  = snowcolumn%density
+   y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need microns
+   y(:,4)  = snowcolumn%liquid_water
+   y(:,5)  = snowcolumn%temperature
 
-! the tb_out array contains the calculated brightness temperature outputs
-! at each polarization (rows) and frequency (columns).
+   aux_ins(1) = real(nlevsno,r4)
+   aux_ins(2) = snowcolumn%t_grnd
+   aux_ins(3) = snowcolumn%soilsat
+   aux_ins(4) = snowcolumn%soilporos
+   aux_ins(5) = 0.5_r4                ! FIXME - hardwired
+    
+   ! the tb_out array contains the calculated brightness temperature outputs
+   ! at each polarization (rows) and frequency (columns).
+    
+   call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+    
+   write(*,*)'tb_out is ',tb_out
 
-call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+   ! FIXME ... which is which
+   if (pol == 'H') then
+      tb(icol) = tb_out(1,1)   ! second dimension is only 1 frequency
+   else
+      tb(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
+   endif
 
-write(*,*)'tb_out is ',tb_out
+   deallocate( y )
+   call destroy_column_snow()
 
-deallocate(y,tb_out)
+enddo SNOWCOLS
+
+if (debug .and. do_output()) then
+   write(*,*)'tb for all columns is ',tb
+endif
+
+! FIXME ... account for heterogeneity somehow ...
+! must aggregate all columns in the gridcell ... I think.
+! area-weight the average, at least - what is below is stupid
+obs_val = sum(tb) / real(ncols,r4)
+
+deallocate( columns_to_get, tb )
+
+istatus = 0
 
 end subroutine get_brightness_temperature
 
@@ -505,10 +542,13 @@ end subroutine get_brightness_temperature
 
 subroutine initialize_module
 
-! Called once to set values and allocate space, open all the CLM files
-! that have the observations, etc.
+! Called once to set values and allocate space. 
 
-integer :: iunit, io, i
+integer :: iunit, io, myncid, varid
+integer :: yyyymmdd, sssss
+integer :: year, month, day, hour, minute, second, leftover
+
+character(len=258) :: filename = 'no_clm_restart_file'
 
 ! Prevent multiple calls from executing this code more than once.
 if (module_initialized) return
@@ -528,7 +568,6 @@ if (do_nml_file()) write(nmlfileunit, nml=obs_def_brightnessT_nml)
 if (do_nml_term()) write(     *     , nml=obs_def_brightnessT_nml)
 
 ! Allocate the module array to store the key information.
-
 missing_metadata%frequency     = MISSING_R8
 missing_metadata%footprint     = MISSING_R8
 missing_metadata%polarization  = 'x'
@@ -537,13 +576,61 @@ missing_metadata%landcovercode = MISSING_I
 allocate( observation_metadata(MAXamsrekey) )
 observation_metadata(:) = missing_metadata
 
+call get_clm_restart_filename( filename )
+
+call nc_check(nf90_open(trim(filename), nf90_nowrite, myncid), &
+          'obs_def_brightnessT_mod.initialize_routine','open '//trim(filename))
+
+call GetDimensions(myncid,filename) ! sets nlon, nlat, ncolumns, etc.
+
+allocate( lon(nlon), lat(nlat), levgrnd(nlevgrnd) )
+call get_grid_arrays(lon, lat, levgrnd)
+
+! Read in the column landunit type. Knowing if the column is a lake is useful.
+allocate( cols1d_ityplun(ncolumns) )
+call nc_check(nf90_inq_varid(myncid,'cols1d_ityplun', varid), &
+              'obs_def_brightnessT_mod.initialize_routine', 'inq_varid cols1d_ityplun')
+call nc_check(nf90_get_var(  myncid, varid, cols1d_ityplun ), &
+              'obs_def_brightnessT_mod.initialize_routine', 'get_var   cols1d_ityplun')
+
+! Read in the current model time
+call nc_check(nf90_inq_varid(myncid, 'timemgr_rst_curr_ymd', varid), &
+              'obs_def_brightnessT_mod.initialize_routine','inq_varid timemgr_rst_curr_ymd '//trim(filename))
+call nc_check(nf90_get_var(  myncid, varid, yyyymmdd), &
+              'obs_def_brightnessT_mod.initialize_routine','get_var yyyymmdd '//trim(filename))
+
+call nc_check(nf90_inq_varid(myncid, 'timemgr_rst_curr_tod',  varid), &
+              'obs_def_brightnessT_mod.initialize_routine','inq_varid timemgr_rst_curr_tod '//trim(filename))
+call nc_check(nf90_get_var(  myncid, varid,    sssss), &
+              'obs_def_brightnessT_mod.initialize_routine','get_var   sssss '//trim(filename))
+
+year     = yyyymmdd/10000
+leftover = yyyymmdd - year*10000
+month    = leftover/100
+day      = leftover - month*100
+
+hour     = sssss/3600
+leftover = sssss - hour*3600
+minute   = leftover/60
+second   = leftover - minute*60
+
+model_time = set_date(year, month, day, hour, minute, second)
+call get_time(model_time, second, day)
+
+if (debug .and. do_output()) then
+   write(*,*)'obs_def_brightnessT_mod.initialize_routine:nlon,nlat,ncolumns is ',nlon,nlat,ncolumns
+   write(*,*)'obs_def_brightnessT_mod.initialize_routine: model time is ',yyyymmdd, sssss
+   call print_date(model_time,'obs_def_brightnessT_mod.initialize_routine:model date is')
+   call print_time(model_time,'obs_def_brightnessT_mod.initialize_routine:model time is')
+endif
+
 end subroutine initialize_module
 
 
 !======================================================================
 
 
-subroutine GetDimensions(ncid, fname)
+subroutine GetDimensions(myncid, fname)
 
 ! Harvest information from the first observation file.
 ! The SingleColumMode files have
@@ -555,494 +642,43 @@ subroutine GetDimensions(ncid, fname)
 !        float lon(lon) ;
 !        float area(lat, lon) ;
 
-integer,          intent(in) :: ncid
+integer,          intent(in) :: myncid
 character(len=*), intent(in) :: fname
 
-! integer, intent(out) :: nlon, nlat, ntime ... module variables
+! integer, intent(out) :: nlon, nlat, ... module variables
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: londimids, latdimids
 integer :: lonvarid, lonndims
 integer :: latvarid, latndims
-integer :: dimid
+integer :: varid, dimid, dimlen
 
-call nc_check(nf90_inq_varid(ncid,  'lon', lonvarid), &
-              'obs_def_brightnessT.GetDimensions','inq_varid lon '//trim(fname))
-call nc_check(nf90_inq_varid(ncid,  'lat', latvarid), &
-              'obs_def_brightnessT.GetDimensions','inq_varid lat '//trim(fname))
+! Get the number of columns in the restart file 
+call nc_check(nf90_inq_dimid(myncid, 'column', dimid), &
+              'obs_def_brightnessT.GetDimensions','inq_dimid column '//trim(fname))
+call nc_check(nf90_inquire_dimension(myncid, dimid, len=ncolumns), &
+              'obs_def_brightnessT.GetDimensions','inquire_dimension column '//trim(fname))
 
-call nc_check(nf90_inquire_variable(ncid, lonvarid, ndims=lonndims, dimids=londimids),&
-              'obs_def_brightnessT.GetDimensions','inquire lon '//trim(fname))
-call nc_check(nf90_inquire_variable(ncid, latvarid, ndims=latndims, dimids=latdimids),&
-              'obs_def_brightnessT.GetDimensions','inquire lat '//trim(fname))
+! Get the number of total levels in the restart file 
+call nc_check(nf90_inq_dimid(myncid, 'levtot', dimid), &
+              'obs_def_brightnessT.GetDimensions','inq_dimid levtot '//trim(fname))
+call nc_check(nf90_inquire_dimension(myncid, dimid, len=nlevtot), &
+              'obs_def_brightnessT.GetDimensions','inquire_dimension levtot '//trim(fname))
 
-if ( (lonndims /= 1) .or. (latndims /= 1) ) then
-   write(string1,*) 'Require "lon" and "lat" variables to be 1D. They are ', &
-                     lonndims, latndims
-   call error_handler(E_ERR,'obs_def_brightnessT.GetDimensions',string1,source,revision,revdate)
-endif
+! Get the number of snow levels in the restart file 
+call nc_check(nf90_inq_dimid(myncid, 'levsno', dimid), &
+              'obs_def_brightnessT.GetDimensions','inq_dimid levsno '//trim(fname))
+call nc_check(nf90_inquire_dimension(myncid, dimid, len=nlevsno), &
+              'obs_def_brightnessT.GetDimensions','inquire_dimension levsno '//trim(fname))
 
-call nc_check(nf90_inquire_dimension(ncid, londimids(1), len=nlon), &
-              'obs_def_brightnessT.GetDimensions','inquire_dimension lon '//trim(fname))
-call nc_check(nf90_inquire_dimension(ncid, latdimids(1), len=nlat), &
-              'obs_def_brightnessT.GetDimensions','inquire_dimension lat '//trim(fname))
+! Get the number of ground levels in the restart file 
+call nc_check(nf90_inq_dimid(myncid, 'levgrnd', dimid), &
+              'obs_def_brightnessT.GetDimensions','inq_dimid levgrnd '//trim(fname))
+call nc_check(nf90_inquire_dimension(myncid, dimid, len=nlevgrnd), &
+              'obs_def_brightnessT.GetDimensions','inquire_dimension levgrnd '//trim(fname))
 
-call nc_check(nf90_inq_dimid(ncid, 'time', dimid), &
-              'obs_def_brightnessT.GetDimensions','inq_dimid time '//trim(fname))
-call nc_check(nf90_inquire_dimension(ncid, dimid, len=ntime), &
-              'obs_def_brightnessT.GetDimensions','inquire_dimension time '//trim(fname))
-
-if ( nf90_inq_dimid(ncid, 'lndgrid', dimid) == NF90_NOERR) then
-   unstructured = .true.
-   if ((nlon /= 1) .or. (nlat /= 1)) then
-      string1 = 'unstructured grids with more than a single gridcell are not supported.'
-      call error_handler(E_ERR,'obs_def_brightnessT.GetDimensions',string1,source,revision,revdate)
-   endif
-endif
+call get_gridsize(nlon, nlat, nlevgrnd)
 
 end subroutine GetDimensions
-
-
-!======================================================================
-
-
-subroutine get_scalar_from_history(varstring, state_time, ens_index, location, &
-                                   obs_time, obs_val, istatus)
-
-character(len=*),    intent(in)  :: varstring
-type(time_type),     intent(in)  :: state_time
-integer,             intent(in)  :: ens_index
-type(location_type), intent(in)  :: location
-type(time_type),     intent(in)  :: obs_time
-real(r8),            intent(out) :: obs_val
-integer,             intent(out) :: istatus
-
-if ( unstructured ) then
-   call get_scalar_from_2Dhistory(varstring,ens_index,location,obs_time,obs_val,istatus)
-else
-   call get_scalar_from_3Dhistory(varstring,ens_index,location,obs_time,obs_val,istatus)
-endif
-
-end subroutine get_scalar_from_history
-
-
-!======================================================================
-
-
-subroutine get_scalar_from_3Dhistory(varstring, ens_index, location, obs_time, &
-                                     obs_val, istatus)
-! the routine must return values for:
-! obs_val -- the computed forward operator value
-! istatus -- return code: 0=ok, > 0 is error, < 0 reserved for system use
-!
-! The requirement is that the history file variable is a 3D variable shaped similarly:
-!
-! float NEP(time, lat, lon) ;
-!          NEP:long_name = "net ecosystem production, blah, blah, blah" ;
-!          NEP:units = "gC/m^2/s" ;
-!          NEP:cell_methods = "time: mean" ;
-!          NEP:_FillValue = 1.e+36f ;
-!          NEP:missing_value = 1.e+36f ;
-
-character(len=*),    intent(in)  :: varstring
-integer,             intent(in)  :: ens_index
-type(location_type), intent(in)  :: location
-type(time_type),     intent(in)  :: obs_time
-real(r8),            intent(out) :: obs_val
-integer,             intent(out) :: istatus
-
-integer,  dimension(NF90_MAX_VAR_DIMS) :: dimids
-real(r8), dimension(3) :: loc
-integer,  dimension(3) :: ncstart, nccount
-integer,  dimension(1) :: loninds, latinds, timeinds
-integer                :: gridloni, gridlatj, timei
-integer                :: varid, xtype, ndims, natts, dimlen
-integer                :: io1, io2, second, day
-real(r8)               :: loc_lon, loc_lat, radius, distance
-real(r4), dimension(1) :: hyperslab
-real(r4)               :: spvalR4
-real(r8)               :: scale_factor, add_offset
-real(digits12)         :: otime
-character(len=NF90_MAX_NAME+20)      :: strshort
-
-type(location_type) :: gridloc
-
-obs_val = MISSING_R8
-istatus = 1
-
-!----------------------------------------------------------------------
-! if observation is outside region encompassed in the history file - fail
-loc      = get_location(location) ! loc is in DEGREES
-loc_lon  = loc(1)
-loc_lat  = loc(2)
-
-if ( (nlon==1) .and. (nlat==1) ) then
-
-   ! Defining the region if running in an unstructured grid is tricky.
-   ! Have lat, lon, and the area of the gridcell which we assume to be basically square.
-   ! The square root of the area defines the length of the edge of the gridcell.
-   ! Half the hypotenuse defines the radius of a circle. Any ob within
-   ! that radius is close enough.
-
-   gridloc   = set_location(lon(1),lat(1), 0.0_r8, VERTISUNDEF)
-   distance  = get_dist(gridloc, location, no_vert = .TRUE.) * RAD2KM ! planet earth
-   radius    = sqrt(2.0_r8 * area(1))/2.0_r8
-
-   if (debug .and. do_output()) then
-      write(string1,*)'    observation lon, lat is ',loc_lon, loc_lat
-      write(string2,*)'gridcell    lon, lat is ',lon(1),lat(1)
-      write(string3,*)'area,radius is ',area(1),radius,' distance ',distance
-      call error_handler(E_MSG, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-                 string1, source, revision, revdate, text2=string2, text3=string3)
-   endif
-
-   if ( distance > radius ) return
-
-else
-   if ( .not. is_longitude_between(loc_lon, lon(1), lon(nlon), doradians=.FALSE.)) return
-   if ((loc_lat < lat(1)) .or. (loc_lat > lat(nlat))) return
-endif
-
-!----------------------------------------------------------------------
-! Now that we know the observation operator is possible, continue ...
-
-write(strshort,'(''ens_index '',i4,1x,A)')ens_index,trim(varstring)
-
-if (ens_index > ens_size) then
-   write(string1,*)'Known to have ',ens_size,'ensemble members for observation operator.'
-   write(string2,*)'asking to use operator for ensemble member ',ens_index
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-              string1, source, revision, revdate, text2=string2)
-endif
-
-!----------------------------------------------------------------------
-! bombproofing ... make sure the netcdf file is open.
-
-call nc_check(nf90_inquire(ncid(ens_index)), &
-              'obs_def_brightnessT.get_scalar_from_3Dhistory', 'inquire '//trim(strshort))
-
-! bombproofing ... make sure the variable is the shape and size we expect
-
-call nc_check(nf90_inq_varid(ncid(ens_index), trim(varstring), varid), &
-        'obs_def_brightnessT.get_scalar_from_3Dhistory', 'inq_varid '//trim(strshort))
-call nc_check(nf90_inquire_variable(ncid(ens_index), varid, xtype=xtype, ndims=ndims, &
-        dimids=dimids, natts=natts), &
-        'obs_def_brightnessT.get_scalar_from_3Dhistory','inquire variable '//trim(strshort))
-
-if (ndims /= 3) then
-   write(string1,*)trim(varstring),' is supposed to have 3 dimensions, it has',ndims
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! If the variable is not a NF90_FLOAT, then the assumptions for processing
-! the missing_value, _FillValue, etc., may not be correct.
-if (xtype /= NF90_FLOAT) then
-   write(string1,*)trim(varstring),' is supposed to be a 32 bit real. xtype = ', &
-                   NF90_FLOAT,' it is ',xtype
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! Dimension 1 is longitude
-call nc_check(nf90_inquire_dimension(ncid(ens_index), dimids(1), len=dimlen), &
-        'obs_def_brightnessT.get_scalar_from_3Dhistory', 'inquire_dimension 1 '//trim(strshort))
-if (dimlen /= nlon) then
-   write(string1,*)'LON has length',nlon,trim(varstring),' has ',dimlen,'longitudes.'
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! Dimension 2 is latitude
-call nc_check(nf90_inquire_dimension(ncid(ens_index), dimids(2), len=dimlen), &
-        'obs_def_brightnessT.get_scalar_from_3Dhistory', 'inquire_dimension 2 '//trim(strshort))
-if (dimlen /= nlat) then
-   write(string1,*)'LAT has length',nlat,trim(varstring),' has ',dimlen,'latitudes.'
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! Dimension 3 is time
-call nc_check(nf90_inquire_dimension(ncid(ens_index), dimids(3), len=dimlen), &
-        'obs_def_brightnessT.get_scalar_from_3Dhistory', 'inquire_dimension 3'//trim(strshort))
-if (dimlen /= ntime) then
-   write(string1,*)'TIME has length',ntime,trim(varstring),' has ',dimlen,'times.'
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_3Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-!----------------------------------------------------------------------
-! Find the grid cell and timestep of interest
-! FIXME ... since the history file contents are for the previous 30m,
-! perhaps the closest time is not the best approximation.
-! Get the individual locations values
-
-call get_time(obs_time, second, day)
-otime    = real(day,digits12) + real(second,digits12)/86400.0_digits12
-
-latinds  = minloc(abs(lat - loc_lat))   ! these return 'arrays' ...
-loninds  = minloc(abs(lon - loc_lon))   ! these return 'arrays' ...
-timeinds = minloc(abs(rtime - otime))   ! these return 'arrays' ...
-
-gridlatj = latinds(1)
-gridloni = loninds(1)
-timei    = timeinds(1)
-
-if (debug .and. do_output()) then
-   write(*,*)'obs_def_brightnessT.get_scalar_from_3Dhistory:targetlon, lon, lon index is ', &
-                                           loc_lon,lon(gridloni),gridloni
-   write(*,*)'obs_def_brightnessT.get_scalar_from_3Dhistory:targetlat, lat, lat index is ', &
-                                           loc_lat,lat(gridlatj),gridlatj
-   write(*,*)'obs_def_brightnessT.get_scalar_from_3Dhistory:  targetT,   T,   T index is ', &
-                                           otime,rtime(timei),timei
-endif
-
-if ( abs(otime - rtime(timei)) > 30*60 ) then
-   if (debug .and. do_output()) then
-      write(*,*)'obs_def_brightnessT.get_scalar_from_3Dhistory: no close time ... skipping observation'
-      call print_time(obs_time,'obs_def_brightnessT.get_scalar_from_3Dhistory:observation time')
-      call print_date(obs_time,'obs_def_brightnessT.get_scalar_from_3Dhistory:observation date')
-   endif
-   istatus = 2
-   return
-endif
-
-!----------------------------------------------------------------------
-! Grab exactly the scalar we want.
-
-ncstart = (/ gridloni, gridlatj, timei /)
-nccount = (/        1,        1,     1 /)
-
-call nc_check(nf90_get_var(ncid(ens_index),varid,hyperslab,start=ncstart,count=nccount), &
-     'obs_def_brightnessT.get_scalar_from_3Dhistory', 'get_var')
-
-obs_val = hyperslab(1)
-
-!----------------------------------------------------------------------
-! Apply any netCDF attributes ...
-
-io1 = nf90_get_att(ncid(ens_index), varid, '_FillValue' , spvalR4)
-if ((io1 == NF90_NOERR) .and. (hyperslab(1) == spvalR4)) obs_val = MISSING_R8
-
-io2 = nf90_get_att(ncid(ens_index), varid, 'missing_value' , spvalR4)
-if ((io2 == NF90_NOERR) .and. (hyperslab(1) == spvalR4)) obs_val = MISSING_R8
-
-io1 = nf90_get_att(ncid(ens_index), varid, 'scale_factor', scale_factor)
-io2 = nf90_get_att(ncid(ens_index), varid, 'add_offset'  , add_offset)
-
-if ( (io1 == NF90_NOERR) .and. (io2 == NF90_NOERR) ) then
-   if (obs_val /= MISSING_R8) obs_val = obs_val * scale_factor + add_offset
-elseif (io1 == NF90_NOERR) then
-   if (obs_val /= MISSING_R8) obs_val = obs_val * scale_factor
-elseif (io2 == NF90_NOERR) then
-   if (obs_val /= MISSING_R8) obs_val = obs_val + add_offset
-endif
-
-if (obs_val /= MISSING_R8) istatus = 0
-
-end subroutine get_scalar_from_3Dhistory
-
-
-!======================================================================
-
-
-subroutine get_scalar_from_2Dhistory(varstring, ens_index, location, obs_time, &
-                                     obs_val, istatus)
-! the routine must return values for:
-! obs_val -- the computed forward operator value
-! istatus -- return code: 0=ok, > 0 is error, < 0 reserved for system use
-!
-! The requirement is that the history file variable is a 2D variable shaped similarly:
-!
-! float NEP(time, lndgrid) ;
-!          NEP:long_name = "net ecosystem production, blah, blah, blah" ;
-!          NEP:units = "gC/m^2/s" ;
-!          NEP:cell_methods = "time: mean" ;
-!          NEP:_FillValue = 1.e+36f ;
-!          NEP:missing_value = 1.e+36f ;
-!
-! Just because it is 2D does not mean it is a single column,
-! although single columns are all that is really supported right now.
-
-character(len=*),    intent(in)  :: varstring
-integer,             intent(in)  :: ens_index
-type(location_type), intent(in)  :: location
-type(time_type),     intent(in)  :: obs_time
-real(r8),            intent(out) :: obs_val
-integer,             intent(out) :: istatus
-
-integer,  dimension(NF90_MAX_VAR_DIMS) :: dimids
-real(r8), dimension(3) :: loc
-integer,  dimension(2) :: ncstart, nccount
-integer,  dimension(1) :: timeinds
-integer                :: gridij, timei
-integer                :: varid, xtype, ndims, natts, dimlen
-integer                :: io1, io2, second, day
-real(r8)               :: loc_lon, loc_lat, radius, distance
-real(r4), dimension(1) :: hyperslab
-real(r4)               :: spvalR4
-real(r8)               :: scale_factor, add_offset
-real(digits12)         :: otime
-character(len=NF90_MAX_NAME+20)      :: strshort
-
-type(location_type) :: gridloc
-
-obs_val = MISSING_R8
-istatus = 1
-
-!----------------------------------------------------------------------
-! if observation is outside region encompassed in the history file - fail
-loc      = get_location(location) ! loc is in DEGREES
-loc_lon  = loc(1)
-loc_lat  = loc(2)
-
-! Defining the region if running in an unstructured grid is tricky.
-! We have lat, lon, and the area of the gridcell which we assume to be basically square.
-! The square root of the area defines the length of the edge of the gridcell.
-! Half the hypotenuse defines the radius of a circle. Any ob within
-! that radius is close enough.
-
-! TJH FIXME This does not work with unstructured grid.
-! latinds  = minloc(abs(lat - loc_lat))   ! these return 'arrays' ...
-! loninds  = minloc(abs(lon - loc_lon))   ! these return 'arrays' ...
-! gridij = the closest location
-
-! The "1" in the following reflect the fact that only a single gridcell
-! is currently supported in the unstructured grid configuration.
-! (see GetDimensions())
-
-gridij   = 1
-gridloc  = set_location(lon(gridij),lat(gridij), 0.0_r8, VERTISUNDEF)
-distance = get_dist(gridloc, location, no_vert = .TRUE.) * RAD2KM
-radius   = sqrt(2.0_r8 * area(gridij))/2.0_r8
-
-if (debug .and. do_output()) then
-   write(string1,*)'    observation lon, lat is ',loc_lon, loc_lat
-   write(string2,*)'gridcell    lon, lat is ',lon(gridij),lat(gridij)
-   write(string3,*)'area,radius is ',area(gridij),radius,' distance ',distance
-   call error_handler(E_MSG, 'obs_def_brightnessT.get_scalar_from_2Dhistory', &
-              string1, source, revision, revdate, text2=string2, text3=string3)
-endif
-
-if ( distance > radius ) return
-
-!----------------------------------------------------------------------
-! Now that we know the observation operator is possible, continue ...
-
-write(strshort,'(''ens_index '',i4,1x,A)')ens_index,trim(varstring)
-
-if (ens_index > ens_size) then
-   write(string1,*)'believed to have ',ens_size,'ensemble members for observation operator.'
-   write(string2,*)'asking to use operator for ensemble member ',ens_index
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_2Dhistory', &
-              string1, source, revision, revdate, text2=string2)
-endif
-
-!----------------------------------------------------------------------
-! bombproofing ... make sure the netcdf file is open.
-
-call nc_check(nf90_inquire(ncid(ens_index)), &
-              'obs_def_brightnessT.get_scalar_from_2Dhistory', 'inquire '//trim(strshort))
-
-! bombproofing ... make sure the variable is the shape and size we expect
-
-call nc_check(nf90_inq_varid(ncid(ens_index), trim(varstring), varid), &
-        'obs_def_brightnessT.get_scalar_from_2Dhistory', 'inq_varid '//trim(strshort))
-call nc_check(nf90_inquire_variable(ncid(ens_index), varid, xtype=xtype, ndims=ndims, &
-        dimids=dimids, natts=natts), &
-        'obs_def_brightnessT.get_scalar_from_2Dhistory','inquire variable '//trim(strshort))
-
-if (ndims /= 2) then
-   write(string1,*)trim(varstring),' is supposed to have 2 dimensions, it has',ndims
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_2Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! If the variable is not a NF90_FLOAT, then the assumptions for processing
-! the missing_value, _FillValue, etc., may not be correct.
-if (xtype /= NF90_FLOAT) then
-   write(string1,*)trim(varstring),' is supposed to be a 32 bit real. xtype = ', &
-                   NF90_FLOAT,' it is ',xtype
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_2Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! Dimension 1 is spatial
-call nc_check(nf90_inquire_dimension(ncid(ens_index), dimids(1), len=dimlen), &
-        'obs_def_brightnessT.get_scalar_from_2Dhistory', 'inquire_dimension 1 '//trim(strshort))
-if (dimlen /= nlon) then
-   write(string1,*)'LON has length',nlon,trim(varstring),' has ',dimlen,'longitudes.'
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_2Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-! Dimension 2 is time
-call nc_check(nf90_inquire_dimension(ncid(ens_index), dimids(2), len=dimlen), &
-        'obs_def_brightnessT.get_scalar_from_2Dhistory', 'inquire_dimension 2 '//trim(strshort))
-if (dimlen /= ntime) then
-   write(string1,*)'TIME has length',ntime,trim(varstring),' has ',dimlen,'times.'
-   call error_handler(E_ERR, 'obs_def_brightnessT.get_scalar_from_2Dhistory', &
-              string1, source, revision, revdate)
-endif
-
-!----------------------------------------------------------------------
-! Find the timestep of interest
-! FIXME ... since the history file contents are for the previous 30m,
-! perhaps the closest time is not the best approximation.
-
-call get_time(obs_time, second, day)
-otime    = real(day,digits12) + real(second,digits12)/86400.0_digits12
-timeinds = minloc(abs(rtime - otime))   ! these return 'arrays' ...
-timei    = timeinds(1)
-
-if (debug .and. do_output()) then
-   write(*,*)'obs_def_brightnessT.get_scalar_from_2Dhistory:  targetT,   T,   T index is ', &
-                                           otime,rtime(timei),timei
-endif
-
-if ( abs(otime - rtime(timei)) > 30*60 ) then
-   if (debug .and. do_output()) then
-      write(*,*)'obs_def_brightnessT.get_scalar_from_2Dhistory: no close time ... skipping observation'
-      call print_time(obs_time,'obs_def_brightnessT.get_scalar_from_2Dhistory:observation time')
-      call print_date(obs_time,'obs_def_brightnessT.get_scalar_from_2Dhistory:observation date')
-   endif
-   istatus = 2
-   return
-endif
-
-!----------------------------------------------------------------------
-! Grab exactly the scalar we want.
-
-ncstart = (/ gridij, timei /)
-nccount = (/      1,     1 /)
-
-call nc_check(nf90_get_var(ncid(ens_index),varid,hyperslab,start=ncstart,count=nccount), &
-     'obs_def_brightnessT.get_scalar_from_2Dhistory', 'get_var')
-
-obs_val = hyperslab(1)
-
-!----------------------------------------------------------------------
-! Apply any netCDF attributes ...
-
-io1 = nf90_get_att(ncid(ens_index), varid, '_FillValue' , spvalR4)
-if ((io1 == NF90_NOERR) .and. (hyperslab(1) == spvalR4)) obs_val = MISSING_R8
-
-io2 = nf90_get_att(ncid(ens_index), varid, 'missing_value' , spvalR4)
-if ((io2 == NF90_NOERR) .and. (hyperslab(1) == spvalR4)) obs_val = MISSING_R8
-
-io1 = nf90_get_att(ncid(ens_index), varid, 'scale_factor', scale_factor)
-io2 = nf90_get_att(ncid(ens_index), varid, 'add_offset'  , add_offset)
-
-if ( (io1 == NF90_NOERR) .and. (io2 == NF90_NOERR) ) then
-   if (obs_val /= MISSING_R8) obs_val = obs_val * scale_factor + add_offset
-elseif (io1 == NF90_NOERR) then
-   if (obs_val /= MISSING_R8) obs_val = obs_val * scale_factor
-elseif (io2 == NF90_NOERR) then
-   if (obs_val /= MISSING_R8) obs_val = obs_val + add_offset
-endif
-
-if (obs_val /= MISSING_R8) istatus = 0
-
-end subroutine get_scalar_from_2Dhistory
 
 
 !======================================================================
@@ -1300,6 +936,337 @@ write(*,*)'TJH DEBUG: Radius,area is ',distance,PI*distance**2, &
 end subroutine test_block
 
 
+
+subroutine get_column_snow(filename, snow_column )
+! Read all the variables needed for the radiative transfer model as applied
+! to a single CLM column. 
+!
+! The treatment of snow-related variables is complicated.
+! The SNLSNO variable defines the number of snow layers with valid values.
+! HOWEVER, if the snow depth is < 0.01 m, the snow is not represented by a layer,
+! so the SNLSNO(i) is zero even though there is a trace of snow.
+! Even a trace amount of snow results in some sort of snow cover fraction.
+!
+! Lakes are treated differently.
+! The SNLSNO(i) is always zero, even though there is snow.
+! The snow over lakes is wholly contained in the bulk formulation variables
+! as opposed to the snow layer variables.
+
+
+! float WATSAT(levgrnd, lat, lon) ;
+!       WATSAT:long_name = "saturated soil water content (porosity)" ;
+!       WATSAT:units = "mm3/mm3" ;
+!       WATSAT:_FillValue = 1.e+36f ;
+!       WATSAT:missing_value = 1.e+36f ;
+
+character(len=*), intent(in)  :: filename
+integer,          intent(in)  :: snow_column
+
+real(r8) :: t_grnd(1) ! ground temperature
+integer  :: snlsno(1) ! number of snow layers
+integer  :: ityplun   ! type of column unit (lake, etc.)
+
+real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
+real(r8), allocatable, dimension(:) :: dzsno, zsno, zisno, snw_rds
+
+integer               :: myncid, varid, ilayer, nlayers
+integer, dimension(2) :: ncstart, nccount
+
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, myncid), &
+              'get_column_snow','open '//trim(filename))
+
+! Get the (scalar) number of active snow layers for this column.
+call nc_check(nf90_inq_varid(myncid,'SNLSNO', varid), 'get_column_snow', 'inq_varid SNLSNO')
+call nc_check(nf90_get_var(  myncid, varid, snlsno, start=(/ snow_column /), count=(/ 1 /)), &
+              'get_column_snow', 'get_var SNLSNO')
+
+! Get the ground temperature for this column.
+! double T_GRND(column); long_name = "ground temperature" ; units = "K" ;
+call nc_check(nf90_inq_varid(myncid,'T_GRND', varid), 'get_column_snow', 'inq_varid T_GRND')
+call nc_check(nf90_get_var(  myncid, varid, t_grnd, start=(/ snow_column /), count=(/ 1 /)), &
+              'get_column_snow', 'get_var T_GRND')
+
+ityplun = cols1d_ityplun(snow_column)   ! are we a lake
+
+if (ityplun == LAKEUNIT ) then
+   ! FIXME ... lake columns use a bulk formula for snow 
+   snowcolumn%nprops    = 0
+   snowcolumn%nlayers   = 0
+   snowcolumn%t_grnd    = 0.0_r4
+   snowcolumn%soilsat   = 0.0_r4
+   snowcolumn%soilporos = 0.0_r4
+   snowcolumn%propconst = 0.0_r4
+   return
+endif
+
+
+! double H2OSOI_LIQ(column, levtot); long_name = "liquid water" ; units = "kg/m2" ;
+! double H2OSOI_ICE(column, levtot); long_name = "ice lens"     ; units = "kg/m2" ;
+! double T_SOISNO(  column, levtot); long_name = "soil-snow temperature" ; units = "K" ;
+
+allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot))
+ncstart = (/ 1, snow_column /)
+nccount = (/ nlevtot,   1   /)
+
+call nc_check(nf90_inq_varid(myncid,'T_SOISNO', varid), 'get_column_snow', 'inq_varid T_SOISNO')
+call nc_check(nf90_get_var(  myncid, varid, t_soisno, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var T_SOISNO')
+
+call nc_check(nf90_inq_varid(myncid,'H2OSOI_LIQ', varid), 'get_column_snow', 'inq_varid H2OSOI_LIQ')
+call nc_check(nf90_get_var(  myncid, varid, h2osoi_liq, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var H2OSOI_LIQ')
+
+call nc_check(nf90_inq_varid(myncid,'H2OSOI_ICE', varid), 'get_column_snow', 'inq_varid H2OSOI_ICE')
+call nc_check(nf90_get_var(  myncid, varid, h2osoi_ice, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var H2OSOI_ICE')
+
+! double   DZSNO(column, levsno); long_name = "snow layer thickness"        ; units = "m" ;
+! double    ZSNO(column, levsno); long_name = "snow layer depth"            ; units = "m" ;
+! double   ZISNO(column, levsno); long_name = "snow interface depth"        ; units = "m" ;
+! double snw_rds(column, levsno); long_name = "snow layer effective radius" ; units = "um" ;
+
+allocate(dzsno(nlevsno), zsno(nlevsno), zisno(nlevsno), snw_rds(nlevsno))
+ncstart = (/ 1, snow_column /)
+nccount = (/ nlevsno,   1   /)
+
+call nc_check(nf90_inq_varid(myncid,'DZSNO', varid), 'get_column_snow', 'inq_varid DZSNO')
+call nc_check(nf90_get_var(  myncid, varid, dzsno, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var DZSNO')
+
+call nc_check(nf90_inq_varid(myncid,'ZSNO', varid), 'get_column_snow', 'inq_varid ZSNO')
+call nc_check(nf90_get_var(  myncid, varid, zsno, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var ZSNO')
+
+call nc_check(nf90_inq_varid(myncid,'ZISNO', varid), 'get_column_snow', 'inq_varid ZISNO')
+call nc_check(nf90_get_var(  myncid, varid, zisno, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var ZISNO')
+
+call nc_check(nf90_inq_varid(myncid,'snw_rds', varid), 'get_column_snow', 'inq_varid snw_rds')
+call nc_check(nf90_get_var(  myncid, varid, snw_rds, start=ncstart, count=nccount), &
+     'get_column_snow', 'get_var snw_rds')
+
+! Print a summary so far
+if (debug .and. do_output()) then
+   write(*,*)'summary for column ',snow_column
+   write(*,*)'  # of snow layers, column ityp, ground temp :', snlsno, ityplun, t_grnd
+   write(*,*)'  h2osoi_liq :', h2osoi_liq(1:nlevsno)
+   write(*,*)'  h2osoi_ice :', h2osoi_ice(1:nlevsno)
+   write(*,*)'  t_soisno   :',   t_soisno(1:nlevsno)
+   write(*,*)'  dzsno      :',      dzsno(1:nlevsno)
+   write(*,*)'  zsno       :',       zsno(1:nlevsno)
+   write(*,*)'  zisno      :',      zisno(1:nlevsno)
+   write(*,*)'  snw_rds    :',    snw_rds(1:nlevsno)
+   write(*,*)
+endif
+
+nlayers = abs(snlsno(1))
+
+allocate( snowcolumn%thickness(nlayers)     , &
+          snowcolumn%density(nlayers)       , &
+          snowcolumn%grain_diameter(nlayers), &
+          snowcolumn%liquid_water(nlayers)  , &
+          snowcolumn%temperature(nlayers)   )
+
+! Fill the output array ... finally
+! FIXME ... soilsat   is a hardwired value
+! FIXME ... soiporos  is a hardwired value
+! FIXME ... propconst is a hardwired value
+
+snowcolumn%nprops    = 5
+snowcolumn%nlayers   = nlayers
+snowcolumn%t_grnd    = t_grnd(1) ! aux_ins(2) ground temperature [K]
+snowcolumn%soilsat   = 0.3       ! aux_ins(3) soil saturation [fraction]
+snowcolumn%soilporos = 0.4       ! aux_ins(4) soil porosity [fraction]
+snowcolumn%propconst = 0.5       ! aux_ins(5) proportionality between grain size & correlation length.
+
+do ilayer = 1,nlayers
+   snowcolumn%thickness(ilayer) = dzsno(ilayer) 
+   snowcolumn%density(ilayer) = ( h2osoi_liq(ilayer) + h2osoi_ice(ilayer)) / dzsno(ilayer)
+   snowcolumn%grain_diameter(ilayer) = snw_rds(ilayer)
+   snowcolumn%liquid_water(ilayer) = h2osoi_liq(ilayer)
+   snowcolumn%temperature(ilayer) = t_soisno(ilayer)
+enddo
+
+end subroutine get_column_snow
+
+
+
+subroutine destroy_column_snow
+
+if (associated(snowcolumn%thickness))      deallocate(snowcolumn%thickness)
+if (associated(snowcolumn%density))        deallocate(snowcolumn%density)
+if (associated(snowcolumn%grain_diameter)) deallocate(snowcolumn%grain_diameter)
+if (associated(snowcolumn%liquid_water))   deallocate(snowcolumn%liquid_water)
+if (associated(snowcolumn%temperature))    deallocate(snowcolumn%temperature)
+
+snowcolumn%nprops    = 0
+snowcolumn%nlayers   = 0
+snowcolumn%t_grnd    = 0.0_r4
+snowcolumn%soilsat   = 0.0_r4
+snowcolumn%soilporos = 0.0_r4
+snowcolumn%propconst = 0.0_r4
+
+end subroutine destroy_column_snow
+
+
+
+subroutine test_brightness_temperature()
+
+! FIXME ... finish this routine ...
+! FIXME ... finish this routine ...
+! FIXME ... finish this routine ...
+! FIXME ... finish this routine ...
+! FIXME ... finish this routine ...
+! FIXME test THE forward observation operator
+
+integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
+integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
+
+! variables required by ss_snow() routine
+real(r4), allocatable, dimension(:,:) :: y ! 2D array 
+real(r4) :: aux_ins(5) ! properties: [nlyrs, ground_T, soilsat, poros, proportionality]
+integer  :: ctrl(4)        ! N_LYRS, N_AUX_INS, N_SNOW_INS, N_FREQ
+real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
+real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
+real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
+real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
+
+integer  :: ilayer, ilon, ilat, icol, ncols
+integer, allocatable, dimension(:) :: columns_to_get
+real(r8), dimension(LocationDims)  :: loc
+real(r8)  :: loc_lon, loc_lat
+character :: pol    ! observation polarization
+
+!TJHtetad(:) = AMSRE_inc_angle
+!TJHfreq(:)  = observation_metadata(key)%frequency
+!TJHpol      = observation_metadata(key)%polarization
+!TJHloc      = get_location(location)
+!TJHloc_lon  = loc(1)
+!TJHloc_lat  = loc(2)
+!TJH
+!TJHilon = 73    ! lon( 73) == 90.0
+!TJHilat = 161   ! lat(161) == 60.78534 ... Siberia
+!TJH
+!TJHncols = get_ncols_in_gridcell(ilon,ilat)
+!TJHallocate (columns_to_get(ncols))
+!TJHcall get_colids_in_gridcell(ilon, ilat, columns_to_get)
+!TJH
+!TJH! Loop over all columns in gridcell that has the right location.
+!TJH! Skip the lake columns, the columns without snow ... others ...
+!TJH! the columns with no layered snow - but might have a trace ...
+!TJH
+!TJHSNOWCOLS : do icol = 1,ncols
+!TJH   call get_column_snow('clm_restart.nc', columns_to_get(icol) )
+!TJH
+!TJH   if ( debug .and. do_output() ) then
+!TJH      if (snowcolumn%nlayers < 1) then
+!TJH         write(string1, *) 'column (',columns_to_get(icol),') has no snow'
+!TJH         call error_handler(E_MSG,'get_brightness_temperature',string1)
+!TJH      else
+!TJH         write(*,*)'nprops   ',snowcolumn%nprops
+!TJH         write(*,*)'nlayers  ',snowcolumn%nlayers
+!TJH         write(*,*)'t_grnd   ',snowcolumn%t_grnd
+!TJH         write(*,*)'soilsat  ',snowcolumn%soilsat
+!TJH         write(*,*)'soilpor  ',snowcolumn%soilporos
+!TJH         write(*,*)'proconst ',snowcolumn%propconst
+!TJH         write(*,*)'thickness',snowcolumn%thickness
+!TJH         write(*,*)'density  ',snowcolumn%density
+!TJH         write(*,*)'diameter ',snowcolumn%grain_diameter
+!TJH         write(*,*)'liqwater ',snowcolumn%liquid_water
+!TJH         write(*,*)'temp     ',snowcolumn%temperature
+!TJH      endif
+!TJH   endif
+!TJH
+!TJH   nlevsno  = snowcolumn%nlayers
+!TJH
+!TJH   allocate( y(nlevsno, snowcolumn%nprops) )
+!TJH
+!TJH   ! FIXME Ally ... if you have a better way to specify/determine,
+!TJH   ! tb_ubc do it here. Call your atmospheric model to calculate it.
+!TJH   tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)
+!TJH
+!TJH   ctrl(1) = nlevsno
+!TJH   ctrl(2) = 0              ! not used as far as I can tell
+!TJH   ctrl(3) = snowcolumn%nprops
+!TJH   ctrl(4) = N_FREQ
+!TJH
+!TJH   y(:,1)  = snowcolumn%thickness
+!TJH   y(:,2)  = snowcolumn%density
+!TJH   y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need microns
+!TJH   y(:,4)  = snowcolumn%liquid_water
+!TJH   y(:,5)  = snowcolumn%temperature
+!TJH
+!TJH   aux_ins(1) = real(nlevsno,r4)
+!TJH   aux_ins(2) = snowcolumn%t_grnd
+!TJH   aux_ins(3) = snowcolumn%soilsat
+!TJH   aux_ins(4) = snowcolumn%soilporos
+!TJH   aux_ins(5) = 0.5_r4                ! FIXME - hardwired
+!TJH    
+!TJH   ! the tb_out array contains the calculated brightness temperature outputs
+!TJH   ! at each polarization (rows) and frequency (columns).
+!TJH    
+!TJH   call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+!TJH    
+!TJH   write(*,*)'tb_out is ',tb_out
+!TJH
+!TJH   deallocate( y )
+!TJH   call destroy_column_snow()
+!TJH
+!TJHenddo SNOWCOLS
+!TJH
+!TJHdeallocate( columns_to_get )
+
+!TJHdo ilayer = 1,nlevsno
+!TJH   ! For now, just make something up
+!TJH
+!TJH   if ( ilayer == 1) then
+!TJH      snow%thickness      = 0.6213     ! meters
+!TJH      snow%density        = 270.5943   ! kg/m3
+!TJH      snow%grain_diameter = 93.1651E-06  ! m   (93 mm)
+!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
+!TJH      snow%temperature    = 266.1220   ! K
+!TJH   elseif (ilayer == 2) then
+!TJH      snow%thickness      = 0.2071     ! meters
+!TJH      snow%density        = 150.7856   ! kg/m3
+!TJH      snow%grain_diameter =84.0811E-06    ! m
+!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
+!TJH      snow%temperature    = 256.7763   ! K
+!TJH   elseif (ilayer == 3) then
+!TJH      snow%thickness      = 0.1033     ! meters
+!TJH      snow%density        = 96.1940    ! kg/m3
+!TJH      snow%grain_diameter = 67.6715E-06  ! m
+!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
+!TJH      snow%temperature    = 247.9525   ! K
+!TJH   elseif (ilayer == 4) then
+!TJH      snow%thickness      = 0.0497     ! meters
+!TJH      snow%density        = 66.4903    ! kg/m3
+!TJH      snow%grain_diameter = 66.8529E-06  ! m
+!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
+!TJH      snow%temperature    = 240.4609   ! K
+!TJH   elseif (ilayer == 5) then
+!TJH      snow%thickness      = 0.0200     ! meters
+!TJH      snow%density        = 58.0377    ! kg/m3
+!TJH      snow%grain_diameter = 65.6391E-06  ! m
+!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
+!TJH      snow%temperature    = 235.8929   ! K
+!TJH   endif
+!TJH
+!TJH   y(ilayer,1) = snow%thickness
+!TJH   y(ilayer,2) = snow%density
+!TJH   y(ilayer,3) = snow%grain_diameter
+!TJH   y(ilayer,4) = snow%liquid_water
+!TJH   y(ilayer,5) = snow%temperature
+!TJH
+!TJHenddo
+
+!TJHaux_ins = (/ real(nlevsno,r4), 271.1123, 0.3, 0.4, 0.5 /) ! FIXME replace by real values.
+!TJH
+!TJHcall ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+!TJH
+!TJHwrite(*,*)'tb_out is ',tb_out
+
+end subroutine test_brightness_temperature
+
 !======================================================================
 
 
@@ -1313,50 +1280,3 @@ end module obs_def_brightnessT_mod
 ! $Id$
 ! $Revision$
 ! $Date$
-
-This come from the history file
-
-float WATSAT(levgrnd, lat, lon) ;
-      WATSAT:long_name = "saturated soil water content (porosity)" ;
-      WATSAT:units = "mm3/mm3" ;
-      WATSAT:_FillValue = 1.e+36f ;
-      WATSAT:missing_value = 1.e+36f ;
-
-All these come from the restart file
-
-double snw_rds(column, levsno) ;
-       snw_rds:long_name = "snow layer effective radius" ;
-       snw_rds:units = "um" ;
-
-double H2OSOI_LIQ(column, levtot) ;
-       H2OSOI_LIQ:long_name = "liquid water" ;
-       H2OSOI_LIQ:units = "kg/m2" ;
-
-double H2OSOI_ICE(column, levtot) ;
-       H2OSOI_ICE:long_name = "ice lens" ;
-       H2OSOI_ICE:units = "kg/m2" ;
-
-SWE is H2OSOI_LIQ + H2OSOI_ICE, basically.
-density is SWE / DZSNO
-
-double T_GRND(column) ;
-       T_GRND:long_name = "ground temperature" ;
-       T_GRND:units = "K" ;
-
-double T_SOISNO(column, levtot) ;
-       T_SOISNO:long_name = "soil-snow temperature" ;
-       T_SOISNO:units = "K" ;
-
-double DZSNO(column, levsno) ;
-       DZSNO:long_name = "snow layer thickness" ;
-       DZSNO:units = "m" ;
-
-double ZSNO(column, levsno) ;
-       ZSNO:long_name = "snow layer depth" ;
-       ZSNO:units = "m" ;
-
-double ZISNO(column, levsno) ;
-       ZISNO:long_name = "snow interface depth" ;
-       ZISNO:units = "m" ;
-
-

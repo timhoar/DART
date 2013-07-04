@@ -11,7 +11,7 @@ private
 
 public :: ss_model
 
-logical :: debug = .true.
+logical :: debug = .false.
 
 contains
 
@@ -173,7 +173,7 @@ ALLOCATE(DI(1:NUM),ROIKG(1:NUM),GDI(1:NUM),WIFR(1:NUM),TI(1:NUM))
 
 DI(   1:NUM)   = Y(1:NUM,1)    ! snow thickness
 ROIKG(1:NUM)   = Y(1:NUM,2)    ! snow density
-GDI(  1:NUM)   = Y(1:NUM,3)    ! specific grain diameter
+GDI(  1:NUM)   = Y(1:NUM,3)    ! specific grain diameter (need in microns) XX.YYYYE-06
 WIFR( 1:NUM)   = Y(1:NUM,4)    ! liquid water fraction
 TI(   1:NUM)   = Y(1:NUM,5)    ! snow temperature
 
@@ -181,9 +181,6 @@ GND_TEMP       = AUX_INS(2)    ! Ground temperature
 SOILSATURATION = AUX_INS(3)    ! soil saturation
 SASTPOROS      = AUX_INS(4)    ! soil porosity (fraction)
 SNGDPCI        = AUX_INS(5)    ! proportionality constant
-
-write(*,*)'ss_model: Y  is ',y
-write(*,*)'ss_model: TI is ',ti
 
 GND_MV=SOILSATURATION*SASTPOROS
 
@@ -237,7 +234,7 @@ DO K=1,NFREQ
   ! Code modified 2 July 2013 to use 'effective' grain diameter. TJH 
   ! FIXME ... there may be a better algorithm for correlation length.
 
-  GDIMM = GDI*1000
+  GDIMM = GDI*1000          ! TJH microns to millimeters
   ! PCI   = GDIMM*SNGDPCI   ! TJH
 
   ! ice_frac = snow_density/ice_density
@@ -245,12 +242,12 @@ DO K=1,NFREQ
   pci(:)   = 0.5 * GDIMM * (1.0 - ice_frac)
   !pci(:)   = .67*GDIMM * (1.0 - ice_frac)
 
-  write(*,*)'Specific grain size : GDIMM   ', GDIMM
-  write(*,*)'Snow density : ROI   ', ROI
-  write(*,*)'ice fraction : ice_frac   ', ice_frac
-
-  write(*,*)'Correlation length: pci   ', pci
-
+  if ( debug ) then
+     write(*,*)'ss_model: Specific grain size : GDIMM    ', GDIMM
+     write(*,*)'ss_model: Snow density        : ROI      ', ROI
+     write(*,*)'ss_model: ice fraction        : ice_frac ', ice_frac
+     write(*,*)'ss_model: Correlation length  : pci      ', pci
+  endif
 
   deallocate(ice_frac)
 
@@ -1754,11 +1751,6 @@ integer,intent(in) :: pixel,replicate,rank,meas,fn
 
 ALLOCATE( EICE(NUM),F(NUM),A(NUM),EPSP(NUM),A3(NUM),EA(NUM),EA3(NUM), & 
      K1(NUM),K3(NUM),KSQ(NUM) )
-
-write(*,*)'RO2EPSD: ti   ',ti
-write(*,*)'RO2EPSD: freq ',freq
-write(*,*)'RO2EPSD: eice ',eice
-write(*,*)'RO2EPSD: num  ',num
 
 CALL EPSICE(TI,FREQ,EICE,NUM)
 
