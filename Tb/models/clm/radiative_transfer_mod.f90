@@ -11,7 +11,7 @@ private
 
 public :: ss_model
 
-logical :: debug = .false.
+logical :: debug = .true.
 
 contains
 
@@ -184,6 +184,14 @@ SNGDPCI        = AUX_INS(5)    ! proportionality constant
 
 GND_MV=SOILSATURATION*SASTPOROS
 
+! A.1. DEFINE CONSTANTS
+! TJH these must be before the bare ground calculation.
+MJU0    = 1.2566e-006
+GND_SIG = 0.002
+GND_EPS = 0
+EPS0    = 8.8542e-012
+PI      = 3.14159
+
 !  1. CHECK TO MAKE SURE THERE IS SNOW.  OTHERWISE DEAL WITH SOIL ONLY 
 !     NOTE: AUX_INS(1) CONTAINS 0 IN THE CASE OF NO SNOW, THOUGH NUM
 !     WILL BE 1 TO AVOID INCORRECT ARRAY ALLOCATIONS
@@ -215,14 +223,6 @@ END IF
 DO K=1,NFREQ
 
   !  A. PRELIMINARIES 
-  !  A.1. DEFINE CONSTANTS
-
-  GND_SIG=0.002
-  GND_EPS=0
-  MJU0=1.2566e-006
-  EPS0=8.8542e-012
-
-  PI=3.14159
 
   !  A.2. ALLOCATE AND UNIT CONVERSION STATEMENTS
   ALLOCATE(ROI(1:NUM),GDIMM(1:NUM),PCI(1:NUM),ice_frac(1:NUM))
@@ -416,11 +416,45 @@ INTEGER, INTENT(IN)  :: NUM
 REAL,    INTENT(IN)  :: EPSI(NUM),EPSII(NUM),TI(NUM),FREQ,WIFR(NUM)
 REAL,    INTENT(OUT) :: GAI(NUM)
 
-REAL :: C,PI
+real(digits12) :: C,PI
 
-C=2.99793
-PI=3.14159
-GAI=((2*PI*10*FREQ)*EPSII)/(C*(EPSI-(EPSII**2/4*EPSI))**0.5)
+real(digits12) :: part1,part2
+real(digits12) :: numerator,denominator
+integer :: i
+
+C  = 2.99793_digits12
+PI = 3.14159_digits12
+
+! Must try alternative implementation of following (it over/underflows)
+! GAI=((2*PI*10*FREQ)*EPSII)/(C*(EPSI-(EPSII**2/4*EPSI))**0.5)
+
+do i = 1,NUM
+   numerator   = 2.0_digits12 * PI * 10.0_digits12 * real(FREQ,digits12) * real(EPSII(i),digits12)
+   part1       = (EPSII(i)**2.0/4.0_digits12)*EPSI(i)
+   part2       = EPSI(i) - part1
+   denominator = C * part2**0.5
+
+   if ( debug ) then
+      write(*,*)'abscoeff: i = ',i,' of ',NUM
+      write(*,*)'abscoeff:           C ', C
+      write(*,*)'abscoeff:        FREQ ', FREQ
+      write(*,*)'abscoeff:        EPSI ', EPSI(i)
+      write(*,*)'abscoeff:       EPSII ', EPSII(i)
+      write(*,*)'abscoeff: numerator   ', numerator
+      write(*,*)'abscoeff: part1       ', part1
+      write(*,*)'abscoeff: part2       ', part2
+      write(*,*)'abscoeff: denominator ', denominator
+      write(*,*)'abscoeff: GAI is then ', numerator / denominator
+   endif
+
+   GAI(i) = numerator/denominator
+enddo
+
+! original form in matlab code: 
+! gai = ((2*pi*10*freq).*epsii)./(c.*sqrt(epsi - (epsii.^2./4.*epsi)));
+
+! original form in 32bit fortran code: 
+! GAI=((2*PI*10*FREQ)*EPSII)/(C*(EPSI-(EPSII**2/4*EPSI))**0.5)
 
 END SUBROUTINE ABSCOEFF
 

@@ -455,7 +455,9 @@ if ((ncols == 0) .and. do_output() ) then
    return
 endif
 
-write(*,*)'TJH debug ... ens_index is ',ens_index
+write(*,*)
+write(*,*)
+write(*,*)'TJH debug ... computing gridcell ',ilon,ilat
 
 allocate( columns_to_get(ncols), tb(ncols), weights(ncols) )
 columns_to_get(:) = -1
@@ -465,7 +467,10 @@ call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 
 ! FIXME Presently skipping gridcells with lakes.
 ! get_column_snow() must also modified to use bulk snow formulation for lakes.
-if ( any(cols1d_ityplun(columns_to_get) == LAKEUNIT)) return
+if ( any(cols1d_ityplun(columns_to_get) == LAKEUNIT))  then
+   deallocate(columns_to_get, tb, weights)
+   return
+endif
 
 ! need to know which restart file to use to harvest information
 call build_clm_instance_filename(ens_index, state_time, filename)
@@ -475,7 +480,7 @@ call build_clm_instance_filename(ens_index, state_time, filename)
 SNOWCOLS : do icol = 1,ncols
 
    weights(icol) = cols1d_wtxy(columns_to_get(icol)) ! relative weight of column
-   call get_column_snow(filename, columns_to_get(icol))
+   call get_column_snow(filename, columns_to_get(icol)) ! allocates snowcolumn
 
    if ( debug .and. do_output() ) then
       if (snowcolumn%nlayers < 1) then
@@ -496,32 +501,34 @@ SNOWCOLS : do icol = 1,ncols
       endif
    endif
 
-   nlevsno  = snowcolumn%nlayers
-
-   if ( nlevsno == 0 ) then
+   if ( snowcolumn%nlayers == 0 ) then
       ! If there is no snow, the ss_model will calculate the brightness
       ! temperature of the bare soil. To indicate this, aux_ins(1) must
       ! be 0 and ctrl(1) must be 1
       ctrl(1) = 1
    else
-      ctrl(1) = nlevsno
+      ctrl(1) = snowcolumn%nlayers
    endif
    ctrl(2) = 0              ! not used as far as I can tell
    ctrl(3) = snowcolumn%nprops
    ctrl(4) = N_FREQ
 
-   aux_ins(1) = real(nlevsno,r4)
+   aux_ins(1) = real(snowcolumn%nlayers,r4)
    aux_ins(2) = snowcolumn%t_grnd
    aux_ins(3) = snowcolumn%soilsat
    aux_ins(4) = snowcolumn%soilporos
    aux_ins(5) = 0.5_r4                ! FIXME - hardwired
+
+   ! TJH must convert liquid water to a fraction [0,1]
+   ! TJH 1cm3 == 1g so 100cm * 100cm = 10,000g
+   ! fully saturated then is 10kg/m^2
 
    allocate( y(ctrl(1), snowcolumn%nprops) )
    if ( aux_ins(1) > 0 ) then
       y(:,1)  = snowcolumn%thickness
       y(:,2)  = snowcolumn%density
       y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need meters (from microns)
-      y(:,4)  = snowcolumn%liquid_water
+      y(:,4)  = snowcolumn%liquid_water / 10.0_r4        ! convert to fraction
       y(:,5)  = snowcolumn%temperature
    else ! dummy values for bare ground
       y(:,1)  = 0.0_r4
@@ -547,10 +554,10 @@ SNOWCOLS : do icol = 1,ncols
       ! call to alternative radiative transfer model goes here.
    endif
 
-   write(*,*)'tb_out is ',tb_out
+   write(*,*)'column ', columns_to_get(icol),' tb_out is ',tb_out
+   write(*,*)
 
-   ! FIXME ... which is which
-   if (pol == 'V') then
+   if (pol == 'H') then
       tb(icol) = tb_out(1,1)   ! second dimension is only 1 frequency
    else
       tb(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
@@ -1065,6 +1072,14 @@ real(r8), allocatable, dimension(:) :: dzsno, zsno, zisno, snw_rds
 integer               :: myncid, varid, ilayer, nlayers, ij
 integer, dimension(2) :: ncstart, nccount
 
+! Set some return values
+snowcolumn%nprops    = 0
+snowcolumn%nlayers   = 0
+snowcolumn%t_grnd    = 0.0_r4
+snowcolumn%soilsat   = 0.0_r4
+snowcolumn%soilporos = 0.0_r4
+snowcolumn%propconst = 0.0_r4
+
 call nc_check(nf90_open(trim(filename), NF90_NOWRITE, myncid), &
               'get_column_snow','open '//trim(filename))
 
@@ -1072,6 +1087,8 @@ call nc_check(nf90_open(trim(filename), NF90_NOWRITE, myncid), &
 call nc_check(nf90_inq_varid(myncid,'SNLSNO', varid), 'get_column_snow', 'inq_varid SNLSNO')
 call nc_check(nf90_get_var(  myncid, varid, snlsno, start=(/ snow_column /), count=(/ 1 /)), &
               'get_column_snow', 'get_var SNLSNO')
+
+nlayers = abs(snlsno(1))
 
 ! Get the ground temperature for this column.
 ! double T_GRND(column); long_name = "ground temperature" ; units = "K" ;
@@ -1081,17 +1098,8 @@ call nc_check(nf90_get_var(  myncid, varid, t_grnd, start=(/ snow_column /), cou
 
 ityplun = cols1d_ityplun(snow_column)   ! are we a lake
 
-if (ityplun == LAKEUNIT ) then
-   ! FIXME ... lake columns use a bulk formula for snow
-   snowcolumn%nprops    = 0
-   snowcolumn%nlayers   = 0
-   snowcolumn%t_grnd    = 0.0_r4
-   snowcolumn%soilsat   = 0.0_r4
-   snowcolumn%soilporos = 0.0_r4
-   snowcolumn%propconst = 0.0_r4
-   return
-endif
-
+! FIXME ... lake columns use a bulk formula for snow
+if (ityplun == LAKEUNIT ) return
 
 ! double H2OSOI_LIQ(column, levtot); long_name = "liquid water" ; units = "kg/m2" ;
 ! double H2OSOI_ICE(column, levtot); long_name = "ice lens"     ; units = "kg/m2" ;
@@ -1140,7 +1148,7 @@ call nc_check(nf90_get_var(  myncid, varid, snw_rds, start=ncstart, count=nccoun
 
 ! Print a summary so far
 if (debug .and. do_output()) then
-   write(*,*)'summary for column ',snow_column
+   write(*,*)'get_column_snow: raw CLM data for column ',snow_column
    write(*,*)'  # of snow layers, column ityp, ground temp :', snlsno, ityplun, t_grnd
    write(*,*)'  h2osoi_liq :', h2osoi_liq(1:nlevsno)
    write(*,*)'  h2osoi_ice :', h2osoi_ice(1:nlevsno)
@@ -1149,10 +1157,7 @@ if (debug .and. do_output()) then
    write(*,*)'  zsno       :',       zsno(1:nlevsno)
    write(*,*)'  zisno      :',      zisno(1:nlevsno)
    write(*,*)'  snw_rds    :',    snw_rds(1:nlevsno)
-   write(*,*)
 endif
-
-nlayers = abs(snlsno(1))
 
 allocate( snowcolumn%thickness(nlayers)     , &
           snowcolumn%density(nlayers)       , &
@@ -1180,7 +1185,11 @@ do ilayer = (nlevsno-nlayers+1),nlevsno
    snowcolumn%grain_diameter(ij) = snw_rds(ilayer)
    snowcolumn%liquid_water(ij)   = h2osoi_liq(ilayer)
    snowcolumn%temperature(ij)    = t_soisno(ilayer)
+   write(*,*)'   get_column_snow: filling layer ',ij,' with info from ilayer ',ilayer
 enddo
+
+deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
+deallocate(dzsno, zsno, zisno, snw_rds)
 
 end subroutine get_column_snow
 
@@ -1211,7 +1220,7 @@ subroutine test_ss_model()
 
 integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
-integer   :: nlevsno              ! number of snow levels - 5 in this case
+integer   :: nlayers              ! number of snow levels - 5 in this case
 character :: pol                  ! observation polarization [H,V]
 
 ! variables required by ss_snow() routine
@@ -1226,18 +1235,18 @@ real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
 tetad(:) = 55.0   ! AMSR-E incidence angle
 freq(:)  = 89.0   ! test frequency (GHz)
 pol      = 'H'    ! test polarization
-nlevsno  = 5      ! 5 snow layers in test
+nlayers  = 5      ! 5 snow layers in test
 
-allocate( y(nlevsno,5) ) ! snow layers -x- 5 properties
+allocate( y(nlayers,5) ) ! snow layers -x- 5 properties
 
 tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)  ! two polarizations
 
-ctrl(1) = nlevsno
+ctrl(1) = nlayers
 ctrl(2) = 0         ! not used as far as I can tell
 ctrl(3) = 5
 ctrl(4) = N_FREQ
 
-aux_ins(1) = real(nlevsno,r4)
+aux_ins(1) = real(nlayers,r4)
 aux_ins(2) = 271.1123
 aux_ins(3) = 0.3
 aux_ins(4) = 0.4
