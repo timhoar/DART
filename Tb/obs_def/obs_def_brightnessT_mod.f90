@@ -23,7 +23,7 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(AMSRE_BRIGHTNESS_T)
-!     call get_brightness_temperature(state, state_time, ens_index, location, obs_time, obs_key, obs_val, istatus)
+!     call get_brightness_temperature(state_time, ens_index, location, obs_key, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 
@@ -165,14 +165,14 @@ type(snowprops) :: snowcolumn
 
 character(len=256) :: casename = 'clm_dart'
 logical            :: debug = .false.
-integer            :: hist_nhtfrq = -24 
+integer            :: hist_nhtfrq = -24
 ! CLM variable hist_nhtfrq ... controls how often to write out the history files.
 ! Negative value means the output frequency is the absolute value (in hours).
 
 namelist /obs_def_brightnessT_nml/ casename, debug, hist_nhtfrq
 
 !----------------------------------------------------------------------
-! This function name will be a problem if cosmos and amsrE are needed 
+! This function name will be a problem if cosmos and amsrE are needed
 ! at the same time. refactor into single function in utilities_mod?
 !----------------------------------------------------------------------
 
@@ -354,13 +354,13 @@ end subroutine write_amsre_metadata
 
 
 !======================================================================
-! The AMSR-E Level-2A product (AE_L2A) contains brightness temperatures at 
-! 6.9 GHz, 10.7 GHz, 18.7 GHz, 23.8 GHz, 36.5 GHz, and 89.0 GHz. 
-! Data are resampled to be spatially consistent, and therefore are available 
-! at a variety of resolutions that correspond to the footprint sizes of the 
-! observations such as 56 km, 38 km, 21 km, 12 km, and 5.4 km, respectively. 
-! Each swath is packaged with associated geolocation fields. 
-! Data are stored in Hierarchical Data Format - Earth Observing System (HDF-EOS) 
+! The AMSR-E Level-2A product (AE_L2A) contains brightness temperatures at
+! 6.9 GHz, 10.7 GHz, 18.7 GHz, 23.8 GHz, 36.5 GHz, and 89.0 GHz.
+! Data are resampled to be spatially consistent, and therefore are available
+! at a variety of resolutions that correspond to the footprint sizes of the
+! observations such as 56 km, 38 km, 21 km, 12 km, and 5.4 km, respectively.
+! Each swath is packaged with associated geolocation fields.
+! Data are stored in Hierarchical Data Format - Earth Observing System (HDF-EOS)
 ! format and are available from 1 June 2002 to 4 October 2011 via FTP.
 
 subroutine interactive_amsre_metadata( key )
@@ -388,15 +388,16 @@ end subroutine interactive_amsre_metadata
 !======================================================================
 
 
-subroutine get_brightness_temperature(state, state_time, ens_index, location, obs_time, key, obs_val, istatus)
+subroutine get_brightness_temperature(state_time, ens_index, location, key, obs_val, istatus)
 
 ! This is THE forward observation operator. Given the state and a location, return the value
+! The parts of the state required for this forward operator are not required to
+! be part of the DART state vector. They are currently directly harvested from the CLM
+! restart file. As such, the posteriors are not informative.
 
-real(r8),            intent(in)  :: state(:)   ! DART state vector
-type(time_type),     intent(in)  :: state_time ! valid time of DART state 
+type(time_type),     intent(in)  :: state_time ! valid time of DART state
 integer,             intent(in)  :: ens_index  ! Ensemble member number
 type(location_type), intent(in)  :: location   ! target location (i.e. obs)
-type(time_type),     intent(in)  :: obs_time   ! time of observation
 integer,             intent(in)  :: key        ! pointer for obs custom metadata
 real(r8),            intent(out) :: obs_val    ! model estimate of observation value
 integer,             intent(out) :: istatus    ! status of the calculation
@@ -405,24 +406,24 @@ integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
 
 ! variables required by ss_snow() routine
-real(r4), allocatable, dimension(:,:) :: y ! 2D array 
-real(r4) :: aux_ins(5) ! properties: [nlyrs, ground_T, soilsat, poros, proportionality]
-integer  :: ctrl(4)        ! N_LYRS, N_AUX_INS, N_SNOW_INS, N_FREQ
+real(r4), allocatable, dimension(:,:) :: y ! 2D array of snow properties
+real(r4) :: aux_ins(5)     ! [nsnowlyrs, ground_T, soilsat, poros, proportionality]
+integer  :: ctrl(4)        ! [n_lyrs, n_aux_ins, n_snow_ins, n_freq]
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
 real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
-real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
-real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
+real(r4) :: tb_ubc(N_POL,N_FREQ) ! upper boundary condition brightness temperature
+real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 
-integer  :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
-integer  :: ilayer, ilon, ilat, icol, ncols, lccode
+! support variables 
+character(len=256)                  :: filename
 integer,  allocatable, dimension(:) :: columns_to_get
 real(r4), allocatable, dimension(:) :: tb
 real(r8), allocatable, dimension(:) :: weights
 real(r8), dimension(LocationDims)   :: loc
 real(r8)  :: loc_lon, loc_lat
-character :: pol    ! observation polarization
-
-character(len=256) :: filename
+character :: pol                    ! observation polarization
+integer   :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
+integer   :: ilon, ilat, icol, ncols, lccode
 
 istatus  = 1
 obs_val  = MISSING_R8
@@ -454,6 +455,8 @@ if ((ncols == 0) .and. do_output() ) then
    return
 endif
 
+write(*,*)'TJH debug ... ens_index is ',ens_index
+
 allocate( columns_to_get(ncols), tb(ncols), weights(ncols) )
 columns_to_get(:) = -1
 tb(:)             = 0.0_r4
@@ -465,7 +468,7 @@ call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 if ( any(cols1d_ityplun(columns_to_get) == LAKEUNIT)) return
 
 ! need to know which restart file to use to harvest information
-call build_clm_instance_filename(ens_index, filename)
+call build_clm_instance_filename(ens_index, state_time, filename)
 
 ! Loop over all columns in the gridcell that has the right location.
 
@@ -496,7 +499,7 @@ SNOWCOLS : do icol = 1,ncols
    nlevsno  = snowcolumn%nlayers
 
    if ( nlevsno == 0 ) then
-      ! If there is no snow, the ss_model will calculate the brightness 
+      ! If there is no snow, the ss_model will calculate the brightness
       ! temperature of the bare soil. To indicate this, aux_ins(1) must
       ! be 0 and ctrl(1) must be 1
       ctrl(1) = 1
@@ -535,7 +538,7 @@ SNOWCOLS : do icol = 1,ncols
    ! If the landcovercode (lccode) indicates that you want to use
    ! a different radiative transfer model ... implement it here.
    ! this will involve changing the following 'if' statement.
- 
+
    if (lccode > 0 ) then
       ! the tb_out array contains the calculated brightness temperature outputs
       ! at each polarization (rows) and frequency (columns).
@@ -543,7 +546,7 @@ SNOWCOLS : do icol = 1,ncols
    else
       ! call to alternative radiative transfer model goes here.
    endif
-    
+
    write(*,*)'tb_out is ',tb_out
 
    ! FIXME ... which is which
@@ -585,7 +588,7 @@ end subroutine get_brightness_temperature
 
 subroutine initialize_module
 
-! Called once to set values and allocate space. 
+! Called once to set values and allocate space.
 
 integer :: iunit, io, myncid, varid
 integer :: yyyymmdd, sssss
@@ -674,6 +677,10 @@ if (debug .and. do_output()) then
    call print_time(model_time,'obs_def_brightnessT_mod.initialize_routine:model time is')
 endif
 
+if (debug .and. do_output()) then
+   call test_ss_model()
+endif
+
 end subroutine initialize_module
 
 
@@ -682,45 +689,34 @@ end subroutine initialize_module
 
 subroutine GetDimensions(myncid, fname)
 
-! Harvest information from the first observation file.
-! The SingleColumMode files have
-!        float lat(lndgrid) ;
-!        float lon(lndgrid) ;
-!        float area(lndgrid) ;
-! while the 2D files have
-!        float lat(lat) ;
-!        float lon(lon) ;
-!        float area(lat, lon) ;
+! Harvest information from the CLM restart file and model_mod.
+! This routine sets the following module variables:
+! nlon, nlat, nlevgrnd, ncolumn, nlevtot, nlevsno, nlevgrnd
 
 integer,          intent(in) :: myncid
 character(len=*), intent(in) :: fname
 
-! integer, intent(out) :: nlon, nlat, ... module variables
+integer :: dimid
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: londimids, latdimids
-integer :: lonvarid, lonndims
-integer :: latvarid, latndims
-integer :: varid, dimid, dimlen
-
-! Get the number of columns in the restart file 
+! Get the number of columns in the restart file
 call nc_check(nf90_inq_dimid(myncid, 'column', dimid), &
               'obs_def_brightnessT.GetDimensions','inq_dimid column '//trim(fname))
 call nc_check(nf90_inquire_dimension(myncid, dimid, len=ncolumns), &
               'obs_def_brightnessT.GetDimensions','inquire_dimension column '//trim(fname))
 
-! Get the number of total levels in the restart file 
+! Get the number of total levels in the restart file
 call nc_check(nf90_inq_dimid(myncid, 'levtot', dimid), &
               'obs_def_brightnessT.GetDimensions','inq_dimid levtot '//trim(fname))
 call nc_check(nf90_inquire_dimension(myncid, dimid, len=nlevtot), &
               'obs_def_brightnessT.GetDimensions','inquire_dimension levtot '//trim(fname))
 
-! Get the number of snow levels in the restart file 
+! Get the number of snow levels in the restart file
 call nc_check(nf90_inq_dimid(myncid, 'levsno', dimid), &
               'obs_def_brightnessT.GetDimensions','inq_dimid levsno '//trim(fname))
 call nc_check(nf90_inquire_dimension(myncid, dimid, len=nlevsno), &
               'obs_def_brightnessT.GetDimensions','inquire_dimension levsno '//trim(fname))
 
-! Get the number of ground levels in the restart file 
+! Get the number of ground levels in the restart file
 call nc_check(nf90_inq_dimid(myncid, 'levgrnd', dimid), &
               'obs_def_brightnessT.GetDimensions','inq_dimid levgrnd '//trim(fname))
 call nc_check(nf90_inquire_dimension(myncid, dimid, len=nlevgrnd), &
@@ -936,15 +932,15 @@ end subroutine check_iostat
 !======================================================================
 
 
-subroutine build_clm_instance_filename(instance, filename)
+subroutine build_clm_instance_filename(instance, state_time, filename)
 ! If the instance is 1, it could be a perfect model scenario
 ! or it could be the first instance of many. CLM has a different
 ! naming scheme for these.
 !
-! the model time is part of the initialization ... module storage
 ! the casename is part of the module namelist
 
 integer,          intent(in)  :: instance
+type(time_type),  intent(in)  :: state_time
 character(len=*), intent(out) :: filename
 
 integer :: year, month, day, hour, minute, second
@@ -952,7 +948,7 @@ integer :: year, month, day, hour, minute, second
 100 format (A,'.clm2_',I4.4,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
 110 format (A,'.clm2'      ,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
 
-call get_date(model_time, year, month, day, hour, minute, second)
+call get_date(state_time, year, month, day, hour, minute, second)
 second = second + minute*60 + hour*3600
 
 write(filename,110) trim(casename),year,month,day,second
@@ -1036,7 +1032,7 @@ end subroutine test_block
 
 subroutine get_column_snow(filename, snow_column )
 ! Read all the variables needed for the radiative transfer model as applied
-! to a single CLM column. 
+! to a single CLM column.
 !
 ! The treatment of snow-related variables is complicated.
 ! The SNLSNO variable defines the number of snow layers with valid values.
@@ -1086,7 +1082,7 @@ call nc_check(nf90_get_var(  myncid, varid, t_grnd, start=(/ snow_column /), cou
 ityplun = cols1d_ityplun(snow_column)   ! are we a lake
 
 if (ityplun == LAKEUNIT ) then
-   ! FIXME ... lake columns use a bulk formula for snow 
+   ! FIXME ... lake columns use a bulk formula for snow
    snowcolumn%nprops    = 0
    snowcolumn%nlayers   = 0
    snowcolumn%t_grnd    = 0.0_r4
@@ -1179,7 +1175,7 @@ snowcolumn%propconst = 0.5       ! aux_ins(5) proportionality between grain size
 ij = 0
 do ilayer = (nlevsno-nlayers+1),nlevsno
    ij = ij + 1
-   snowcolumn%thickness(ij)      = dzsno(ilayer) 
+   snowcolumn%thickness(ij)      = dzsno(ilayer)
    snowcolumn%density(ij)        = (h2osoi_liq(ilayer) + h2osoi_ice(ilayer)) / dzsno(ilayer)
    snowcolumn%grain_diameter(ij) = snw_rds(ilayer)
    snowcolumn%liquid_water(ij)   = h2osoi_liq(ilayer)
@@ -1209,20 +1205,17 @@ end subroutine destroy_column_snow
 
 
 
-subroutine test_brightness_temperature()
+subroutine test_ss_model()
 
-! FIXME ... finish this routine ...
-! FIXME ... finish this routine ...
-! FIXME ... finish this routine ...
-! FIXME ... finish this routine ...
-! FIXME ... finish this routine ...
-! FIXME test THE forward observation operator
+! test THE forward observation operator
 
 integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
+integer   :: nlevsno              ! number of snow levels - 5 in this case
+character :: pol                  ! observation polarization [H,V]
 
 ! variables required by ss_snow() routine
-real(r4), allocatable, dimension(:,:) :: y ! 2D array 
+real(r4), allocatable, dimension(:,:) :: y ! 2D array
 real(r4) :: aux_ins(5) ! properties: [nlyrs, ground_T, soilsat, poros, proportionality]
 integer  :: ctrl(4)        ! N_LYRS, N_AUX_INS, N_SNOW_INS, N_FREQ
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
@@ -1230,151 +1223,42 @@ real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
 real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
 
-integer  :: ilayer, ilon, ilat, icol, ncols
-integer, allocatable, dimension(:) :: columns_to_get
-real(r8), dimension(LocationDims)  :: loc
-real(r8)  :: loc_lon, loc_lat
-character :: pol    ! observation polarization
+tetad(:) = 55.0   ! AMSR-E incidence angle
+freq(:)  = 89.0   ! test frequency (GHz)
+pol      = 'H'    ! test polarization
+nlevsno  = 5      ! 5 snow layers in test
 
-!TJHtetad(:) = AMSRE_inc_angle
-!TJHfreq(:)  = observation_metadata(key)%frequency
-!TJHpol      = observation_metadata(key)%polarization
-!TJHloc      = get_location(location)
-!TJHloc_lon  = loc(1)
-!TJHloc_lat  = loc(2)
-!TJH
-!TJHilon = 73    ! lon( 73) == 90.0
-!TJHilat = 161   ! lat(161) == 60.78534 ... Siberia
-!TJH
-loc_lon = 260.0
-loc_lat = 45.7
-write(*,*)'minloc is ',minloc( abs(loc_lon-LON) ), 'should be 209'
-write(*,*)'minloc is ',minloc( abs(loc_lat-LAT) ), 'should be 145'
+allocate( y(nlevsno,5) ) ! snow layers -x- 5 properties
 
-ilon = 73    ! lon( 73) == 90.0
-ilat = 161   ! lat(161) == 60.78534 ... Siberia
+tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)  ! two polarizations
 
-ilon = 209   ! lon(209) == 260.0000
-ilat = 145   ! lat(145) == 45.70681 ... Nebraska prarie
-!TJHncols = get_ncols_in_gridcell(ilon,ilat)
-!TJHallocate (columns_to_get(ncols))
-!TJHcall get_colids_in_gridcell(ilon, ilat, columns_to_get)
-!TJH
-!TJH! Loop over all columns in gridcell that has the right location.
-!TJH! Skip the lake columns, the columns without snow ... others ...
-!TJH! the columns with no layered snow - but might have a trace ...
-!TJH
-!TJHSNOWCOLS : do icol = 1,ncols
-!TJH   call get_column_snow('clm_restart.nc', columns_to_get(icol) )
-!TJH
-!TJH   if ( debug .and. do_output() ) then
-!TJH      if (snowcolumn%nlayers < 1) then
-!TJH         write(string1, *) 'column (',columns_to_get(icol),') has no snow'
-!TJH         call error_handler(E_MSG,'get_brightness_temperature',string1)
-!TJH      else
-!TJH         write(*,*)'nprops   ',snowcolumn%nprops
-!TJH         write(*,*)'nlayers  ',snowcolumn%nlayers
-!TJH         write(*,*)'t_grnd   ',snowcolumn%t_grnd
-!TJH         write(*,*)'soilsat  ',snowcolumn%soilsat
-!TJH         write(*,*)'soilpor  ',snowcolumn%soilporos
-!TJH         write(*,*)'proconst ',snowcolumn%propconst
-!TJH         write(*,*)'thickness',snowcolumn%thickness
-!TJH         write(*,*)'density  ',snowcolumn%density
-!TJH         write(*,*)'diameter ',snowcolumn%grain_diameter
-!TJH         write(*,*)'liqwater ',snowcolumn%liquid_water
-!TJH         write(*,*)'temp     ',snowcolumn%temperature
-!TJH      endif
-!TJH   endif
-!TJH
-!TJH   nlevsno  = snowcolumn%nlayers
-!TJH
-!TJH   allocate( y(nlevsno, snowcolumn%nprops) )
-!TJH
-!TJH   ! FIXME Ally ... if you have a better way to specify/determine,
-!TJH   ! tb_ubc do it here. Call your atmospheric model to calculate it.
-!TJH   tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)
-!TJH
-!TJH   ctrl(1) = nlevsno
-!TJH   ctrl(2) = 0              ! not used as far as I can tell
-!TJH   ctrl(3) = snowcolumn%nprops
-!TJH   ctrl(4) = N_FREQ
-!TJH
-!TJH   y(:,1)  = snowcolumn%thickness
-!TJH   y(:,2)  = snowcolumn%density
-!TJH   y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need microns
-!TJH   y(:,4)  = snowcolumn%liquid_water
-!TJH   y(:,5)  = snowcolumn%temperature
-!TJH
-!TJH   aux_ins(1) = real(nlevsno,r4)
-!TJH   aux_ins(2) = snowcolumn%t_grnd
-!TJH   aux_ins(3) = snowcolumn%soilsat
-!TJH   aux_ins(4) = snowcolumn%soilporos
-!TJH   aux_ins(5) = 0.5_r4                ! FIXME - hardwired
-!TJH    
-!TJH   ! the tb_out array contains the calculated brightness temperature outputs
-!TJH   ! at each polarization (rows) and frequency (columns).
-!TJH    
-!TJH   call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
-!TJH    
-!TJH   write(*,*)'tb_out is ',tb_out
-!TJH
-!TJH   deallocate( y )
-!TJH   call destroy_column_snow()
-!TJH
-!TJHenddo SNOWCOLS
-!TJH
-!TJHdeallocate( columns_to_get )
+ctrl(1) = nlevsno
+ctrl(2) = 0         ! not used as far as I can tell
+ctrl(3) = 5
+ctrl(4) = N_FREQ
 
-!TJHdo ilayer = 1,nlevsno
-!TJH   ! For now, just make something up
-!TJH
-!TJH   if ( ilayer == 1) then
-!TJH      snow%thickness      = 0.6213     ! meters
-!TJH      snow%density        = 270.5943   ! kg/m3
-!TJH      snow%grain_diameter = 93.1651E-06  ! m   (93 mm)
-!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
-!TJH      snow%temperature    = 266.1220   ! K
-!TJH   elseif (ilayer == 2) then
-!TJH      snow%thickness      = 0.2071     ! meters
-!TJH      snow%density        = 150.7856   ! kg/m3
-!TJH      snow%grain_diameter =84.0811E-06    ! m
-!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
-!TJH      snow%temperature    = 256.7763   ! K
-!TJH   elseif (ilayer == 3) then
-!TJH      snow%thickness      = 0.1033     ! meters
-!TJH      snow%density        = 96.1940    ! kg/m3
-!TJH      snow%grain_diameter = 67.6715E-06  ! m
-!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
-!TJH      snow%temperature    = 247.9525   ! K
-!TJH   elseif (ilayer == 4) then
-!TJH      snow%thickness      = 0.0497     ! meters
-!TJH      snow%density        = 66.4903    ! kg/m3
-!TJH      snow%grain_diameter = 66.8529E-06  ! m
-!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
-!TJH      snow%temperature    = 240.4609   ! K
-!TJH   elseif (ilayer == 5) then
-!TJH      snow%thickness      = 0.0200     ! meters
-!TJH      snow%density        = 58.0377    ! kg/m3
-!TJH      snow%grain_diameter = 65.6391E-06  ! m
-!TJH      snow%liquid_water   = 0.0        ! dry snow (fraction)
-!TJH      snow%temperature    = 235.8929   ! K
-!TJH   endif
-!TJH
-!TJH   y(ilayer,1) = snow%thickness
-!TJH   y(ilayer,2) = snow%density
-!TJH   y(ilayer,3) = snow%grain_diameter
-!TJH   y(ilayer,4) = snow%liquid_water
-!TJH   y(ilayer,5) = snow%temperature
-!TJH
-!TJHenddo
+aux_ins(1) = real(nlevsno,r4)
+aux_ins(2) = 271.1123
+aux_ins(3) = 0.3
+aux_ins(4) = 0.4
+aux_ins(5) = 0.5_r4
 
-!TJHaux_ins = (/ real(nlevsno,r4), 271.1123, 0.3, 0.4, 0.5 /) ! FIXME replace by real values.
-!TJH
-!TJHcall ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
-!TJH
-!TJHwrite(*,*)'tb_out is ',tb_out
+y(:,1) = (/   0.6213,   0.2071,   0.1033,   0.0497,   0.0200 /) ! snow thickness (meters)
+y(:,2) = (/ 270.5943, 150.7856,  96.1940,  66.4903,  58.0377 /) ! density (kg/m3)
+y(:,3) = (/  93.1651,  84.0811,  67.6715,  66.8529,  65.6391 /) / 1000000.0_r4  ! grain diameter (m)
+y(:,4) = (/   0.0000,   0.0000,   0.0000,   0.0000,   0.0000 /) ! liquid water fraction
+y(:,5) = (/ 266.1220, 256.7763, 247.9525, 240.4609, 235.8929 /) ! temperature (K)
 
-end subroutine test_brightness_temperature
+! the tb_out array contains the calculated brightness temperature outputs
+! at each polarization (rows) and frequency (columns).
+
+call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+
+write(*,*)'TEST case: tb_out is ',tb_out
+
+deallocate( y )
+
+end subroutine test_ss_model
 
 !======================================================================
 
