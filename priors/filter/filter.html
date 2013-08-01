@@ -648,6 +648,7 @@ prematurely terminating the namelist.
    output_inflation         = .true.,
    trace_execution          = .false.,
    silence                  = .false.,
+   types_use_precomputed_priors = 'null',
 
    inf_flavor                  = 0,                       0,
    inf_initial_from_restart    = .false.,                 .false.,
@@ -884,6 +885,13 @@ is true the mean data will be written to a separate file.
     <TD>True means output almost no runtime messages.  Not recommended
         for general use, but can speed long runs of the lower order models
         if the execution time becomes dominated by the volume of output. 
+ </TD></TR>
+
+<TR><TD>types_use_precomputed_priors</TD>
+    <TD>character(len=32) (:)</TD>
+    <TD>List contains the names of any specific observation types that
+        have precomputed prior forward operator values in the incoming
+        observation sequence file.
  </TD></TR>
 
 <TR><TD colspan=3>All subsequent variables are arrays of length 2.<br />
