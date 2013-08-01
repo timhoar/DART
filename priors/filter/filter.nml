@@ -27,6 +27,7 @@
    output_inflation         = .true.,
    trace_execution          = .false.,
    silence                  = .false.,
+   types_use_precomputed_priors = 'null',
 
    inf_flavor                  = 0,                       0,
    inf_initial_from_restart    = .false.,                 .false.,
