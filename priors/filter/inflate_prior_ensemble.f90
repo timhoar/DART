@@ -21,11 +21,11 @@ use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,     
                                  set_qc_meta_data, get_expected_obs, get_first_obs,          &
                                  get_obs_time_range, delete_obs_from_seq, delete_seq_head,   &
                                  delete_seq_tail, replace_obs_values, replace_qc,            &
-                                 destroy_obs_sequence
+                                 destroy_obs_sequence, get_qc_meta_data, add_qc
 use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time, &
-                                 get_obs_kind, get_obs_name ! CSS
-use obs_kind_mod,         only : assimilate_this_obs_kind, evaluate_this_obs_kind ! CSS
-
+                                 get_obs_kind
+use obs_kind_mod,         only : assimilate_this_obs_kind, evaluate_this_obs_kind, &
+                                 max_obs_kinds, get_obs_kind_index
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                  operator(-), print_time
 use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
@@ -33,8 +33,8 @@ use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, 
                                  do_output, find_namelist_in_file, check_namelist_read,      &
                                  open_file, close_file, do_nml_file, do_nml_term
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
-                                 netcdf_file_type, init_diag_output, finalize_diag_output,   & 
-                                 aoutput_diagnostics, ens_mean_for_model
+                                 netcdf_file_type, init_diag_output, finalize_diag_output,   &
+                                 ens_mean_for_model, end_assim_model
 use assim_tools_mod,      only : filter_assim, set_assim_tools_trace
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
@@ -43,7 +43,11 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  read_ensemble_restart, write_ensemble_restart,              &
                                  compute_copy_mean, compute_copy_mean_sd,                    &
                                  compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
-                                 get_ensemble_time
+                                 get_ensemble_time, set_ensemble_time, broadcast_copy,       &
+                                 prepare_to_read_from_vars, prepare_to_write_to_vars,        &
+                                 prepare_to_read_from_copies, prepare_to_write_to_copies,    &
+                                 prepare_to_update_copies, map_task_to_pe, map_pe_to_task,   &
+                                 get_ensemble_time, set_ensemble_time
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
@@ -74,6 +78,10 @@ type(obs_type)          :: observation
 
 integer                 :: trace_level, timestamp_level
 
+! the public in obs_kind_mod is misnamed; it really defines the number
+! of specific types (not generic kinds).  rename it for code clarity.
+integer, parameter      :: max_obs_types = max_obs_kinds
+
 ! Defining whether diagnostics are for prior or posterior
 integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
 
@@ -81,8 +89,9 @@ integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
 ! Namelist input with default values
 !
 integer  :: async = 0, ens_size = 20
-logical  :: start_from_restart = .false.
-logical  :: output_restart     = .false.
+logical  :: start_from_restart  = .false.
+logical  :: output_restart      = .false.
+logical  :: output_restart_mean = .false.
 integer  :: tasks_per_model_advance = 1
 ! if init_time_days and seconds are negative initial time is 0, 0
 ! for no restart or comes from restart if restart exists
@@ -103,15 +112,14 @@ integer  :: num_output_obs_members   = 0
 integer  :: output_interval     = 1
 integer  :: num_groups          = 1
 real(r8) :: outlier_threshold   = -1.0_r8
+logical  :: enable_special_outlier_code = .false.
 real(r8) :: input_qc_threshold  = 3.0_r8
 logical  :: output_forward_op_errors = .false.
 logical  :: output_timestamps        = .false.
 logical  :: trace_execution          = .false.
 logical  :: silence                  = .false.
 
-integer :: num_types_precomputed ! CSS
-integer, parameter ::  max_types_precompute = 100 ! CSS
-character(len = 32 ) :: types_use_precomputed_priors(max_types_precompute) = 'null' ! CSS
+character(len = 32 ) :: types_use_precomputed_priors(max_obs_types) = 'null'
 
 character(len = 129) :: obs_sequence_in_name  = "obs_seq.out",    &
                         obs_sequence_out_name = "obs_seq.final",  &
@@ -143,16 +151,16 @@ namelist /inflate_prior_ensemble_nml/ async, adv_ens_command, ens_size, tasks_pe
    start_from_restart, output_restart, obs_sequence_in_name, obs_sequence_out_name, &
    restart_in_file_name, restart_out_file_name, init_time_days, init_time_seconds,  &
    first_obs_days, first_obs_seconds, last_obs_days, last_obs_seconds,              &
-   obs_window_days, obs_window_seconds,                                             &
-   num_output_state_members, num_output_obs_members,                                &
+   obs_window_days, obs_window_seconds, enable_special_outlier_code,                &
+   num_output_state_members, num_output_obs_members, output_restart_mean,           &
    output_interval, num_groups, outlier_threshold, trace_execution,                 &
    input_qc_threshold, output_forward_op_errors, output_timestamps,                 &
    inf_flavor, inf_initial_from_restart, inf_sd_initial_from_restart,               &
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
-   silence,                                                                         &
-   types_use_precomputed_priors  ! CSS
+   silence, types_use_precomputed_priors
+
 
 
 !----------------------------------------------------------------
@@ -162,7 +170,7 @@ call filter_main()
 
 !----------------------------------------------------------------
 
-contains 
+contains
 
 subroutine filter_main()
 
@@ -173,27 +181,34 @@ type(time_type)             :: time1, first_obs_time, last_obs_time
 type(time_type)             :: curr_ens_time, next_ens_time, window_time
 type(adaptive_inflate_type) :: prior_inflate, post_inflate
 
-integer,    allocatable :: keys(:)
-integer                 :: i, iunit, io, time_step_number, num_obs_in_set
-integer                 :: ierr, last_key_used, model_size, key_bounds(2)
-integer                 :: in_obs_copy, obs_val_index
-integer                 :: output_state_mean_index, output_state_spread_index
-integer                 :: prior_obs_mean_index, posterior_obs_mean_index
-integer                 :: prior_obs_spread_index, posterior_obs_spread_index
+integer, allocatable :: keys(:)
+
+integer :: i, iunit, io, time_step_number, num_obs_in_set
+integer :: ierr, last_key_used, model_size, key_bounds(2)
+integer :: in_obs_copy, obs_val_index
+integer :: output_state_mean_index, output_state_spread_index
+integer :: prior_obs_mean_index, posterior_obs_mean_index
+integer :: prior_obs_spread_index, posterior_obs_spread_index
+
 ! Global indices into ensemble storage
-integer                 :: ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY, PRIOR_INF_SD_COPY
-integer                 :: POST_INF_COPY, POST_INF_SD_COPY
-integer                 :: OBS_VAL_COPY, OBS_ERR_VAR_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
-integer                 :: OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END
-integer                 :: OBS_PRIOR_VAR_START, OBS_PRIOR_VAR_END, TOTAL_OBS_COPIES
-integer                 :: input_qc_index, DART_qc_index
-integer                 :: mean_owner, mean_owners_index
+integer :: ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY, PRIOR_INF_SD_COPY
+integer :: POST_INF_COPY, POST_INF_SD_COPY
+integer :: OBS_VAL_COPY, OBS_ERR_VAR_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
+integer :: OBS_MEAN_START, OBS_MEAN_END
+integer :: OBS_VAR_START, OBS_VAR_END, TOTAL_OBS_COPIES
+integer :: input_qc_index, DART_qc_index
+integer :: mean_owner, mean_owners_index
+
+integer :: num_types_precomputed
+logical :: precomputed_priors(max_obs_types)
+integer :: precomputed_copy_index
 
 ! For now, have model_size real storage for the ensemble mean, don't really want this
 ! in the long run
-real(r8), allocatable   :: ens_mean(:)
+real(r8), allocatable :: ens_mean(:)
 
-logical                 :: ds, all_gone
+logical :: ds, all_gone
+
 
 
 call filter_initialize_modules_used()
@@ -202,6 +217,7 @@ call filter_initialize_modules_used()
 call find_namelist_in_file("input.nml", "inflate_prior_ensemble_nml", iunit)
 read(iunit, nml = inflate_prior_ensemble_nml, iostat = io)
 call check_namelist_read(iunit, io, "inflate_prior_ensemble_nml")
+
 
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=inflate_prior_ensemble_nml)
@@ -217,6 +233,10 @@ if(ens_size < 2) then
    write(msgstring, *) 'ens_size in namelist is ', ens_size, ': Must be > 1'
    call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate)
 endif
+
+! informational message to log
+write(msgstring, '(A,I5)') 'running with an ensemble size of ', ens_size
+call error_handler(E_MSG,'filter:', msgstring, source, revision, revdate)
 
 ! See if smoothing is turned on
 ds = do_smoothing()
@@ -244,16 +264,6 @@ PRIOR_INF_COPY       = ens_size + 3
 PRIOR_INF_SD_COPY    = ens_size + 4
 POST_INF_COPY        = ens_size + 5
 POST_INF_SD_COPY     = ens_size + 6
-
-! don't need these
-!OBS_ERR_VAR_COPY     = ens_size + 1
-!OBS_VAL_COPY         = ens_size + 2
-!OBS_KEY_COPY         = ens_size + 3
-!OBS_GLOBAL_QC_COPY   = ens_size + 4
-!OBS_PRIOR_MEAN_START = ens_size + 5
-!OBS_PRIOR_MEAN_END   = OBS_PRIOR_MEAN_START + num_groups - 1
-!OBS_PRIOR_VAR_START  = OBS_PRIOR_MEAN_START + num_groups
-!OBS_PRIOR_VAR_END    = OBS_PRIOR_VAR_START + num_groups - 1
 
 ! Can't output more ensemble members than exist
 if(num_output_state_members > ens_size) num_output_state_members = ens_size
@@ -304,6 +314,13 @@ call adaptive_inflate_init(prior_inflate, inf_flavor(1), inf_initial_from_restar
 !   inf_sd_initial(2), inf_lower_bound(2), inf_upper_bound(2), inf_sd_lower_bound(2),  &
 !   ens_handle, POST_INF_COPY, POST_INF_SD_COPY, 'Posterior')
 
+if (do_output()) then
+   if (inf_flavor(1) > 0 .and. inf_damping(1) < 1.0_r8) then
+      write(msgstring, '(A,F12.6,A)') 'Prior inflation damping of ', inf_damping(1), ' will be used'
+      call error_handler(E_MSG,'filter:', msgstring)
+   endif
+endif
+
 call trace_message('After  initializing inflation')
 
 call     trace_message('Before initializing output files')
@@ -321,7 +338,7 @@ else
    output_state_spread_index = 0
    prior_obs_mean_index = 0
    posterior_obs_mean_index = 0
-   prior_obs_spread_index = 0 
+   prior_obs_spread_index = 0
    posterior_obs_spread_index = 0
 endif
 
@@ -337,7 +354,7 @@ call compute_copy_mean_sd(ens_handle, 1, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
 call all_copies_to_all_vars(ens_handle) 
 
 call trace_message('Before outputting state before inflation')
-call filter_state_space_diagnostics(PriorStateUnit, ens_handle, &
+call filter_state_space_diagnostics(time1, PriorStateUnit, ens_handle, &
    model_size, num_output_state_members, &
    output_state_mean_index, output_state_spread_index, &
    output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
@@ -346,18 +363,18 @@ call trace_message('After outputting state before inflation')
 ! end CSS
 
 if(do_single_ss_inflate(prior_inflate) .or. do_varying_ss_inflate(prior_inflate)) then
-   call trace_message('Before prior inflation damping and prep')
-   if (inf_damping(1) /= 1.0_r8) then
-      ens_handle%copies(PRIOR_INF_COPY, :) = 1.0_r8 + &
-	 inf_damping(1) * (ens_handle%copies(PRIOR_INF_COPY, :) - 1.0_r8) 
-   endif
+      call trace_message('Before prior inflation damping and prep')
+      if (inf_damping(1) /= 1.0_r8) then
+         ens_handle%copies(PRIOR_INF_COPY, :) = 1.0_r8 + &
+            inf_damping(1) * (ens_handle%copies(PRIOR_INF_COPY, :) - 1.0_r8)
+      endif
 
-   call filter_ensemble_inflate(ens_handle, PRIOR_INF_COPY, prior_inflate, ENS_MEAN_COPY)
+      call filter_ensemble_inflate(ens_handle, PRIOR_INF_COPY, prior_inflate, ENS_MEAN_COPY)
 
-   ! Recompute the the mean and spread as required for diagnostics
-   call compute_copy_mean_sd(ens_handle, 1, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
+      ! Recompute the the mean and spread as required for diagnostics
+      call compute_copy_mean_sd(ens_handle, 1, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
 
-   call trace_message('After  prior inflation damping and prep')
+      call trace_message('After  prior inflation damping and prep')
 endif
 
 ! Back to state space for diagnostics if required
@@ -380,16 +397,16 @@ endif
 call ens_mean_for_model(ens_mean)
 
 if ((output_interval > 0) .and. &
-    (time_step_number / output_interval * output_interval == time_step_number)) then
-   call trace_message('Before prior state space diagnostics')
-   call filter_state_space_diagnostics(PosteriorStateUnit, ens_handle, &
-      model_size, num_output_state_members, &
-      output_state_mean_index, output_state_spread_index, &
-      output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-      prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
-   call trace_message('After  prior state space diagnostics')
+       (time_step_number / output_interval * output_interval == time_step_number)) then
+      call trace_message('Before prior state space diagnostics')
+      call filter_state_space_diagnostics(time1, PriorStateUnit, ens_handle, &
+         model_size, num_output_state_members, &
+         output_state_mean_index, output_state_spread_index, &
+         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+         prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+      call trace_message('After  prior state space diagnostics')
 endif
-  
+
 
 ! If observation space inflation, output the diagnostics
 if(do_obs_inflate(prior_inflate) .and. my_task_id() == 0) & 
@@ -431,7 +448,7 @@ call trace_message('After  ensemble and obs memory cleanup')
 
 call     trace_message('Inflate Prior Ensemble done')
 call timestamp_message('Inflate Prior Ensemble done')
-if(my_task_id() == 0) then 
+if(my_task_id() == 0) then
    write(logfileunit,*)'FINISHED filter.'
    write(logfileunit,*)
 endif
@@ -442,7 +459,7 @@ endif
 
 ! Make this the very last thing done, especially for SGI systems.
 ! It shuts down MPI and if you try to write after that, some libraries
-! choose to discard output that is written after mpi is finalized, or 
+! choose to discard output that is written after mpi is finalized, or
 ! worse, the processes can hang.
 call finalize_mpi_utilities(async=async)
 
@@ -477,7 +494,7 @@ integer :: i, ensemble_offset, num_state_copies, num_obs_copies
 
 ! Section for state variables + other generated data stored with them.
 
-! Ensemble mean goes first 
+! Ensemble mean goes first
 num_state_copies = num_output_state_members + 2
 output_state_mean_index = 1
 state_meta(output_state_mean_index) = 'ensemble mean'
@@ -503,7 +520,7 @@ end do
 
 ! Next two slots are for inflation mean and sd metadata
 ! To avoid writing out inflation values to the Prior and Posterior netcdf files,
-! set output_inflation to false in the filter section of input.nml 
+! set output_inflation to false in the filter section of input.nml
 if(output_inflation) then
    num_state_copies = num_state_copies + 2
    state_meta(num_state_copies-1) = 'inflation mean'
@@ -533,7 +550,7 @@ PosteriorStateUnit = init_diag_output('after_inflation', &
 !call set_copy_meta_data(seq, num_obs_copies, posterior_meta_data)
 !posterior_obs_mean_index = num_obs_copies 
 
-! Set up obs ensemble spread 
+! Set up obs ensemble spread
 !num_obs_copies = num_obs_copies + 1
 !prior_meta_data = 'prior ensemble spread'
 !call set_copy_meta_data(seq, num_obs_copies, prior_meta_data)
@@ -643,7 +660,8 @@ else
 endif
 
 ! Temporary print of initial model time
-if(my_task_id() == 0) then
+if(ens_handle%my_pe == 0) then
+   ! FIXME for the future: if pe 0 is not task 0, pe 0 can not print debug messages
    call get_time(time, secs, days)
    write(msgstring, *) 'initial model time of 1st ensemble member (days,seconds) ',days,secs
    call error_handler(E_DBG,'filter_read_restart',msgstring,source,revision,revdate)
@@ -662,6 +680,7 @@ type(adaptive_inflate_type), intent(inout) :: inflate
 integer :: j, group, grp_bot, grp_top, grp_size
 
 ! Assumes that the ensemble is copy complete
+call prepare_to_update_copies(ens_handle)
 
 ! Inflate each group separately;  Divide ensemble into num_groups groups
 grp_size = ens_size / num_groups
@@ -744,7 +763,7 @@ subroutine timestamp_message(msg, sync)
 character(len=*), intent(in) :: msg
 logical, intent(in), optional :: sync
 
-! Write current time and message to stdout and log file. 
+! Write current time and message to stdout and log file.
 ! if sync is present and true, sync mpi jobs before printing time.
 
 if (timestamp_level <= 0) return
