@@ -197,7 +197,7 @@ integer :: mean_owner, mean_owners_index
 
 integer :: num_types_precomputed
 logical :: precomputed_priors(max_obs_types)
-integer :: precomputed_copy_index
+integer :: precomputed_copy_base
 
 ! For now, have model_size real storage for the ensemble mean, don't really want this
 ! in the long run
@@ -292,7 +292,7 @@ call timestamp_message('Before setting up space for observations')
 
 ! Initialize the obs_sequence; every pe gets a copy for now
 call filter_setup_obs_sequence(seq, num_types_precomputed, in_obs_copy, &
-   obs_val_index, input_qc_index, DART_qc_index, precomputed_copy_index)
+   obs_val_index, input_qc_index, DART_qc_index, precomputed_copy_base)
 
 call timestamp_message('After  setting up space for observations')
 call     trace_message('After  setting up space for observations')
@@ -557,7 +557,7 @@ AdvanceTime : do
    call get_obs_ens(ens_handle, obs_ens_handle, forward_op_ens_handle, &
       seq, keys, obs_val_index, input_qc_index, num_obs_in_set, &
       OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
-      num_types_precomputed, precomputed_copy_index, precomputed_priors, &
+      num_types_precomputed, precomputed_copy_base, precomputed_priors, &
       isprior=.true.)
 
    ! Although they are integer, keys are one 'copy' of obs ensemble
@@ -680,7 +680,7 @@ AdvanceTime : do
    call get_obs_ens(ens_handle, obs_ens_handle, forward_op_ens_handle, &
       seq, keys, obs_val_index, input_qc_index, num_obs_in_set, &
       OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
-      num_types_precomputed, precomputed_copy_index, precomputed_priors, &
+      num_types_precomputed, precomputed_copy_base, precomputed_priors, &
       isprior=.false.)
 
    call timestamp_message('After  computing posterior observation values')
@@ -995,13 +995,13 @@ end subroutine filter_initialize_modules_used
 !-------------------------------------------------------------------------
 
 subroutine filter_setup_obs_sequence(seq, num_types_precomputed, in_obs_copy, &
-   obs_val_index, input_qc_index, DART_qc_index, precomputed_copy_index)
+   obs_val_index, input_qc_index, DART_qc_index, precomputed_copy_base)
 
 type(obs_sequence_type), intent(inout) :: seq
 integer,                 intent(in)    :: num_types_precomputed
 integer,                 intent(out)   :: in_obs_copy, obs_val_index
 integer,                 intent(out)   :: input_qc_index, DART_qc_index
-integer,                 intent(out)   :: precomputed_copy_index
+integer,                 intent(out)   :: precomputed_copy_base
 
 character(len = metadatalength) :: no_qc_meta_data = 'No incoming data QC'
 character(len = metadatalength) :: dqc_meta_data   = 'DART quality control'
@@ -1042,7 +1042,7 @@ endif
 if ( num_types_precomputed > 0 ) then
    ! read in without any additional space for copies - should already be enough copies
    call read_obs_seq(obs_sequence_in_name, 0, qc_num_inc, 0, seq)
-   precomputed_copy_index = find_precomputed_metadata(seq, ens_size)
+   precomputed_copy_base = find_precomputed_metadata(seq, ens_size)
 else
    ! Read in with enough space for diagnostic output values and add'l qc field
    call read_obs_seq(obs_sequence_in_name, num_obs_copies, qc_num_inc, 0, seq)
@@ -1346,7 +1346,7 @@ end subroutine filter_ensemble_inflate
 subroutine get_obs_ens(ens_handle, obs_ens_handle, forward_op_ens_handle, seq, keys, &
    obs_val_index, input_qc_index, num_obs_in_set, &
    OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
-   num_types_precomputed, precomputed_copy_index, precomputed_priors, isprior)
+   num_types_precomputed, precomputed_copy_base, precomputed_priors, isprior)
 
 ! Computes forward observation operators and related quality control indicators.
 
@@ -1358,7 +1358,7 @@ integer,                 intent(in)    :: obs_val_index, input_qc_index, num_obs
 integer,                 intent(in)    :: OBS_ERR_VAR_COPY, OBS_VAL_COPY
 integer,                 intent(in)    :: OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
 integer,                 intent(in)    :: num_types_precomputed
-integer,                 intent(in)    :: precomputed_copy_index
+integer,                 intent(in)    :: precomputed_copy_base
 logical,                 intent(in)    :: precomputed_priors(max_obs_types)
 logical,                 intent(in)    :: isprior
 
@@ -1367,7 +1367,7 @@ integer            :: j, k, my_num_copies, istatus , global_ens_index, thiskey(1
 logical            :: evaluate_this_ob, assimilate_this_ob
 type(obs_def_type) :: obs_def
 
-integer            :: this_ob_type
+integer            :: this_ob_type, copy_offset
 logical            :: read_precomputed_priors
 
 
@@ -1438,7 +1438,9 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
 
          if ( read_precomputed_priors ) then
         !   write(*,*) 'getting precomputed prior'
-            call get_precomputed_obs(observation, this_ob_type, precomputed_copy_index, &
+            copy_offset = (global_ens_index - 1) * 2
+            call get_precomputed_obs(observation, this_ob_type, &
+               precomputed_copy_base + copy_offset, &
                thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
          else
 !           write(*,*) 'using DART observation operator'
