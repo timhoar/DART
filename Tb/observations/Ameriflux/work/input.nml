@@ -1,4 +1,5 @@
 &preprocess_nml
+           overwrite_output = .true.,
     input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
    output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
      input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
@@ -21,7 +22,6 @@
    write_binary_obs_sequence = .FALSE.
    /
 
-
 &level4_to_obs_nml
    text_input_file = '../data/USHa12003_L4_h.txt',
    obs_out_file    = 'obs_seq.out',
@@ -31,6 +31,14 @@
    longitude       = -72.1715,
    elevation       = 353,
    flux_height     = 29,
+   maxgoodqc       = 3,
+   verbose         = .TRUE.
+   /
+
+&modis_subset_to_obs_nml
+   text_input_file = '/glade/scratch/thoar/MODIS_LAI/MOD15A2/MOD15A2.fn_usbouldr.txt',
+   metadata_file   = '/glade/scratch/thoar/MODIS_LAI/MODIS_subset_metadata.txt',
+   obs_out_file    = 'obs_seq.out',
    maxgoodqc       = 3,
    verbose         = .TRUE.
    /
