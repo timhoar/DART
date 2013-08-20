@@ -35,6 +35,8 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                               init_obs_sequence, get_num_obs, &
                               set_copy_meta_data, set_qc_meta_data
 
+use obs_utilities_mod, only : create_3d_obs, add_obs_to_seq
+
 use      obs_kind_mod, only : MODIS_LEAF_AREA_INDEX, &
                               MODIS_FPAR
 
@@ -53,7 +55,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=128) :: text_input_file = 'MOD15A2.fn_usbouldr.txt'
 character(len=128) :: metadata_file   = 'MODIS_subset_metadata.txt'
 character(len=128) :: obs_out_file    = 'obs_seq.out'
-real(r8)           :: maxgoodqc       = 3.0_r8
+real(r8)           :: maxgoodqc       = 10
 logical            :: verbose         = .false.
 
 namelist /modis_subset_to_obs_nml/ text_input_file, metadata_file, obs_out_file, maxgoodqc, verbose
@@ -66,69 +68,71 @@ character(len=600)      :: input_line, bigline
 character(len=256)      :: string1, string2, string3
 integer                 :: iline
 logical                 :: first_obs
-integer                 :: oday, osec, rcio, iunit
+integer                 :: rcio, iunit
 integer                 :: num_copies, num_qc, max_obs
-real(r8)                :: oerr, qc, obval
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
 type(time_type)         :: prev_time
-real(r8), parameter     :: umol_to_gC = (1.0_r8/1000000.0_r8) * 12.0_r8
 
-type modistype
+type modis_type
   character(len=20) :: HDFnamestring       = 'HDFname'
   character(len=20) :: Productstring       = 'Product'
   character(len=20) :: Datestring          = 'Date'
   character(len=20) :: Sitestring          = 'Site'
   character(len=20) :: ProcessDatestring   = 'ProcessDate'
   character(len=20) :: Bandstring          = 'Band'
-  character(len=20) :: Fparstring          = 'Fpar_1km'
-  character(len=20) :: Laistring           = 'Lai_1km'
-  character(len=20) :: FparStdDevstring    = 'FparStdDev_1km'
-  character(len=20) :: LaiStdDevstring     = 'LaiStdDev_1km'
-  character(len=20) :: FparLai_QCstring    = 'FparLai_QC'
   character(len=20) :: FparExtra_QCstring  = 'FparExtra_QC'
+  character(len=20) :: FparLai_QCstring    = 'FparLai_QC'
+  character(len=20) :: FparStdDevstring    = 'FparStdDev_1km'
+  character(len=20) :: Fparstring          = 'Fpar_1km'
+  character(len=20) :: LaiStdDevstring     = 'LaiStdDev_1km'
+  character(len=20) :: Laistring           = 'Lai_1km'
   integer  :: HDFnameindex
   integer  :: Productindex
   integer  :: Dateindex
   integer  :: Siteindex
   integer  :: ProcessDateindex
   integer  :: Bandindex
-  integer  :: Fparindex
-  integer  :: FparStdDevindex
-  integer  :: FparLai_QCindex
   integer  :: FparExtra_QCindex
-  integer  :: Lai_index
+  integer  :: FparLai_QCindex
+  integer  :: FparStdDevindex
+  integer  :: Fparindex
   integer  :: LaiStdDev_index
+  integer  :: Lai_index
   character(len=80) :: HDFname
   character(len=80) :: Product
   character(len=80) :: Date
   character(len=80) :: Site
   character(len=80) :: ProcessDate
   character(len=80) :: Band
-  real(r8) :: Fpar
-  real(r8) :: Lai
+  integer  :: FparExtra_QC
+  integer  :: FparLai_QC
   real(r8) :: FparStdDev
-  real(r8) :: FparLai_QC
-  real(r8) :: FparExtra_QC
+  real(r8) :: Fpar
   real(r8) :: LaiStdDev
-  
-  type(time_type)   :: time_obs
-  type(time_type)   :: Fpar_time
-  type(time_type)   :: Lai_time
-  type(time_type)   :: FparStdDev_time
-  type(time_type)   :: FparLai_QC_time
-  type(time_type)   :: FparExtra_QC_time
-  type(time_type)   :: LaiStdDev_time
+  real(r8) :: Lai
+  type(time_type) :: time_obs
+  type(time_type) :: FparExtra_QC_time
+  type(time_type) :: FparLai_QC_time
+  type(time_type) :: FparStdDev_time
+  type(time_type) :: Fpar_time
+  type(time_type) :: LaiStdDev_time
+  type(time_type) :: Lai_time
+end type modis_type
+    type(modis_type) :: modis
 
-  character(len=40) :: Fpar_site
-  character(len=40) :: Lai_site
-  character(len=40) :: FparStdDev_site
-  character(len=40) :: FparLai_QC_site
-  character(len=40) :: FparExtra_QC_site
-  character(len=40) :: LaiStdDev_site
-end type modistype
-
-type(modistype) :: modis
+! record_type has all the information on one line/record 
+type record_type
+  character(len=80) :: HDFname
+  character(len=80) :: Product
+  character(len=80) :: Date
+  character(len=80) :: Site
+  character(len=80) :: ProcessDate
+  character(len=80) :: Band
+  integer, dimension(49) :: ivalues
+  type(time_type) :: time_obs
+end type record_type
+    type(record_type) :: modisrecord
 
 type metadata_type
    integer :: site_name_indx      ! Match(columns,'SITE_NAME')
@@ -147,19 +151,12 @@ type metadata_type
    character(len=80), allocatable, dimension(:) :: fluxnet_id
    character(len=80), allocatable, dimension(:) :: fluxnet_key_id
 end type metadata_type
+    type(metadata_type) :: metadata
 
-type(metadata_type) :: metadata
-
-integer           :: siteindex
-real(r8)          :: latitude
-real(r8)          :: longitude
-integer           :: landcover
-character(len=80) :: IDstring
-integer, dimension(49) :: values
-
-type(time_type)   :: current_time
-
-integer :: bob, bits567
+integer  :: siteindex
+real(r8) :: latitude
+real(r8) :: longitude
+integer  :: landcover
 
 !-----------------------------------------------------------------------
 ! start of executable code
@@ -191,13 +188,14 @@ call Get_MODIS_subset_metadata()
 ! There are multiple lines for each observation, so file line count
 ! is more than enough. This program will only write out the actual number 
 ! created.
-! Initialize two empty observations - one to track location
-! in observation sequence - the other is for the new observation.
 
 iunit = open_file(text_input_file, 'formatted', 'read')
 if (verbose) print *, 'opened input file ' // trim(text_input_file)
 
 max_obs    = count_file_lines(iunit)
+rewind(iunit)
+call decode_modis_header(iunit) ! which data csv columns are which
+
 num_copies = 1
 num_qc     = 1
 first_obs  = .true.
@@ -206,16 +204,12 @@ call static_init_obs_sequence()
 call init_obs(obs,      num_copies, num_qc)
 call init_obs(prev_obs, num_copies, num_qc)
 call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
+call init_record(modisrecord) ! one line of data from the csv file
 
 ! the first one needs to contain the string 'observation' and the
 ! second needs the string 'QC'.
 call set_copy_meta_data(obs_seq, 1, 'observation')
 call set_qc_meta_data(  obs_seq, 1, 'MODIS QC')
-
-! The first line describes all the fields ... column headers, if you will
-
-rewind(iunit)
-call decode_header(iunit)
 
 obsloop: do iline = 2,max_obs
 
@@ -230,142 +224,94 @@ obsloop: do iline = 2,max_obs
 
    input_line = adjustl(bigline)
 
-   ! parse line into a temporary array ..
-
-   ! parse the line into the modis structure (including the observation time)
-   call stringparse(input_line, iline, IDstring, values)
+   ! parse the line into temporary modis structure (including the observation time)
+   ! If the time is an existing one, just add contents to modis structure and
+   ! continue. If time is a new time, flush the buffer, reset and continue.
+   call stringparse( input_line, iline )
 
    if (iline <= 2) then
-      write(*,*)''
-      write(*,*)'Check of the first observation: (column,string,value)'
-      write(*,*)modis%HDFnameindex,     modis%HDFnamestring,     modis%HDFname
-      write(*,*)modis%Productindex,     modis%Productstring,     modis%Product
-      write(*,*)modis%Dateindex,        modis%Datestring,        modis%Date
-      write(*,*)modis%Siteindex,        modis%Sitestring,        modis%Site
-      write(*,*)modis%ProcessDateindex, modis%ProcessDatestring, modis%ProcessDate
-      write(*,*)modis%Bandindex,        modis%Bandstring,        modis%Band
 
-      call print_date(modis%time_obs, 'observation date is')
-      call print_time(modis%time_obs, 'observation time is')
-      current_time = modis%time_obs
-   end if
+      ! Only needs to be done once since file is for one site.
+      ! Extract the site from the filename and determine metadata.
 
-   if (verbose) call print_date(modis%time_obs, 'obs time is')
+      siteindex = get_metadata(modisrecord%Site)
+      latitude  = metadata%latitude( siteindex)
+      longitude = metadata%longitude(siteindex)
+      landcover = -23
 
-   siteindex = get_metadata(modis%Site)
+      ! check the lat/lon values to see if they are ok
+      if (longitude < 0.0_r8) longitude = longitude + 360.0_r8
 
-   ! extract the site from the filename and determine metadata 
+      if (( latitude > 90.0_r8 .or. latitude  <  -90.0_r8 ) .or. &
+          (longitude <  0.0_r8 .or. longitude >  360.0_r8 )) then
 
-   latitude  = metadata%latitude( siteindex)
-   longitude = metadata%longitude(siteindex)
-   landcover = -23
+         write (string2,*)'latitude  should be [-90, 90] but is ',latitude
+         write (string3,*)'longitude should be [  0,360] but is ',longitude
 
-   if (verbose) print *, 'modis located at lat, lon =', latitude, longitude
-
-   ! check the lat/lon values to see if they are ok
-   if (longitude < 0.0_r8) longitude = longitude + 360.0_r8
-
-   if (( latitude > 90.0_r8 .or. latitude  <  -90.0_r8 ) .or. &
-       (longitude <  0.0_r8 .or. longitude >  360.0_r8 )) then
-
-      write (string2,*)'latitude  should be [-90, 90] but is ',latitude
-      write (string3,*)'longitude should be [  0,360] but is ',longitude
-
-      string1 ='modis location error in input.nml&modis_subset_to_obs_nml'
-      call error_handler(E_ERR,'modis_subset_to_obs', string1, source, revision, &
+         string1 ='modis location error in input.nml&modis_subset_to_obs_nml'
+         call error_handler(E_ERR,'modis_subset_to_obs', string1, source, revision, &
                       revdate, text2=string2,text3=string3)
+      endif
 
+      ! First observation can define the following
+      modis%HDFname     = modisrecord%HDFname
+      modis%Product     = modisrecord%Product
+      modis%Date        = modisrecord%Date
+      modis%Site        = modisrecord%Site
+      modis%ProcessDate = modisrecord%ProcessDate
+      modis%Band        = modisrecord%Band
+      modis%time_obs    = modisrecord%time_obs
+
+      if (verbose) then
+         write(*,*)''
+         write(*,*)'Check of the first observation: (column,string,value)'
+         write(*,*)modis%HDFnameindex,     modis%HDFnamestring,     modis%HDFname
+         write(*,*)modis%Productindex,     modis%Productstring,     modis%Product
+         write(*,*)modis%Dateindex,        modis%Datestring,        modis%Date
+         write(*,*)modis%Siteindex,        modis%Sitestring,        modis%Site
+         write(*,*)modis%ProcessDateindex, modis%ProcessDatestring, modis%ProcessDate
+         write(*,*)modis%Bandindex,        modis%Bandstring,        modis%Band
+         write(*,*)'site # ',siteindex,' is located at lat, lon =', latitude, longitude
+      endif
    endif
 
-   ! make an obs derived type, and then add it to the sequence
-   ! If the QC value is good, use the observation.
-   ! Increasingly larger QC values are more questionable quality data.
-   ! The observation errors are from page 183, Table 7.1(A) in 
-   ! Chapter 7 of a book by A.D. Richardson et al. via Andy Fox.  
+   if (verbose) call print_date(modisrecord%time_obs, 'obs date is')
+   if (verbose) call print_time(modisrecord%time_obs, 'obs time is')
 
-!  if (modis%FparExtra_QC <= maxgoodqc) then   ! Sensible Heat Flux [W m-2]
+   if (modisrecord%time_obs /= modis%time_obs) then
+      ! time to write the current modis structure to the obs sequence file
+      call stow_observation()
+      modis%time_obs = modisrecord%time_obs
+   endif
 
-   select case ( IDstring )
-   case ( 'Fpar_1km' )
-     modis%Fpar      = check_modis_qc(values(25),'Fpar_1km')
-     modis%Fpar_time = modis%time_obs
+   ! determine which values were read
 
-   case ( 'Lai_1km' )
-     modis%Lai      = check_modis_qc(values(25),'Lai_1km')
-     modis%Lai_time = modis%time_obs
-
-   case ( 'FparExtra_QC' ) ! This is of no value to us at this time.
-     modis%FparExtra_QC      = values(25)
-     modis%FparExtra_QC_time = modis%time_obs
-
+   select case ( modisrecord%Band )
+   case ( 'FparExtra_QC' )
+     ! This is of no value to us at this time.
+     modis%FparExtra_QC      = modisrecord%ivalues(25)
+     modis%FparExtra_QC_time = modisrecord%time_obs
    case ( 'FparLai_QC' )
-     modis%FparLai_QC      = check_modis_qc(values(25),'FparLai_QC')
-     modis%FparLai_QC_time = modis%time_obs
-
+     modis%FparLai_QC      = check_modis_qc(modisrecord)
+     modis%FparLai_QC_time = modisrecord%time_obs
    case ( 'FparStdDev_1km' )
-     modis%FparStdDev      = check_modis_qc(values(25),'FparStdDev_1km')
-     modis%FparStdDev_time = modis%time_obs
-
+     modis%FparStdDev      = check_modis_qc(modisrecord)
+     modis%FparStdDev_time = modisrecord%time_obs
+   case ( 'Fpar_1km' )
+     modis%Fpar            = check_modis_qc(modisrecord)
+     modis%Fpar_time       = modisrecord%time_obs
    case ( 'LaiStdDev_1km' )
-     modis%LaiStdDev      = check_modis_qc(values(25),'LaiStdDev_1km')
-     modis%LaiStdDev_time = modis%time_obs
-
+     modis%LaiStdDev       = check_modis_qc(modisrecord)
+     modis%LaiStdDev_time  = modisrecord%time_obs
+   case ( 'Lai_1km' )
+     modis%Lai             = check_modis_qc(modisrecord)
+     modis%Lai_time        = modisrecord%time_obs
    case default
    end select
 
-   ! FIXME ... after observation is confirmed new time ... put that data into
-   ! new array ... reinitialize all fields ... etc.
-
-   if (modis%time_obs /= current_time) then
-      ! there is a new time ... must be finished reading this obs 
-   !  if ( consistent_time( modis%Fpar_time, modis%Lai_time,  &
-   !          modis%FparExtra_QC_time, modis%FparLai_QC_time, &
-   !          modis%FparStdDev_time, modis%LaiStdDev_time) )
-
-      if ( .true. ) then
-
-         ! QC flags are binary-coded ascii strings  10011101
-         ! bits 5,6,7 (the last three) are decoded as follows:
-         ! 000 ... Main(RT) method used, best result possible (no saturation)
-         ! 001 ... Main(RT) method used with saturation, Good, very usable
-         ! 010 ... Main(RT) method failed due to bad geometry, empirical algorithm used
-         ! 011 ... Main(RT) method failed due to other problems
-         ! 100 ... pixel not produced at all
-
-         ! relying on integer arithmetic
-         bob = 1000 * (modis%FparLai_QC / 1000)
-         bits567 = modis%FparLai_QC - bob
-
-         write(*,*)'modis%FparLai_QC and last 3',modis%FparLai_QC, bits567
-
-         if (bits567 > 1) then
-            modis%Fpar = MISSING_R8
-            modis%Lai  = MISSING_R8
-         endif
-
-         if (modis%FparLai_QC <= maxgoodqc) then
-
-            call get_time(modis%time_obs, osec, oday)
-
-            oerr = modis%FparStdDev
-            qc   = real(modis%FparLai_QC,r8)
-
-            obval= real(modis%Fpar,r8)
-
-            call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
-                               MODIS_FPAR, oerr, oday, osec, qc, obs)
-            call add_obs_to_seq(obs_seq, obs, modis%time_obs, prev_obs, prev_time, first_obs)
-
-         endif
-
-      endif
-
-      ! Call finalize_obs
-      current_time = modis%time_obs
-   endif
-
-
 end do obsloop
+
+call stow_observation() ! Flush that last observation 
 
 ! if we added any obs to the sequence, write it out to a file now.
 if ( get_num_obs(obs_seq) > 0 ) then
@@ -377,113 +323,6 @@ endif
 call finalize_utilities()
 
 contains
-
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
-!   create_3d_obs - subroutine that is used to create an observation
-!                   type from observation data.
-!
-!       NOTE: assumes the code is using the threed_sphere locations module,
-!             that the observation has a single data value and a single
-!             qc value, and that this obs type has no additional required
-!             data (e.g. gps and radar obs need additional data per obs)
-!
-!    lat   - latitude of observation
-!    lon   - longitude of observation
-!    vval  - vertical coordinate
-!    vkind - kind of vertical coordinate (pressure, level, etc)
-!    obsv  - observation value
-!    okind - observation kind
-!    oerr  - observation error (in units of standard deviation)
-!    day   - gregorian day
-!    sec   - gregorian second
-!    qc    - quality control value
-!    obs   - observation type
-!
-!     created Oct. 2007 Ryan Torn, NCAR/MMM
-!     adapted for more generic use 11 Mar 2010, nancy collins, ncar/image
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, obs)
-use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
-                             set_obs_def_error_variance, set_obs_def_location
-use obs_sequence_mod, only : obs_type, set_obs_values, set_qc, set_obs_def
-use time_manager_mod, only : time_type, set_time
-use     location_mod, only : set_location
-
- integer,        intent(in)    :: okind, vkind, day, sec
- real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
- type(obs_type), intent(inout) :: obs
-
-real(r8)           :: obs_val(1), qc_val(1)
-type(obs_def_type) :: obs_def
-
-call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
-call set_obs_def_kind(obs_def, okind)
-call set_obs_def_time(obs_def, set_time(sec, day))
-call set_obs_def_error_variance(obs_def, oerr * oerr)
-call set_obs_def(obs, obs_def)
-
-obs_val(1) = obsv
-call set_obs_values(obs, obs_val)
-qc_val(1)  = qc
-call set_qc(obs, qc_val)
-
-end subroutine create_3d_obs
-
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
-!   add_obs_to_seq -- adds an observation to a sequence.  inserts if first
-!           obs, inserts with a prev obs to save searching if that's possible.
-!
-!     seq - observation sequence to add obs to
-!     obs - observation, already filled in, ready to add
-!     obs_time - time of this observation, in dart time_type format
-!     prev_obs - the previous observation that was added to this sequence
-!                (will be updated by this routine)
-!     prev_time - the time of the previously added observation (will also
-!                be updated by this routine)
-!     first_obs - should be initialized to be .true., and then will be
-!                updated by this routine to be .false. after the first obs
-!                has been added to this sequence.
-!
-!     created Mar 8, 2010   nancy collins, ncar/image
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine add_obs_to_seq(seq, obs, obs_time, prev_obs, prev_time, first_obs)
-
-use obs_sequence_mod, only : obs_sequence_type, obs_type, insert_obs_in_seq
-use time_manager_mod, only : time_type, operator(>=)
-
-type(obs_sequence_type), intent(inout) :: seq
-type(obs_type),          intent(inout) :: obs, prev_obs
-type(time_type),         intent(in)    :: obs_time
-type(time_type),         intent(inout) :: prev_time
-logical,                 intent(inout) :: first_obs
-
-! insert(seq,obs) always works (i.e. it inserts the obs in
-! proper time format) but it can be slow with a long file.
-! supplying a previous observation that is older (or the same
-! time) as the new one speeds up the searching a lot.
-
-if(first_obs) then    ! for the first observation, no prev_obs
-   call insert_obs_in_seq(seq, obs)
-   first_obs = .false.
-else
-   if(obs_time >= prev_time) then  ! same time or later than previous obs
-      call insert_obs_in_seq(seq, obs, prev_obs)
-   else                            ! earlier, search from start of seq
-      call insert_obs_in_seq(seq, obs)
-   endif
-endif
-
-! update for next time
-prev_obs  = obs
-prev_time = obs_time
-
-end subroutine add_obs_to_seq
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -535,7 +374,7 @@ end function count_file_lines
 
 
 
-subroutine decode_header(iunit)
+subroutine decode_modis_header(iunit)
 ! Reads the first line of the header and parses the information.
 ! And by parse, I mean determine which columns are the columns
 ! of interest.
@@ -543,7 +382,7 @@ subroutine decode_header(iunit)
 integer, intent(in) :: iunit
 
 integer, parameter :: maxwordlength = 80
-integer :: i,charcount,columncount,wordlength,maxlength
+integer :: i,charcount,columncount,wordlength
 character(len=maxwordlength), dimension(:), allocatable :: columns
 integer, dimension(10) :: qc = 0
 
@@ -552,7 +391,7 @@ integer, dimension(10) :: qc = 0
 read(iunit,'(A)',iostat=rcio) bigline
 if (rcio /= 0) then
   write(string1,*)'Cannot parse header. Begins <',trim(bigline(1:40)),'>'
-  call error_handler(E_ERR,'decode_header',string1, source, revision, revdate)
+  call error_handler(E_ERR,'decode_modis_header',string1, source, revision, revdate)
 endif
 
 input_line = adjustl(bigline)
@@ -572,7 +411,7 @@ do i = 1,len_trim(input_line)
       if (wordlength > maxwordlength) then
          write(string1,*)'unexpected long word ... starts <',&
                            input_line((i-wordlength):(i-1)),'>'
-         call error_handler(E_ERR,'decode_header',string1, source, revision, revdate)
+         call error_handler(E_ERR,'decode_modis_header',string1, source, revision, revdate)
       endif
       columns(columncount) = input_line((i-wordlength):(i-1)) 
       if (verbose) write(*,*)'word(',columncount,') is ',columns(columncount)
@@ -607,7 +446,7 @@ qc(10) = CheckIndex( modis%Bandindex,        'Band' )
 
 if (any(qc /= 0) ) then
   write(string1,*)'Did not find all the required column indices.'
-  call error_handler(E_ERR,'decode_header',string1, source, revision, revdate)
+  call error_handler(E_ERR,'decode_modis_header',string1, source, revision, revdate)
 endif
 
 ! Summarize if desired
@@ -623,7 +462,7 @@ endif
 
 deallocate(columns)
 
-end subroutine decode_header
+end subroutine decode_modis_header
 
 
 
@@ -683,7 +522,7 @@ character(len=*), intent(in)  :: context
 
 if (myindex == 0) then
    write(string1,*)'Did not find column header matching ',trim(context)
-   call error_handler(E_MSG,'decode_header:CheckIndex',string1, source, revision, revdate)
+   call error_handler(E_MSG,'decode_modis_header:CheckIndex',string1, source, revision, revdate)
    CheckIndex = -1 ! not a good thing
 else
    CheckIndex = 0  ! Good to go
@@ -693,57 +532,38 @@ end function CheckIndex
 
 
 
-subroutine stringparse(str1, linenum, ObsString, quantities )
-! just declare everything as reals and chunk it
+subroutine stringparse( myline, linenum )
+! just chunk it
 
-character(len=*), intent(in) :: str1
-integer         , intent(in) :: linenum
-character(len=80), intent(out) :: ObsString
-integer, dimension(49), intent(out) :: quantities
+character(len=*), intent(in) :: myline
+integer,          intent(in) :: linenum
 
 character(len=80), dimension(6) :: column_names
 integer :: iyear, idoy
-type(time_type) :: time0, time1, time2
+type(time_type) :: time0, time1
 
-quantities(:) = MISSING_R8
+modisrecord%ivalues(:) = MISSING_R8
 
-read(str1,*,iostat=rcio) column_names, quantities
+read(myline,*,iostat=rcio) column_names, modisrecord%ivalues
 
 if (rcio /= 0) then
-   write(string1,*)'Cannot parse line',linenum,'. Begins <',trim(str1(1:40)),'>'
+   write(string1,*)'Cannot parse line',linenum,'. Begins <',trim(myline(1:40)),'>'
    call error_handler(E_ERR,'stringparse',string1, source, revision, revdate)
 endif
 
-! Stuff what we want into the modis structure
-!
-! Convert to 'CLM-friendly' units AFTER we determine observation error variance.
-! That happens in the main routine.
-!
-! NEE_or_fMDS    has units     [umolCO2 m-2 s-1] 
-! H_f            has units     [W m-2]
-! LE_f           has units     [W m-2]
-!
-! (CLM) NEE      has units     [gC m-2 s-1]
+! Convert to 'CLM-friendly' units later.
 
-modis%HDFname     = trim(column_names(modis%HDFnameindex))
-modis%Product     = trim(column_names(modis%Productindex))
-modis%Date        = trim(column_names(modis%Dateindex))
-modis%Site        = trim(column_names(modis%Siteindex))
-modis%ProcessDate = trim(column_names(modis%ProcessDateindex))
-modis%Band        = trim(column_names(modis%Bandindex))
+modisrecord%HDFname     = trim(column_names(modis%HDFnameindex))
+modisrecord%Product     = trim(column_names(modis%Productindex))
+modisrecord%Date        = trim(column_names(modis%Dateindex))
+modisrecord%Site        = trim(column_names(modis%Siteindex))
+modisrecord%ProcessDate = trim(column_names(modis%ProcessDateindex))
+modisrecord%Band        = trim(column_names(modis%Bandindex))
 
-read(modis%Date,'(1x,i4,i3)')iyear,idoy
-
+read(modisrecord%Date,'(1x,i4,i3)')iyear,idoy
 time0   = set_date(iyear, 1, 1, 0, 0, 0)
 time1   = set_time(0, idoy)
-modis%time_obs = time0 + time1
-
-write(*,*)'year is ',iyear
-write(*,*)'idoy is ',idoy
-call print_time(modis%time_obs)
-call print_date(modis%time_obs)
-
-IDstring = modis%Band
+modisrecord%time_obs = time0 + time1
 
 end subroutine stringparse
 
@@ -838,7 +658,7 @@ subroutine decode_metadata(iunit)
 integer,              intent(in)  :: iunit
 
 integer, parameter :: maxwordlength = 80
-integer :: i,charcount,columncount,wordlength,maxlength
+integer :: i,charcount,columncount,wordlength
 character(len=maxwordlength), dimension(:), allocatable :: columns
 integer, dimension(10) :: qc = 0
 
@@ -938,29 +758,138 @@ enddo StationLoop
 end function get_metadata
 
 
-function check_modis_qc(value,valstring)
+
+function check_modis_qc( myrecord )
 ! Checks the appropriate QC values for the value in question
 ! and converts 'good' values to proper units.
-   integer, intent(in) :: value
-   character(len=*), intent(in) :: valstring
-   real(r8) :: check_modis_qc
 
-   select case ( valstring )
-   case ('Fpar_1km') 
-      if (value < 249) check_modis_qc = value * 0.01_r8
+type(record_type), intent(in) :: myrecord
+real(r8) :: check_modis_qc
+real(r8) :: value
 
-   case ('FparStdDev_1km') 
-      if (value < 248) check_modis_qc = value * 0.01_r8
+check_modis_qc = MISSING_R8
 
-   case ('Lai_1km') 
-      if (value < 249) check_modis_qc = value * 0.1_r8
+value = real(myrecord%ivalues(25),r8)
 
-   case ('LaiStdDev_1km') 
-      if (value < 248) check_modis_qc = value * 0.1_r8
-   case default
-   end select
+select case ( myrecord%Band )
+case ('FparLai_QC') 
+   check_modis_qc = value
+case ('FparStdDev_1km') 
+   if (value < 248) check_modis_qc = value * 0.01_r8
+case ('Fpar_1km') 
+   if (value < 249) check_modis_qc = value * 0.01_r8
+case ('LaiStdDev_1km') 
+   if (value < 248) check_modis_qc = value * 0.1_r8
+case ('Lai_1km') 
+   if (value < 249) check_modis_qc = value * 0.1_r8
+case default
+   write(string1,*)'Did not match <',trim(myrecord%Band),'>'
+   call error_handler(E_ERR,'check_modis_qc',string1, source, revision, revdate)
+end select
 
 end function check_modis_qc
+
+
+subroutine init_record( myrecord )
+type(record_type), intent(out) :: myrecord
+myrecord%HDFname     = 'null'
+myrecord%Product     = 'null'
+myrecord%Date        = 'null'
+myrecord%Site        = 'null'
+myrecord%ProcessDate = 'null'
+myrecord%Band        = 'null'
+myrecord%ivalues(:)  = MISSING_R8
+myrecord%time_obs    = set_time(0,0)
+end subroutine init_record
+
+
+subroutine stow_observation()
+! so by now, everything should be in the modis structure
+
+real(r8) :: oerr, qc, obval
+integer  :: oday, osec
+integer  :: bob, bits567
+
+call get_time(modis%time_obs, osec, oday)
+
+! Check to make sure all Fpar observations are for the same time
+if ( (modis%Fpar_time /= modis%FparExtra_QC_time) .or. &
+     (modis%Fpar_time /= modis%FparLai_QC_time)   .or. &
+     (modis%Fpar_time /= modis%FparStdDev_time) ) then
+   call print_time(modis%Fpar_time,        str='Fpar_time')
+   call print_time(modis%FparExtra_QC_time,str='FparExtra_QC_time')
+   call print_time(modis%FparLai_QC_time,  str='FparLai_QC_time')
+   call print_time(modis%FparStdDev_time,  str='FparStdDev_time')
+   write(string1,*)'All Fpar times did not match.'
+   call error_handler(E_ERR,'stow_observation',string1, source, revision, revdate)
+endif
+
+! Check to make sure all Lai observations are for the same time
+if ( (modis%Lai_time /= modis%FparLai_QC_time) .or. &
+     (modis%Lai_time /= modis%FparStdDev_time) ) then
+   call print_time(modis%Lai_time,        str='Lai_time')
+   call print_time(modis%FparLai_QC_time, str='FparLai_QC_time')
+   call print_time(modis%FparStdDev_time, str='FparStdDev_time')
+   write(string1,*)'All Lai times did not match.'
+   call error_handler(E_ERR,'stow_observation',string1, source, revision, revdate)
+endif
+
+! QC flags are binary-coded ascii strings e.g., 10011101
+! bits 5,6,7 (the last three) are decoded as follows:
+! 000 ... Main(RT) method used, best result possible (no saturation)
+! 001 ... Main(RT) method used with saturation, Good, very usable
+! 010 ... Main(RT) method failed due to bad geometry, empirical algorithm used
+! 011 ... Main(RT) method failed due to other problems
+! 100 ... pixel not produced at all
+
+! relying on integer arithmetic
+bob = 1000 * (modis%FparLai_QC / 1000)
+bits567   =   modis%FparLai_QC - bob
+
+! TJH-OK write(*,*)'modis%FparLai_QC and last 3',modis%FparLai_QC, bits567
+
+if (bits567 > maxgoodqc) then
+   modis%Fpar = MISSING_R8
+   modis%Lai  = MISSING_R8
+endif
+
+if (modis%Fpar /= MISSING_R8) then
+   qc    = real(bits567,r8)
+   obval = real(modis%Fpar,r8)
+   oerr  = modis%FparStdDev
+
+   call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
+               MODIS_FPAR, oerr, oday, osec, qc, obs)
+endif
+
+if (modis%Lai /= MISSING_R8) then
+   qc    = real(bits567,r8)
+   obval = real(modis%Lai,r8)
+   oerr  = modis%LaiStdDev
+
+   call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
+               MODIS_LEAF_AREA_INDEX, oerr, oday, osec, qc, obs)
+endif
+
+call add_obs_to_seq(obs_seq, obs, modis%time_obs, prev_obs, prev_time, first_obs)
+
+! Time to reinitialize the modis structure data values
+
+modis%FparExtra_QC      = MISSING_R8
+modis%FparExtra_QC_time = set_time(0,0)
+modis%FparLai_QC        = MISSING_R8
+modis%FparLai_QC_time   = set_time(0,0)
+modis%FparStdDev        = MISSING_R8
+modis%FparStdDev_time   = set_time(0,0)
+modis%Fpar              = MISSING_R8
+modis%Fpar_time         = set_time(0,0)
+modis%LaiStdDev         = MISSING_R8
+modis%LaiStdDev_time    = set_time(0,0)
+modis%Lai               = MISSING_R8
+modis%Lai_time          = set_time(0,0)
+modis%Band              = 'null'
+
+end subroutine stow_observation
 
 
 

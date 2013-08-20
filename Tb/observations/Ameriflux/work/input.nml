@@ -36,10 +36,10 @@
    /
 
 &modis_subset_to_obs_nml
-   text_input_file = '/glade/scratch/thoar/MODIS_LAI/MOD15A2/MOD15A2.fn_usbouldr.txt',
+   text_input_file = '/glade/scratch/thoar/MODIS_LAI/MOD15A2/MOD15A2.fn_usmafort.txt',
    metadata_file   = '/glade/scratch/thoar/MODIS_LAI/MODIS_subset_metadata.txt',
    obs_out_file    = 'obs_seq.out',
-   maxgoodqc       = 3,
+   maxgoodqc       = 10,
    verbose         = .TRUE.
    /
 
