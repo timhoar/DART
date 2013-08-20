@@ -104,7 +104,6 @@ type modis_type
   character(len=80) :: Date
   character(len=80) :: Site
   character(len=80) :: ProcessDate
-  character(len=80) :: Band
   integer  :: FparExtra_QC
   integer  :: FparLai_QC
   real(r8) :: FparStdDev
@@ -259,24 +258,26 @@ obsloop: do iline = 2,max_obs
       modis%Date        = modisrecord%Date
       modis%Site        = modisrecord%Site
       modis%ProcessDate = modisrecord%ProcessDate
-      modis%Band        = modisrecord%Band
       modis%time_obs    = modisrecord%time_obs
 
       if (verbose) then
-         write(*,*)''
+         write(*,*)
          write(*,*)'Check of the first observation: (column,string,value)'
-         write(*,*)modis%HDFnameindex,     modis%HDFnamestring,     modis%HDFname
-         write(*,*)modis%Productindex,     modis%Productstring,     modis%Product
-         write(*,*)modis%Dateindex,        modis%Datestring,        modis%Date
-         write(*,*)modis%Siteindex,        modis%Sitestring,        modis%Site
-         write(*,*)modis%ProcessDateindex, modis%ProcessDatestring, modis%ProcessDate
-         write(*,*)modis%Bandindex,        modis%Bandstring,        modis%Band
-         write(*,*)'site # ',siteindex,' is located at lat, lon =', latitude, longitude
+         write(*,*)modis%HDFnameindex,     modis%HDFnamestring,     trim(modis%HDFname)
+         write(*,*)modis%Productindex,     modis%Productstring,     trim(modis%Product)
+         write(*,*)modis%Dateindex,        modis%Datestring,        trim(modis%Date)
+         write(*,*)modis%Siteindex,        modis%Sitestring,        trim(modis%Site)
+         write(*,*)modis%ProcessDateindex, modis%ProcessDatestring, trim(modis%ProcessDate)
+         write(*,*)modis%Bandindex,        modis%Bandstring,        trim(modisrecord%Band)
+         write(*,*)'   site # ',siteindex,' is located at lat, lon =', latitude, longitude
+         write(*,*)'   data(25) is ',modisrecord%ivalues(25)
       endif
    endif
 
-   if (verbose) call print_date(modisrecord%time_obs, 'obs date is')
-   if (verbose) call print_time(modisrecord%time_obs, 'obs time is')
+                call print_date(modisrecord%time_obs, ' obs date is')
+   if (verbose) call print_time(modisrecord%time_obs, ' obs time is')
+   if (verbose) write(*,*)trim(modisrecord%Band),' data(25) is ',modisrecord%ivalues(25)
+   if (verbose) write(*,*)
 
    if (modisrecord%time_obs /= modis%time_obs) then
       ! time to write the current modis structure to the obs sequence file
@@ -284,7 +285,7 @@ obsloop: do iline = 2,max_obs
       modis%time_obs = modisrecord%time_obs
    endif
 
-   ! determine which values were read
+   ! determine which values were read and update 
 
    select case ( modisrecord%Band )
    case ( 'FparExtra_QC' )
@@ -292,22 +293,24 @@ obsloop: do iline = 2,max_obs
      modis%FparExtra_QC      = modisrecord%ivalues(25)
      modis%FparExtra_QC_time = modisrecord%time_obs
    case ( 'FparLai_QC' )
-     modis%FparLai_QC      = check_modis_qc(modisrecord)
-     modis%FparLai_QC_time = modisrecord%time_obs
+     modis%FparLai_QC        = check_modis_qc(modisrecord)
+     modis%FparLai_QC_time   = modisrecord%time_obs
    case ( 'FparStdDev_1km' )
-     modis%FparStdDev      = check_modis_qc(modisrecord)
-     modis%FparStdDev_time = modisrecord%time_obs
+     modis%FparStdDev        = check_modis_qc(modisrecord)
+     modis%FparStdDev_time   = modisrecord%time_obs
    case ( 'Fpar_1km' )
-     modis%Fpar            = check_modis_qc(modisrecord)
-     modis%Fpar_time       = modisrecord%time_obs
+     modis%Fpar              = check_modis_qc(modisrecord)
+     modis%Fpar_time         = modisrecord%time_obs
    case ( 'LaiStdDev_1km' )
-     modis%LaiStdDev       = check_modis_qc(modisrecord)
-     modis%LaiStdDev_time  = modisrecord%time_obs
+     modis%LaiStdDev         = check_modis_qc(modisrecord)
+     modis%LaiStdDev_time    = modisrecord%time_obs
    case ( 'Lai_1km' )
-     modis%Lai             = check_modis_qc(modisrecord)
-     modis%Lai_time        = modisrecord%time_obs
+     modis%Lai               = check_modis_qc(modisrecord)
+     modis%Lai_time          = modisrecord%time_obs
    case default
    end select
+
+   if (iline == 30) exit obsloop ! TJH early exit
 
 end do obsloop
 
@@ -384,7 +387,7 @@ integer, intent(in) :: iunit
 integer, parameter :: maxwordlength = 80
 integer :: i,charcount,columncount,wordlength
 character(len=maxwordlength), dimension(:), allocatable :: columns
-integer, dimension(10) :: qc = 0
+integer, dimension(6) :: qc = 0
 
 ! Read the line and strip off any leading whitespace.
 
@@ -414,7 +417,7 @@ do i = 1,len_trim(input_line)
          call error_handler(E_ERR,'decode_modis_header',string1, source, revision, revdate)
       endif
       columns(columncount) = input_line((i-wordlength):(i-1)) 
-      if (verbose) write(*,*)'word(',columncount,') is ',columns(columncount)
+      if (verbose) write(*,*)'word(',columncount,') is ',trim(columns(columncount))
       wordlength = 0
       charcount = i
    else
@@ -441,8 +444,8 @@ qc( 1) = CheckIndex( modis%HDFnameindex,     'HDFname' )
 qc( 2) = CheckIndex( modis%Productindex,     'Product' )
 qc( 3) = CheckIndex( modis%Dateindex,        'Date' )
 qc( 4) = CheckIndex( modis%Siteindex,        'Site' )
-qc( 9) = CheckIndex( modis%ProcessDateindex, 'ProcessDate' )
-qc(10) = CheckIndex( modis%Bandindex,        'Band' )
+qc( 5) = CheckIndex( modis%ProcessDateindex, 'ProcessDate' )
+qc( 6) = CheckIndex( modis%Bandindex,        'Band' )
 
 if (any(qc /= 0) ) then
   write(string1,*)'Did not find all the required column indices.'
@@ -634,13 +637,13 @@ readloop: do iline = 1,metadata%nstations
 
    if (verbose) then
       write(*,*)'line number ',iline
-      write(*,*)'   site_name      is ', metadata%site_name(iline)
-      write(*,*)'   country        is ', metadata%country(iline)
+      write(*,*)'   site_name      is ', trim(metadata%site_name(iline))
+      write(*,*)'   country        is ', trim(metadata%country(iline))
       write(*,*)'   latitude       is ', metadata%latitude( iline)
       write(*,*)'   longitude      is ', metadata%longitude(iline)
-      write(*,*)'   modis_site_id  is ', metadata%modis_site_id(iline)
-      write(*,*)'   fluxnet_id     is ', metadata%fluxnet_id(iline)
-      write(*,*)'   fluxnet_key_id is ', metadata%fluxnet_key_id(iline)
+      write(*,*)'   modis_site_id  is ', trim(metadata%modis_site_id(iline))
+      write(*,*)'   fluxnet_id     is ', trim(metadata%fluxnet_id(iline))
+      write(*,*)'   fluxnet_key_id is ', trim(metadata%fluxnet_key_id(iline))
       write(*,*)
    endif
 
@@ -660,7 +663,7 @@ integer,              intent(in)  :: iunit
 integer, parameter :: maxwordlength = 80
 integer :: i,charcount,columncount,wordlength
 character(len=maxwordlength), dimension(:), allocatable :: columns
-integer, dimension(10) :: qc = 0
+integer, dimension(7) :: qc = 0
 
 ! Read the line and strip off any leading whitespace.
 
@@ -690,7 +693,7 @@ do i = 1,len_trim(input_line)
          call error_handler(E_ERR,'decode_metadata',string1, source, revision, revdate)
       endif
       columns(columncount) = input_line((i-wordlength):(i-1)) 
-      if (verbose) write(*,*)'word(',columncount,') is ',columns(columncount)
+      if (verbose) write(*,*)'word(',columncount,') is ',trim(columns(columncount))
       wordlength = 0
       charcount = i
    else
@@ -810,28 +813,15 @@ real(r8) :: oerr, qc, obval
 integer  :: oday, osec
 integer  :: bob, bits567
 
-call get_time(modis%time_obs, osec, oday)
-
-! Check to make sure all Fpar observations are for the same time
-if ( (modis%Fpar_time /= modis%FparExtra_QC_time) .or. &
-     (modis%Fpar_time /= modis%FparLai_QC_time)   .or. &
-     (modis%Fpar_time /= modis%FparStdDev_time) ) then
-   call print_time(modis%Fpar_time,        str='Fpar_time')
-   call print_time(modis%FparExtra_QC_time,str='FparExtra_QC_time')
-   call print_time(modis%FparLai_QC_time,  str='FparLai_QC_time')
-   call print_time(modis%FparStdDev_time,  str='FparStdDev_time')
-   write(string1,*)'All Fpar times did not match.'
-   call error_handler(E_ERR,'stow_observation',string1, source, revision, revdate)
-endif
-
-! Check to make sure all Lai observations are for the same time
-if ( (modis%Lai_time /= modis%FparLai_QC_time) .or. &
-     (modis%Lai_time /= modis%FparStdDev_time) ) then
-   call print_time(modis%Lai_time,        str='Lai_time')
-   call print_time(modis%FparLai_QC_time, str='FparLai_QC_time')
-   call print_time(modis%FparStdDev_time, str='FparStdDev_time')
-   write(string1,*)'All Lai times did not match.'
-   call error_handler(E_ERR,'stow_observation',string1, source, revision, revdate)
+if (verbose) then
+   call print_date(modis%time_obs)
+   write(*,*) 'FparExtra_QC is ', modis%FparExtra_QC
+   write(*,*) 'FparLai_QC   is ', modis%FparLai_QC
+   write(*,*) 'FparStdDev   is ', modis%FparStdDev
+   write(*,*) 'Fpar         is ', modis%Fpar
+   write(*,*) 'LaiStdDev    is ', modis%LaiStdDev
+   write(*,*) 'Lai          is ', modis%Lai
+   write(*,*)
 endif
 
 ! QC flags are binary-coded ascii strings e.g., 10011101
@@ -853,25 +843,45 @@ if (bits567 > maxgoodqc) then
    modis%Lai  = MISSING_R8
 endif
 
-if (modis%Fpar /= MISSING_R8) then
+call get_time(modis%time_obs, osec, oday)
+
+if ( (modis%Fpar /= MISSING_R8) .and. (modis%FparStdDev /= MISSING_R8) ) then
+   ! Check to make sure all Fpar observations are for the same time
+   if ( (modis%Fpar_time /= modis%FparLai_QC_time)   .or. &
+        (modis%Fpar_time /= modis%FparStdDev_time) ) then
+      call print_time(modis%Fpar_time,        str='Fpar_time')
+      call print_time(modis%FparLai_QC_time,  str='FparLai_QC_time')
+      call print_time(modis%FparStdDev_time,  str='FparStdDev_time')
+      write(string1,*)'All Fpar times did not match.'
+      call error_handler(E_ERR,'stow_observation',string1, source, revision, revdate)
+   endif
    qc    = real(bits567,r8)
    obval = real(modis%Fpar,r8)
    oerr  = modis%FparStdDev
 
    call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
                MODIS_FPAR, oerr, oday, osec, qc, obs)
+   call add_obs_to_seq(obs_seq, obs, modis%time_obs, prev_obs, prev_time, first_obs)
 endif
 
-if (modis%Lai /= MISSING_R8) then
+if ( (modis%Lai /= MISSING_R8) .and. (modis%FparStdDev /= MISSING_R8) ) then
+   ! Check to make sure all Lai observations are for the same time
+   if ( (modis%Lai_time /= modis%FparLai_QC_time) .or. &
+        (modis%Lai_time /= modis%FparStdDev_time) ) then
+      call print_time(modis%Lai_time,        str='Lai_time')
+      call print_time(modis%FparLai_QC_time, str='FparLai_QC_time')
+      call print_time(modis%FparStdDev_time, str='FparStdDev_time')
+      write(string1,*)'All Lai times did not match.'
+      call error_handler(E_ERR,'stow_observation',string1, source, revision, revdate)
+   endif
    qc    = real(bits567,r8)
    obval = real(modis%Lai,r8)
    oerr  = modis%LaiStdDev
 
    call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
                MODIS_LEAF_AREA_INDEX, oerr, oday, osec, qc, obs)
+   call add_obs_to_seq(obs_seq, obs, modis%time_obs, prev_obs, prev_time, first_obs)
 endif
-
-call add_obs_to_seq(obs_seq, obs, modis%time_obs, prev_obs, prev_time, first_obs)
 
 ! Time to reinitialize the modis structure data values
 
@@ -887,7 +897,6 @@ modis%LaiStdDev         = MISSING_R8
 modis%LaiStdDev_time    = set_time(0,0)
 modis%Lai               = MISSING_R8
 modis%Lai_time          = set_time(0,0)
-modis%Band              = 'null'
 
 end subroutine stow_observation
 
