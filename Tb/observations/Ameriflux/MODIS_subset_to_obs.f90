@@ -236,7 +236,7 @@ obsloop: do iline = 2,max_obs
       siteindex = get_metadata(modisrecord%Site)
       latitude  = metadata%latitude( siteindex)
       longitude = metadata%longitude(siteindex)
-      landcover = -23
+      landcover = -23 ! FIXME ... no landcover metadata included in this version.
 
       ! check the lat/lon values to see if they are ok
       if (longitude < 0.0_r8) longitude = longitude + 360.0_r8
@@ -309,8 +309,6 @@ obsloop: do iline = 2,max_obs
      modis%Lai_time          = modisrecord%time_obs
    case default
    end select
-
-   if (iline == 30) exit obsloop ! TJH early exit
 
 end do obsloop
 
