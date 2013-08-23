@@ -10,46 +10,39 @@
 # Purpose
 # ---------------------
 #
-# This script is designed to set up, stage, and build a multi-instance run of CESM
-# using an I compset where only CLM active and the ocean and land states are specified
-# by data files.
+# This script is designed to set up, stage, and build a single-instance run of CESM
+# using an I compset where only CLM is active and the ocean and land states are
+# specified by data files. CESM is set up with a 'hybrid' start.
 #
-# CLM: uses the result of the 'b40.20th.005_ens${instance}' experiments - sort of.
-#      CLM has changed since then and the CLM restart files needed to be converted
-#      to the new format. I ran 'interpinic' to (essentially) reformat the files
-#      and changed the CASENAME to 'cesm_test' and used the multi-instance naming
-#      convention for the new files.
-#
-#      The initial ensemble can be set by specifying the 'finidat' variable in the
-#      user_nl_clm_${instance}. A FULL pathname to the file is required. This is nice
-#      for two reasons - one is that you don't need to copy the files and rename them
-#      (tedious), the second is that the full pathname provides a means of tracking
-#      the origin of the initial ensemble.
+# CLM: The initial state is set by specifying the 'finidat' variable in
+#      user_nl_clm. Under a hybrid start, CESM uses the REFCASE and REFDATE
+#      information to construct the finidat value. This script makes an effort
+#      to coordinate the staging of the file so it is consistent with CESM
 #
 # DATM: We are using an ensemble of data atmospheres. This requires modification of
 #       the stream text files (and the stream files) for each CESM instance.
 #
 # DOCN: We are using a single data ocean.
 #
-# Much of the complexity comes from ensuring compatibility between the namelists
-# for each instance and staging of the files. The original experiments were run
-# before the multi-instance capacity was developed and the naming convention decided.
-# Consequently, there is a lot of manipulation of the 'instance' portion of the
-# filenames.
+# This script has a counterpart that is a multi-instance setup for either a free
+# run or an assimilation experiment. To make it easy to maintain (and hopefully
+# understand), the two scripts are intended to parallel each other. That means this
+# script performs a lot of manipulation of the 'instance' portion of the
+# filenames, which seems unnecessary initially.
 #
-# This script results in a viable setup for a CESM multi-instance experiment. You
-# are STRONGLY encouraged to run the multi-instance CESM a few times and experiment
-# with different settings BEFORE you try to assimilate observations. The amount of
-# data volume is quite large and you should become comfortable using CESM's restart
-# capability to re-stage files in your RUN directory
+# This script results in a viable setup for a CESM single instance experiment. You
+# are STRONGLY encouraged to run the single instance CESM a few times and experiment
+# with different settings BEFORE you try to generate 'perfect' observations.
+# You should become comfortable using CESM's restart capability to re-stage files
+# in your RUN directory.
 #
 # ${CASEROOT}/CESM_DART_config will augment the CESM case with the required setup
-# and configuration to perform a DART assimilation. CASEROOT/CESM_DART_config
+# and configuration to use DART to harvest synthetic observations. CESM_DART_config
 # will insert a few dozen lines into the ${CASE}.run script after it makes a backup
 # copy.  This, and the required setup, can be run at a later date. e.g. you can
 # advance an ensemble from 2004-01-01 to 2004-02-01 and then run
 # CESM_DART_config to augment the existing run script, modify STOP_N to 6 hours,
-# and start assimilating observations when CESM stops at 2004-02-01 06Z ...
+# and start harvesting synthetic observations when CESM stops at 2004-02-01 06Z ...
 #
 # This script relies heavily on the information in:
 # http://www.cesm.ucar.edu/models/cesm1.1/cesm/doc/usersguide/book1.html
@@ -60,19 +53,19 @@
 #
 # -- You will have to read and understand the script in its entirety.
 #    You will have to modify things outside this script.
-#    This script sets up a CESM multi-instance run as we understand them and
+#    This script sets up a CESM single instance run as we understand them and
 #    it has almost nothing to do with DART. This is intentional.
 #
 # -- Edit and run this script in the $DART/models/CESM/shell_scripts directory
 #    or copy it to somewhere that it will be preserved and run it there.
 #    It will create a CESM 'CASE' directory, where the model will be built,
-#    and an execution directory, where each forecast (and assimilation) will
+#    and an execution directory, where each forecast will
 #    take place.  The short term archiver will use a third directory for
 #    storage of model output until it can be moved to long term storage (HPSS)
 #
 # -- Examine the whole script to identify things to change for your experiments.
 #
-# -- Provide the CESM initial ensemble needed by your run.
+# -- Provide the CESM initial file needed by your run.
 #
 # -- Run this script.
 #
@@ -103,13 +96,11 @@
 # the value of "case" will be used many ways;
 #    directory and file names, both locally and on HPSS, and
 #    script names; so consider it's length and information content.
-# num_instances:  Number of ensemble members
 
-setenv case                 clm_hybrid
+setenv case                 clm_pmo
 setenv compset              I_2000_CN
 setenv resolution           f09_f09
 setenv cesmtag              cesm1_1_1
-setenv num_instances        80
 
 # ==============================================================================
 # define machines and directories
@@ -152,6 +143,25 @@ setenv stream_year_first 2004
 setenv stream_year_last  2004
 setenv stream_year_align 2004
 
+# SingleInstanceRefcase: the filenames are fundamentally different for
+#    a multi-instance CESM run or a single-instance CESM run. A correct setting
+#    of this variable makes staging the required files easier - that's all.
+#    1 means 'true' ... the restart file has a single-instance-like name.
+#    0 means 'false' .. the restart file has a  multi-instance-like name.
+#
+# TRUTHinstance: specifies the specific instance you want to define as the TRUTH.
+#                If you have an initial ensemble size of 80, 1<= instance <= 80.
+#                If you only have one CLM state ... use 1. This value is also
+#                used to specify _which_ DATM streamfile to use to force the
+#                TRUTH run.
+#
+# CLM_stagedir: specifies the location of the CLM restart file you are defining as
+#               the truth. As this state evolves in time, it will be used as the
+#               input to the exact same forward observation operator code that
+#               will be used during a subsequent assimilation.
+
+setenv SingleInstanceRefcase 0
+setenv TRUTHinstance 23
 setenv CLM_stagedir /glade/scratch/afox/archive/$run_refcase/rest/$refyear-$refmon-$refday-$run_reftod
 
 # ==============================================================================
@@ -160,7 +170,7 @@ setenv CLM_stagedir /glade/scratch/afox/archive/$run_refcase/rest/$refyear-$refm
 # resubmit      How many job steps to run on continue runs (will be 0 initially)
 # stop_option   DART REQUIRES this to be 'nhours' ... DO NOT CHANGE
 # stop_n        Specifies number of hours to advance the model in a single execution.
-# assim_n       Specifies number of hours between assimilations.
+# assim_n       Specifies number of hours between desired observation files.
 # clm_dtime     dynamical timestep (in seconds) ... 1800 is the default for CLM
 # h1nsteps      is the number of time steps to put in a single .h1. file
 #               DART needs to know this and the only time it is known is during
@@ -190,13 +200,13 @@ setenv assim_n             24
 # queue      can be changed during a series by changing the ${case}.run
 # timewall   can be changed during a series by changing the ${case}.run
 #
-# TJH: Advancing 80 instances for 72 hours with 2400 pes (80*15*2) with
-#      an assimilation step took about 10 minutes on yellowstone.
+# TJH: Advancing 1 instance for 72 hours with 60 pes (4 nodes)
+#      took less than 2 minutes on yellowstone.
 # ==============================================================================
 
 setenv ACCOUNT      P8685xxxx
 setenv queue        economy
-setenv timewall     1:00
+setenv timewall     0:10
 
 # ==============================================================================
 # set these standard commands based on the machine you are running on.
@@ -316,29 +326,14 @@ foreach FILE ( *xml )
    endif
 end
 
-if ( $num_instances < 10) then
-
    # This is only for the purpose of debugging the code.
-   @ atm_tasks = $ptile * $num_instances * 4
-   @ lnd_tasks = $ptile * $num_instances * 4
-   @ ice_tasks = $ptile * $num_instances
-   @ ocn_tasks = $ptile * $num_instances
-   @ cpl_tasks = $ptile * $num_instances
-   @ glc_tasks = $ptile * $num_instances
-   @ rof_tasks = $ptile * $num_instances * 4
-
-else
-
-   # This works, but a more efficient layout should be used
-   @ atm_tasks = $ptile * $num_instances * 2
-   @ lnd_tasks = $ptile * $num_instances * 2
-   @ ice_tasks = $ptile * $num_instances
-   @ ocn_tasks = $ptile * $num_instances
-   @ cpl_tasks = $ptile * $num_instances
-   @ glc_tasks = $ptile * $num_instances
-   @ rof_tasks = $ptile * $num_instances * 2
-
-endif
+   @ atm_tasks = $ptile * 4
+   @ lnd_tasks = $ptile * 4
+   @ ice_tasks = $ptile
+   @ ocn_tasks = $ptile
+   @ cpl_tasks = $ptile
+   @ glc_tasks = $ptile
+   @ rof_tasks = $ptile * 4
 
 # echo "task partitioning ... perhaps ... atm // ocn // lnd+ice+glc+rof"
 # presently, all components run 'serially' - one after another.
@@ -352,13 +347,13 @@ echo "GLC  gets $glc_tasks"
 echo "ROF  gets $rof_tasks"
 echo ""
 
-./xmlchange NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks,NINST_ATM=$num_instances
-./xmlchange NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks,NINST_LND=$num_instances
+./xmlchange NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks,NINST_ATM=1
+./xmlchange NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks,NINST_LND=1
 ./xmlchange NTHRDS_ICE=$nthreads,NTASKS_ICE=$ice_tasks,NINST_ICE=1
 ./xmlchange NTHRDS_OCN=$nthreads,NTASKS_OCN=$ocn_tasks,NINST_OCN=1
 ./xmlchange NTHRDS_CPL=$nthreads,NTASKS_CPL=$cpl_tasks
 ./xmlchange NTHRDS_GLC=$nthreads,NTASKS_GLC=$glc_tasks,NINST_GLC=1
-./xmlchange NTHRDS_ROF=$nthreads,NTASKS_ROF=$rof_tasks,NINST_ROF=$num_instances
+./xmlchange NTHRDS_ROF=$nthreads,NTASKS_ROF=$rof_tasks,NINST_ROF=1
 ./xmlchange ROOTPE_ATM=0
 ./xmlchange ROOTPE_LND=0
 ./xmlchange ROOTPE_ICE=0
@@ -540,10 +535,10 @@ endif
 # ==============================================================================
 
 @ inst = 1
-while ($inst <= $num_instances)
+while ($inst <= 1)
 
    # following the CESM strategy for 'inst_string'
-   set inst_string  = `printf _%04d $inst`
+   set inst_string  = ''
 
    # ===========================================================================
    set fname = "user_nl_datm${inst_string}"
@@ -637,17 +632,20 @@ end
 
 # Replace each default stream txt file with one that uses the CLM DATM
 # conditions for a default year and modify the instance number.
+# In a PMO setting, the stream text file 'instance' must refer to an
+# existing instance in the set of available forcing files.
+# The $TRUTHinstance specifies which DATM forcing file is used to
+# drive the TRUTH.
 
 foreach FNAME (user*streams*)
    set name_parse = `echo $FNAME | sed 's/\_/ /g'`
-   @ instance_index = $#name_parse
-   @ filename_index = $#name_parse - 1
+   @ filename_index = $#name_parse
    set streamname = $name_parse[$filename_index]
-   set instance   = $name_parse[$instance_index]
+   set instance   = `printf %04d $TRUTHinstance`
 
    if (-e $dartroot/models/clm/shell_scripts/user_$streamname*template) then
 
-      echo "Copying DART template for $FNAME and changing instances, refyear"
+      echo "Copying DART template for $FNAME and changing instance, refyear"
 
       ${COPY} $dartroot/models/clm/shell_scripts/user_$streamname*template $FNAME
 
@@ -677,25 +675,25 @@ cat << EndOfText >! stage_initial_cesm_files
 cd ${rundir}
 
 echo ''
-echo 'Copying only the required restart files from the staging directory.'
-echo 'With CONTINUE_RUN=FALSE, there are many that are not required.'
+echo 'Copying the required restart file from the staging directory.'
+echo 'With CONTINUE_RUN=FALSE, only a single file is required.'
 echo ''
 
-# This copies over only the minimum number of instances.
-# The reference case may more instances than we need,
-# and it certainly has more files than we need.
+if (( $SingleInstanceRefcase ))
+then
+   ${COPY} ${CLM_stagedir}/${run_refcase}.clm2.r.${run_refdate}-${run_reftod}.nc .
+else
 
-let inst=1
-while ((\$inst <= $num_instances)); do
+   let inst=$TRUTHinstance
+
    inst_string=\`printf _%04d \$inst\`
 
    echo ''
-   echo "Staging restarts for instance \$inst of $num_instances"
+   echo "Staging restart for instance \$inst"
 
-   ${COPY} ${CLM_stagedir}/${run_refcase}.clm2\${inst_string}.r.${run_refdate}-${run_reftod}.nc .
-
-   let inst+=1
-done
+   ${COPY} ${CLM_stagedir}/${run_refcase}.clm2\${inst_string}.r.${run_refdate}-${run_reftod}.nc \
+                           ${run_refcase}.clm2.r.${run_refdate}-${run_reftod}.nc
+fi
 
 exit 0
 
