@@ -35,7 +35,7 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /glade/p/image/Observations/land
+      set BASEOBSDIR = /glade/p/image/Observations/land/AMSR-E
    breaksw
 
    case lone*:
@@ -124,7 +124,7 @@ else
    set OBSDIR = `printf %04d%02d_6H ${LND_YEAR} ${LND_MONTH}`
 endif
 
-set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
+set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}.in
 
 if (  -e   ${OBS_FILE} ) then
    ${COPY} ${OBS_FILE} obs_seq.in

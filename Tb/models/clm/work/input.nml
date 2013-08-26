@@ -12,7 +12,7 @@
    trace_execution       = .false.,
    restart_in_file_name  = "perfect_ics",
    restart_out_file_name = "perfect_restart",
-   obs_seq_in_file_name  = "obs_seq.in",
+   obs_seq_in_file_name  = "obs_seq.5coop.in",
    obs_seq_out_file_name = "obs_seq.out",
    adv_ens_command       = "./ha_ha_ha.csh"
    output_timestamps     = .false.,
@@ -138,11 +138,12 @@
    debug       = .false.
    /
 
+
 &obs_def_brightnessT_nml
    casename    = '../clm_dart',
    debug       = .true.
-   hist_nhtfrq = -24,
    /
+
 
 &obs_kind_nml
    assimilate_these_obs_types = 'TOWER_NETC_ECO_EXCHANGE',
@@ -153,7 +154,6 @@
                                 'AMSRE_BRIGHTNESS_T',
    evaluate_these_obs_types   = 'null'
    /
-
 
 &assim_model_nml
    write_binary_restart_files = .true.,
@@ -306,13 +306,13 @@
 &obs_sequence_tool_nml
    filename_seq      = '../work/obs_seq.in',
    filename_seq_list = '',
-   filename_out      = '../YYYYMM/obs_seq.daily.YYYYMMDD',
+   filename_out      = 'obs_seq.2004-01-04-00000.in',
    print_only        = .false.,
    gregorian_cal     = .true.,
-   first_obs_days    = GREG1,
-   first_obs_seconds = 0,
-   last_obs_days     = GREG1,
-   last_obs_seconds  = 86399,
+   first_obs_days    = 147194,
+   first_obs_seconds = 43201,
+   last_obs_days     = 147195,
+   last_obs_seconds  = 43200,
    /
 
 

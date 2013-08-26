@@ -135,8 +135,8 @@ character(len=8), parameter :: AMSRESTRING = 'amsr-e'
 character(len=8), parameter ::  IGBPSTRING = 'igbp'
 real(r4),         parameter :: AMSRE_inc_angle = 55.0_r4 ! incidence angle (degrees)
 
-integer :: MAXamsrekey = 24*366  ! one year of hourly data - to start
-integer ::    amsrekey = 0       ! useful length of metadata arrays
+integer, SAVE :: MAXamsrekey = 24*366  ! one year of hourly data - to start
+integer, SAVE ::    amsrekey = 0       ! useful length of metadata arrays
 
 !----------------------------------------------------------------------
 ! Properties required for a snow column
@@ -165,11 +165,8 @@ type(snowprops) :: snowcolumn
 
 character(len=256) :: casename = 'clm_dart'
 logical            :: debug = .false.
-integer            :: hist_nhtfrq = -24
-! CLM variable hist_nhtfrq ... controls how often to write out the history files.
-! Negative value means the output frequency is the absolute value (in hours).
 
-namelist /obs_def_brightnessT_nml/ casename, debug, hist_nhtfrq
+namelist /obs_def_brightnessT_nml/ casename, debug
 
 !----------------------------------------------------------------------
 ! This function name will be a problem if cosmos and amsrE are needed
@@ -455,9 +452,9 @@ if ((ncols == 0) .and. do_output() ) then
    return
 endif
 
-write(*,*)
-write(*,*)
-write(*,*)'TJH debug ... computing gridcell ',ilon,ilat
+if (debug .and. do_output()) write(*,*)
+if (debug .and. do_output()) write(*,*)
+if (debug .and. do_output()) write(*,*)'TJH debug ... computing gridcell ',ilon,ilat
 
 allocate( columns_to_get(ncols), tb(ncols), weights(ncols) )
 columns_to_get(:) = -1
@@ -627,6 +624,7 @@ missing_metadata%polarization  = 'x'
 missing_metadata%landcovercode = MISSING_I
 
 allocate( observation_metadata(MAXamsrekey) )
+amsrekey = 0
 observation_metadata(:) = missing_metadata
 
 call get_clm_restart_filename( filename )

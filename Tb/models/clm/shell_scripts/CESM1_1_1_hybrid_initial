@@ -135,22 +135,22 @@ setenv caseroot     /glade/p/work/${USER}/cases/${case}
 setenv exeroot      /glade/scratch/${USER}/${case}/bld
 setenv rundir       /glade/scratch/${USER}/${case}/run
 setenv archdir      /glade/scratch/${USER}/archive/${case}
-setenv dartroot     /glade/u/home/${USER}/svn/DART/trunk
+setenv dartroot     /glade/u/home/${USER}/work/DART/Tb
 
 # ==============================================================================
 # configure settings
 # ==============================================================================
 
 setenv run_refcase 80_member_freerun_one_degree
-setenv refyear     2004
+setenv refyear     2001
 setenv refmon      01
 setenv refday      01
 setenv run_reftod  00000
 setenv run_refdate $refyear-$refmon-$refday
 
-setenv stream_year_first 2004
-setenv stream_year_last  2004
-setenv stream_year_align 2004
+setenv stream_year_first 2001
+setenv stream_year_last  2001
+setenv stream_year_align 2001
 
 setenv CLM_stagedir /glade/scratch/afox/archive/$run_refcase/rest/$refyear-$refmon-$refday-$run_reftod
 

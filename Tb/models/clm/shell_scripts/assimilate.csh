@@ -131,7 +131,7 @@ else
    set OBSDIR = `printf %04d%02d_6H ${LND_YEAR} ${LND_MONTH}`
 endif
 
-set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
+set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}.out
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.out
