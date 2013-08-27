@@ -6,9 +6,24 @@
 #
 # DART $Id$
 
-# Split a long file into "daily" files which start at 12:00:01 Z the
-# previous day and end at 12:00:00 on the day that matches the day in the
-# filename.
+# Split a long file into "6hourly" files which start 6 hours before the
+# time in the filename and end exactly one second before the day in the
+# filename. This is only logical if you understand the CLM obs operator.
+#
+# The only flux tower forward observation operator is for CLM,
+# which simply grabs values from a history file.
+# The CLM h1 files contain everything STARTING with the time in their filename.
+# all output intervals from that run are simply appended to that file.
+# Consequently, we need to know the filename from the START of the model advance
+# that resulted in the current model state.
+#
+#  | start of the model advance ... *.h1.* file starts getting written
+#  |
+#  X==X==X==X==X==X==X==X==X==X==X==[O] (CLM model advance)
+#  |<------- hist_nhtfrq ------->|   |
+#                                |   | END of the model advance
+#                                |
+#                                | END of the data in the *.h1.* file
 
 # -----------------------------------------------------------------------------
 # set the first and last days to be split.
@@ -24,11 +39,11 @@ end_month=12
 end_day=31
 
 # end of things you should have to set in this script IFF you are
-# content to have 'daily' files with observations +/- 12 hours from
-# date in the filename.
+# content to have 6hourly files with observations from the 6 hour
+# period BEFORE the date in the filename.
 
 # -----------------------------------------------------------------------------
-# convert the start and stop times to gregorian days, so we can compute
+# convert the start and stop times to DART days/seconds, so we can compute
 # total number of days including rolling over month and year boundaries.
 # do the end time first so we can use the same values to set the
 # initial day while we are doing the total day calculation.
@@ -43,27 +58,26 @@ month2=`echo $end_month   | bc`
 day2=`echo   $end_day     | bc`
 
 # make sure there is an initial input.nml for advance_time
-# input.nml gets overwritten in the subsequent loop.
-cp -f  ../work/input.nml.template input.nml || exit -1
-ln -sf ../work/clm_history.nc             . || exit -2
-ln -sf ../work/clm_restart.nc             . || exit -3
+cp -f ../work/input.nml.template input.nml || exit -1
 
 # these outputs from advance time (with the -g flag) are 2 integers:
 # gregorian_day_number seconds
-# since we are concerned with daily files at 00Z,
 # we can hardwire hours, minutes, and seconds
 mon2=`printf %02d $month2`
 day2=`printf %02d $day2`
 end_d=(`echo     ${end_year}${mon2}${day2}00 0 -g | ../work/advance_time`)
-echo "last  day,seconds is ${end_d[0]} ${end_d[1]}"
+echo "last  ${year2} ${month2} ${day2} is DART (days,seconds) ${end_d[0]} ${end_d[1]}"
 
 mon2=`printf %02d $month1`
 day2=`printf %02d $day1`
 start_d=(`echo ${start_year}${mon2}${day2}00 0 -g | ../work/advance_time`)
-echo "first day,seconds is ${start_d[0]} ${start_d[1]}"
+echo "first ${year1} ${month1} ${day1} is DART (days,seconds) ${start_d[0]} ${start_d[1]}"
 
 # how many total days are going to be split (for the loop counter)
+# and we are going to make 4 files per day, so times 4.  if we change
+# the increment (6h currently) the multiple will have to change as well.
 let totaldays=${end_d[0]}-${start_d[0]}+1
+let totaltimes=${totaldays}*4
 
 # -----------------------------------------------------------------------------
 # form some strings for logging.
@@ -72,17 +86,18 @@ let totaldays=${end_d[0]}-${start_d[0]}+1
 # filetime    .... the time in the file NAME ... usually the center.
 # with no -g option advance_time returns strings in the format YYYYMMDDHH
 
-time_one=(`echo ${start_year}${mon2}${day2}00 -12h | ../work/advance_time`)
-time_end=(`echo ${start_year}${mon2}${day2}00 +12h | ../work/advance_time`)
-filetime=(`echo ${start_year}${mon2}${day2}00    0 | ../work/advance_time`)
+time_one=(`echo ${start_year}${mon2}${day2}00 -6h | ../work/advance_time`)
+time_end=(`echo ${start_year}${mon2}${day2}00 -1s | ../work/advance_time`)
+filetime=(`echo ${start_year}${mon2}${day2}00   0 | ../work/advance_time`)
 
-# loop over each output file time (day)
+# loop over each output file time.
 
-let d=1
-while (( d <= totaldays)) ; do
+let itime=1
+while ((itime <= totaltimes)) ; do
 
-   echo "subsetting file $d of $totaldays ..."
-   #echo $filetime $time_end
+   echo ''
+   echo "subsetting file $itime of $totaltimes"
+   # The FluxTower observations are one-sided ...
 
    # string for first time in the file
     year1=${time_one:0:4}
@@ -103,18 +118,18 @@ while (( d <= totaldays)) ; do
     fhour=${filetime:8:2}
 
    # compute the equivalent DART timestamps here - seconds and days.
-   # first time in file ... usually 1 second after the preceeding end time.
-   g=(`echo ${fyear}${fmonth}${fday}${fhour} -12h -g | ../work/advance_time`)
+   # first time in file ...
+   g=(`echo ${fyear}${fmonth}${fday}${fhour} -6h -g | ../work/advance_time`)
    dart1d=${g[0]}
-   let dart1s=${g[1]}+1
+   dart1s=${g[1]}
 
-   # last time in file ... this time IS included in the file.
-   g=(`echo ${fyear}${fmonth}${fday}${fhour} +12h -g | ../work/advance_time`)
+   # last time in file ...
+   g=(`echo ${fyear}${fmonth}${fday}${fhour} -1s -g | ../work/advance_time`)
    dartNd=${g[0]}
    dartNs=${g[1]}
 
    # time in file name ... must have all the zeros for seconds
-   g=(`echo ${fyear}${fmonth}${fday}${fhour}    0 -g | ../work/advance_time`)
+   g=(`echo ${fyear}${fmonth}${fday}${fhour}   0 -g | ../work/advance_time`)
    dartFd=${g[0]}
    dartFs=`printf %05d ${g[1]}`
 
@@ -127,10 +142,16 @@ while (( d <= totaldays)) ; do
    # The input observation sequences generally live in directories
    # with names YYYYMM. FIXME ... year boundaries ...
 
-   echo "../work/obs_seq.in" > olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USBar.2004" >  olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USHa1.2004" >> olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USNR1.2004" >> olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USSP3.2004" >> olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USSRM.2004" >> olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USWcr.2004" >> olist
+   echo "/glade/p/image/Observations/FluxTower/obs_seq.USWrc.2004" >> olist
 
    # make sure output dir exists
-   OUTDIR=${fyear}${fmonth}
+   OUTDIR=${fyear}${fmonth}_6H
    if [[ ! -d ${OUTDIR} ]] ; then
         mkdir ${OUTDIR}
    fi
@@ -148,14 +169,14 @@ while (( d <= totaldays)) ; do
    # do the extract here
    ../work/obs_sequence_tool
 
-   # advance the day; the output is YYYYMMDD00
-   time_one=(`echo ${year1}${month1}${day1}${hour1} +1d | ../work/advance_time`)
-   time_end=(`echo ${yearN}${monthN}${dayN}${hourN} +1d | ../work/advance_time`)
-   filetime=(`echo ${fyear}${fmonth}${fday}${fhour} +1d | ../work/advance_time`)
-   # echo "next set of times are: $time_one $time_end $filetime"
+   # advance 6 hours; the output is YYYYMMDDHH
+   time_one=(`echo ${year1}${month1}${day1}${hour1} +6h | ../work/advance_time`)
+   time_end=(`echo ${yearN}${monthN}${dayN}${hourN} +6h | ../work/advance_time`)
+   filetime=(`echo ${fyear}${fmonth}${fday}${fhour} +6h | ../work/advance_time`)
+   # echo "next set of times are (first,last,file): $time_one $time_end $filetime"
 
    # advance the loop counter
-   let d=d+1
+   let itime=itime+1
 
 done
 

@@ -136,18 +136,21 @@
    /
 
 
-# shell_scripts/makedaily.sh takes one long obs file and chops
-# it up into daily files. This is a template.
+# shell_scripts/makedaily.sh takes the obs files and chops
+# them up into daily files. This is a template.
 &obs_sequence_tool_nml
-   filename_seq      = '../work/obs_seq.in',
-   filename_seq_list = '',
-   filename_out      = '../YYYYMM/obs_seq.YYYY-MM-DD-SSSSS.in',
-   print_only        = .false.,
-   gregorian_cal     = .true.,
-   first_obs_days    = DART1D,
-   first_obs_seconds = DART1S,
-   last_obs_days     = DARTND,
-   last_obs_seconds  = DARTNS,
+   filename_seq       = '',
+   filename_seq_list  = 'olist',
+   filename_out       = '../OUTDIR/obs_seq.YYYY-MM-DD-SSSSS.in',
+   print_only         = .false.,
+   gregorian_cal      = .true.,
+   first_obs_days     = DART1D,
+   first_obs_seconds  = DART1S,
+   last_obs_days      = DARTND,
+   last_obs_seconds   = DARTNS,
+   edit_qc_metadata   = .true.,
+   new_qc_metadata    = 'Original QC'
+   synonymous_qc_list = 'Original QC','Data QC','Ameriflux QC','COSMOS QC','MODIS QC'
    /
 
 
