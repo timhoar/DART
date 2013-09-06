@@ -33,7 +33,6 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 use      obs_kind_mod, only : DWL_U_WIND_COMPONENT, DWL_V_WIND_COMPONENT,             &
                               DWL_RAY_CLEAR_LOS_VELOCITY, DWL_MIE_CLEAR_LOS_VELOCITY, &
                               DWL_RAY_CLOUD_LOS_VELOCITY, DWL_MIE_CLOUD_LOS_VELOCITY
-use       obs_def_mod, only : set_los_vel
 
 implicit none
 
@@ -225,7 +224,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
         exit obsloop
     end select
 
-   call create_3d_obs(add_obs_data, lat, lon, vert, VERTISHEIGHT, wnd, &
+   call create_3d_obs(add_obs_data, lat, lon, vert, VERTISHEIGHT, wnd, los, &
                          typecode, oday, osec, qc, obs)
    call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
    
@@ -261,6 +260,7 @@ contains
 !    vval  - vertical coordinate
 !    vkind - kind of vertical coordinate (pressure, level, etc)
 !    obsv  - observation value
+!    angle - additional metadata for these obs kinds
 !    okind - observation kind
 !    oerr  - observation error
 !    day   - gregorian day
@@ -272,10 +272,11 @@ contains
 !     adapted for more generic use 11 Mar 2010, nancy collins, ncar/image
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine create_3d_obs(add_data, lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, obs)
+subroutine create_3d_obs(add_data, lat, lon, vval, vkind, obsv, angle, okind, oerr, day, sec, qc, obs)
 use        types_mod, only : r8
 use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
                              set_obs_def_error_variance, set_obs_def_location
+                             set_los_vel, set_obs_def_key
 use obs_sequence_mod, only : obs_type, set_obs_values, set_qc, set_obs_def
 use time_manager_mod, only : time_type, set_time
 use     location_mod, only : set_location
@@ -287,11 +288,14 @@ use     location_mod, only : set_location
 
 real(r8)           :: obs_val(1), qc_val(1)
 type(obs_def_type) :: obs_def
+integer            :: key
 
 call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
 call set_obs_def_kind(obs_def, okind)
 call set_obs_def_time(obs_def, set_time(sec, day))
 call set_obs_def_error_variance(obs_def, oerr * oerr)
+call set_los_angle(key, angle)
+call set_obs_def_key(obs_def, key)
 call set_obs_def(obs, obs_def)
 
 if (add_data) then
