@@ -59,12 +59,11 @@ character (len=20)  :: date_string
 
 integer :: oday, osec, rcio, iunit, otype
 integer :: year, month, day, hour, minute, second
-integer :: num_copies, num_qc, lcount
+integer :: num_copies, num_qc, lcount, typecode, darttype
            
 logical  :: file_exist, first_obs
 
-real(r8) :: temp, terr, qc, wdir, wspeed, werr
-real(r8) :: lat, lon, vert, uwnd, uerr, vwnd, verr
+real(r8) :: qc, lat, lon, vert, wnd, los, werr
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
@@ -183,7 +182,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    endif
    
    if (debug) print *, 'next observation is at time ', year, month, day, hour, minute, second
-   if (debug) print *, 'next observation values/err ', uwnd, vwnd, werr
+   if (debug) print *, 'next observation values/err ', wnd, angle, werr
 
    ! change the observation value from cm/s to m/s
    wnd = wnd / 100.0_r8 
@@ -194,7 +193,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
       print *, 'expected -90 <= lat <= 90, bad value for latitude: ', lat
       exit obsloop
    endif
-   if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
+   if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) then
       print *, 'expected 0 <= lon <= 360, bad value for longitude: ', lon
       exit obsloop
    endif
@@ -225,7 +224,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
     end select
 
    call create_3d_obs(add_obs_data, lat, lon, vert, VERTISHEIGHT, wnd, los, &
-                         typecode, oday, osec, qc, obs)
+                         darttype, werr, oday, osec, qc, obs)
    call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
    
    if (debug) print *, 'added velocity obs to output seq'
@@ -275,15 +274,16 @@ contains
 subroutine create_3d_obs(add_data, lat, lon, vval, vkind, obsv, angle, okind, oerr, day, sec, qc, obs)
 use        types_mod, only : r8
 use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
-                             set_obs_def_error_variance, set_obs_def_location
-                             set_los_vel, set_obs_def_key
+                             set_obs_def_error_variance, set_obs_def_location, &
+                             set_obs_def_key
+use obs_def_los_vel_mod, only : set_los_angle
 use obs_sequence_mod, only : obs_type, set_obs_values, set_qc, set_obs_def
 use time_manager_mod, only : time_type, set_time
 use     location_mod, only : set_location
 
  logical,        intent(in)    :: add_data
  integer,        intent(in)    :: okind, vkind, day, sec
- real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
+ real(r8),       intent(in)    :: lat, lon, vval, obsv, angle, oerr, qc
  type(obs_type), intent(inout) :: obs
 
 real(r8)           :: obs_val(1), qc_val(1)
