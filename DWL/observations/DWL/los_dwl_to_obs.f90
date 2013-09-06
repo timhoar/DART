@@ -50,7 +50,7 @@ integer             :: max_obs         = 100000   !  max number of obs in one fi
 logical             :: add_obs_data    = .true.   ! .false. makes empty observations
 logical             :: debug           = .false.  ! .true. prints more info
 
-namelist /dwl_to_obs_nml/ max_obs, text_input_file, obs_out_file, add_obs_data, debug
+namelist /los_dwl_to_obs_nml/ max_obs, text_input_file, obs_out_file, add_obs_data, debug
 
 
 ! local variables
@@ -73,16 +73,16 @@ type(time_type)         :: comp_day0, time_obs, prev_time
 
 ! start of executable code
 
-call initialize_utilities('dwl_to_obs')
+call initialize_utilities('los_dwl_to_obs')
 
 ! namelist handling
-call find_namelist_in_file("input.nml", "dwl_to_obs_nml", iunit)
-read(iunit, nml = dwl_to_obs_nml, iostat = rcio)
-call check_namelist_read(iunit, rcio, "dwl_to_obs_nml")
+call find_namelist_in_file("input.nml", "los_dwl_to_obs_nml", iunit)
+read(iunit, nml = los_dwl_to_obs_nml, iostat = rcio)
+call check_namelist_read(iunit, rcio, "los_dwl_to_obs_nml")
 
 ! Record the namelist values used for the run
-if (do_nml_file()) write(nmlfileunit, nml=dwl_to_obs_nml)
-if (do_nml_term()) write(     *     , nml=dwl_to_obs_nml)
+if (do_nml_file()) write(nmlfileunit, nml=los_dwl_to_obs_nml)
+if (do_nml_term()) write(     *     , nml=los_dwl_to_obs_nml)
 
 
 ! time setup
@@ -356,7 +356,7 @@ prev_time = obs_time
 
 end subroutine add_obs_to_seq
 
-end program dwl_to_obs
+end program los_dwl_to_obs
 
 ! <next few lines under version control, do not edit>
 ! $URL$
