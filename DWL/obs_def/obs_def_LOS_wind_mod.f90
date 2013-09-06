@@ -190,7 +190,7 @@ character(len=*), intent(in), optional :: fform
 
 character(len=4)    :: header
 logical             :: is_asciifile
-real(r8)            :: los_velocity
+real(r8)            :: los_angle
 integer             :: oldkey
 
 if ( .not. module_initialized ) call initialize_module
@@ -200,14 +200,14 @@ is_asciifile = ascii_file_format(fform)
 if (is_asciifile) then
       ! Read the character identifier for verbose formatted output
       read(ifile, FMT="(a4)") header
-      if(header /= 'platform') then
+      if(header /= 'LOS') then
          call error_handler(E_ERR,'read_los_vel', &
               "Expected location header 'LOS' in input file", &
               source, revision, revdate)
       endif
 endif
 
-los_velocity = read_los_vel(ifile, is_asciifile)
+los_angle = read_los_angle(ifile, is_asciifile)
 
 ! Read in the loskey for this particular observation, however, it will
 ! be discarded and a new, unique key will be generated in the set routine.
@@ -219,7 +219,7 @@ endif
 
 ! Generate new unique los velocity observation key, and set the contents
 ! of the private defined type.
-call set_los_vel(loskey, los_velocity)
+call set_los_vel(loskey, los_angle)
 
 end subroutine read_los_vel
 
@@ -314,8 +314,8 @@ subroutine get_los_angle(loskey, angle)
 ! Return the auxiliary contents of a given LOS velocity observation
 ! the input is the private key number for the LOS obs.
 
-integer,             intent(in)  :: loskey
-type(location_type), intent(out) :: angle
+integer,  intent(in)  :: loskey
+real(r8), intent(out) :: angle
 
 ! Simple error check on key number before accessing the array
 call loskey_out_of_range(loskey)
@@ -331,8 +331,8 @@ subroutine set_los_angle(loskey, angle)
 ! Common code to increment the current key count, and set the private
 ! contents of this observation's auxiliary data.
 
-integer,             intent(out) :: loskey
-type(location_type), intent(in)  :: angle
+integer,  intent(out) :: loskey
+real(r8), intent(in)  :: angle
 
 if ( .not. module_initialized ) call initialize_module
 
