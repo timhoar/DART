@@ -219,7 +219,7 @@ endif
 
 ! Generate new unique los velocity observation key, and set the contents
 ! of the private defined type.
-call set_los_vel(loskey, los_angle)
+call set_los_angle(loskey, los_angle)
 
 end subroutine read_los_vel
 
@@ -356,7 +356,7 @@ subroutine interactive_los_vel(loskey)
 
 integer, intent(out) :: loskey
 
-! Uses the local subroutine set_los_vel.
+! Uses the local subroutine set_los_angle.
 
 ! loskey is internally incremented in the set routine, and only counts 
 ! the index for this specialized observation kind. 
@@ -372,7 +372,7 @@ write(*, *)
 
 call interactive_los_angle(angle)
 
-call set_los_vel(loskey, angle)
+call set_los_angle(loskey, angle)
 
 write(*, *)
 write(*, *) 'End of specialized section for LOS wind velocity.'
@@ -489,8 +489,8 @@ if (loskey <= max_los_vel_obs) return
 ! Bad news.  Tell the user.
 write(msgstring, *) 'loskey (',loskey,') exceeds max_los_vel_obs (', &
                      max_los_vel_obs,')'
-call error_handler(E_MSG,'set_los_vel', msgstring, '', '', '')
-call error_handler(E_ERR,'set_los_vel', &
+call error_handler(E_MSG,'set_los_angle', msgstring, '', '', '')
+call error_handler(E_ERR,'set_los_angle', &
                    'Increase max_los_vel_obs in namelist', &
                    source, revision, revdate)
 
