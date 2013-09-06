@@ -207,7 +207,7 @@ if (is_asciifile) then
       endif
 endif
 
-los_velocity = read_los_velocity(ifile, is_asciifile)
+los_velocity = read_los_vel(ifile, is_asciifile)
 
 ! Read in the loskey for this particular observation, however, it will
 ! be discarded and a new, unique key will be generated in the set routine.
