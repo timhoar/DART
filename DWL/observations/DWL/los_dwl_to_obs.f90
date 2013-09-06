@@ -182,7 +182,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    endif
    
    if (debug) print *, 'next observation is at time ', year, month, day, hour, minute, second
-   if (debug) print *, 'next observation values/err ', wnd, angle, werr
+   if (debug) print *, 'next observation values/err ', wnd, los, werr
 
    ! change the observation value from cm/s to m/s
    wnd = wnd / 100.0_r8 
