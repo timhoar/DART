@@ -442,9 +442,13 @@ endif
 
 ! FIXME: compute here.  you have u, v (wind components), los_vel_data(loskey)%azimuth
 ! in degrees, N=0, increasing clockwise.  replace los_vel line below with correct
-! computation.
+! computation.  right now it's ignoring the angle and assuming it is always 90.
+!  should be something like u * sin(angle * PI / 180.0_r8) +
+!                           v * cos(angle * PI / 180.0_r8) +
+! and remember angle is 0=N, increasing clockwise.  it is NOT 0=x axis like the
+! mathematical definition of polar coordinate angle.
 
-los_vel = 0.0_r8
+los_vel = u
 
 ! Good return code.
 istatus = 0
