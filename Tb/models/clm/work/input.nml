@@ -81,7 +81,7 @@
 &assim_tools_nml
    filter_kind                     = 1,
    cutoff                          = 0.05,
-   allow_missing_in_state          = .true.,
+   allow_missing_in_clm            = .true.,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
@@ -289,7 +289,7 @@
    bin_width        =     0, 0,  1, 0, 0, 0 ,
    time_to_skip     =     0, 0,  0, 0, 0, 0 ,
    max_num_bins     = 1000,
-   input_qc_threshold = 1,
+   trusted_obs      = 'null',
    Nregions   = 4,
    lonlim1    =     0.0,     0.0,    0.0,  180.0,
    lonlim2    =   360.0,   360.0,  180.0,  360.0,
@@ -299,6 +299,8 @@
    hlevel_edges =  0.0, 1.0, 2.0, 5.0, 10.0, 40.0,
    print_mismatched_locs = .false.,
    create_rank_histogram = .true.,
+   outliers_in_histogram = .true.,
+   use_zero_error_obs    = .false.,
    verbose               = .true.,
    /
 
