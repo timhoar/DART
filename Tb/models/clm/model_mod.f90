@@ -4069,11 +4069,13 @@ do ij = 1,Ncolumn
    endif
 enddo
 
-if ((debug > 4) .and. do_output()) then
+if ((debug > 3) .and. do_output()) then
    do ilon = 1,nlon
    do ilat = 1,nlat
-      write(*,*)'gridcell ',ilon,ilat,' has ', gridCellInfo(ilon,ilat)%ncols,' columns.'
-      write(*,*)'   they are:',gridCellInfo(ilon,ilat)%columnids
+      if ( gridCellInfo(ilon,ilat)%ncols > 0 ) then
+         write(*,*)'gridcell ',ilon,ilat,' has ', gridCellInfo(ilon,ilat)%ncols,' columns.'
+         write(*,*)'   they are:',gridCellInfo(ilon,ilat)%columnids
+      endif
    enddo
    enddo
 endif
