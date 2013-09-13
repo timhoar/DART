@@ -15,12 +15,12 @@
 # depending on the window and the input file,
 # the data from outside these bounds may be needed.
 
-start_year=2004
+start_year=2001
 start_month=1
 start_day=1
 
-end_year=2004
-end_month=12
+end_year=2001
+end_month=3
 end_day=31
 
 # end of things you should have to set in this script IFF you are
@@ -130,20 +130,20 @@ while (( d <= totaldays)) ; do
    echo "../work/obs_seq.in" > olist
 
    # make sure output dir exists
-   OUTDIR=${fyear}${fmonth}
+   OUTDIR=../${fyear}${fmonth}
    if [[ ! -d ${OUTDIR} ]] ; then
         mkdir ${OUTDIR}
    fi
 
-   sed -e "s/OUTDIR/${OUTDIR}/g" \
-       -e "s/YYYY/${fyear}/g"    \
-       -e "s/MM/${fmonth}/g"     \
-       -e "s/DD/${fday}/g"       \
-       -e "s/SSSSS/${dartFs}/g"  \
-       -e "s/DART1D/${dart1d}/g" \
-       -e "s/DART1S/${dart1s}/g" \
-       -e "s/DARTND/${dartNd}/g" \
-       -e "s/DARTNS/${dartNs}/g" < ../work/input.nml.template > input.nml
+   sed -e "s#OUTDIR#${OUTDIR}#g" \
+       -e "s#YYYY#${fyear}#g"    \
+       -e "s#MM#${fmonth}#g"     \
+       -e "s#DD#${fday}#g"       \
+       -e "s#SSSSS#${dartFs}#g"  \
+       -e "s#DART1D#${dart1d}#g" \
+       -e "s#DART1S#${dart1s}#g" \
+       -e "s#DARTND#${dartNd}#g" \
+       -e "s#DARTNS#${dartNs}#g" < ../work/input.nml.template > input.nml
 
    # do the extract here
    ../work/obs_sequence_tool

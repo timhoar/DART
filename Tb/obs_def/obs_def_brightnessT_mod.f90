@@ -74,7 +74,7 @@ use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler,     &
                              check_namelist_read, find_namelist_in_file,       &
                              nmlfileunit, do_output, do_nml_file, do_nml_term, &
                              nc_check, file_exist, is_longitude_between,       &
-                             ascii_file_format
+                             ascii_file_format, logfileunit
 use        model_mod, only : get_ncols_in_gridcell, &
                              get_colids_in_gridcell, &
                              get_clm_restart_filename, &
@@ -152,7 +152,7 @@ type snowprops
    integer  :: nprops          ! [thickness, density, diameter, liqwater, temperature]
    real(r4), pointer, dimension(:) :: thickness      !  LAYER THICKNESS [M]
    real(r4), pointer, dimension(:) :: density        !  LAYER DENSITY [KG/M3]
-   real(r4), pointer, dimension(:) :: grain_diameter !  LAYER GRAIN DIAMETER [M]
+   real(r4), pointer, dimension(:) :: grain_radius   !  LAYER GRAIN RADIUS [M]
    real(r4), pointer, dimension(:) :: liquid_water   !  LAYER LIQUID WATER CONTENT [FRAC]
    real(r4), pointer, dimension(:) :: temperature    !  LAYER TEMPERATURE [K]
 end type snowprops
@@ -263,7 +263,7 @@ integer           :: landcovercode
 
 if ( .not. module_initialized ) call initialize_module
 
-write(string2,*)'observation #',obsID
+! write(string2,*)'observation #',obsID
 
 if ( ascii_file_format(fform) ) then
 
@@ -418,6 +418,8 @@ real(r4), allocatable, dimension(:) :: tb
 real(r8), allocatable, dimension(:) :: weights
 real(r8), dimension(LocationDims)   :: loc
 real(r8)  :: loc_lon, loc_lat
+real(r8), parameter :: density_h2o = 1000.0_r8 ! Water density Kg/m3
+    
 character :: pol                    ! observation polarization
 integer   :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
 integer   :: ilon, ilat, icol, ncols, lccode
@@ -452,15 +454,17 @@ if ((ncols == 0) .and. do_output() ) then
    return
 endif
 
-if (debug .and. do_output()) write(*,*)
-if (debug .and. do_output()) write(*,*)
-if (debug .and. do_output()) write(*,*)'TJH debug ... computing gridcell ',ilon,ilat
-
 allocate( columns_to_get(ncols), tb(ncols), weights(ncols) )
 columns_to_get(:) = -1
 tb(:)             = 0.0_r4
 weights(:)        = 0.0_r8
 call get_colids_in_gridcell(ilon, ilat, columns_to_get)
+
+if (debug .and. do_output()) then
+   write(*,*)
+   write(*,*)'TJH debug ... computing gridcell ',ilon,ilat
+   write(*,*)'TJH debug ... gridcell has columns ',columns_to_get
+endif
 
 ! FIXME Presently skipping gridcells with lakes.
 ! get_column_snow() must also modified to use bulk snow formulation for lakes.
@@ -492,7 +496,7 @@ SNOWCOLS : do icol = 1,ncols
          write(*,*)'proconst ',snowcolumn%propconst
          write(*,*)'thickness',snowcolumn%thickness
          write(*,*)'density  ',snowcolumn%density
-         write(*,*)'diameter ',snowcolumn%grain_diameter
+         write(*,*)'radius   ',snowcolumn%grain_radius
          write(*,*)'liqwater ',snowcolumn%liquid_water
          write(*,*)'temp     ',snowcolumn%temperature
       endif
@@ -516,16 +520,22 @@ SNOWCOLS : do icol = 1,ncols
    aux_ins(4) = snowcolumn%soilporos
    aux_ins(5) = 0.5_r4                ! FIXME - hardwired
 
-   ! TJH must convert liquid water to a fraction [0,1]
-   ! TJH 1cm3 == 1g so 100cm * 100cm = 10,000g
-   ! fully saturated then is 10kg/m^2
+   !-------------------------------------------------------------------
+   ! Ally's description of the y(:,4) variable.
+   ! LWC in kg/m2  -->  kg is mass of liquid water
+   !               -->  m2  is surface area
+   ! LWC 'kg/m2' by water density 'kg/m3', we get depth
+   ! of liquid water (m). Then, (depth of liquid water (m) / depth of snowpack (m))
+   ! provides the fraction of LWC (m water/m snowpack). 
+   ! Since, both liquid water and snowpack has same surface area (m2), 
+   ! we can also express it as 'm3/m3'.
 
    allocate( y(ctrl(1), snowcolumn%nprops) )
    if ( aux_ins(1) > 0 ) then
       y(:,1)  = snowcolumn%thickness
       y(:,2)  = snowcolumn%density
-      y(:,3)  = snowcolumn%grain_diameter / 1000000.0_r4 ! need meters (from microns)
-      y(:,4)  = snowcolumn%liquid_water / 10.0_r4        ! convert to fraction
+      y(:,3)  = snowcolumn%grain_radius * 2.0_r4 / 1000000.0_r4 ! need meters (from microns)
+      y(:,4)  = snowcolumn%liquid_water / (density_h2o * snowcolumn%thickness)
       y(:,5)  = snowcolumn%temperature
    else ! dummy values for bare ground
       y(:,1)  = 0.0_r4
@@ -551,8 +561,9 @@ SNOWCOLS : do icol = 1,ncols
       ! call to alternative radiative transfer model goes here.
    endif
 
-   write(*,*)'column ', columns_to_get(icol),' tb_out is ',tb_out
-   write(*,*)
+   if (debug .and. do_output()) then
+      write(*,*)'column ', columns_to_get(icol),' tb_out is ',tb_out
+   endif
 
    if (pol == 'H') then
       tb(icol) = tb_out(1,1)   ! second dimension is only 1 frequency
@@ -677,9 +688,9 @@ call get_time(model_time, second, day)
 
 if (debug .and. do_output()) then
    write(*,*)'obs_def_brightnessT_mod.initialize_routine:nlon,nlat,ncolumns is ',nlon,nlat,ncolumns
-   write(*,*)'obs_def_brightnessT_mod.initialize_routine: model time is ',yyyymmdd, sssss
-   call print_date(model_time,'obs_def_brightnessT_mod.initialize_routine:model date is')
-   call print_time(model_time,'obs_def_brightnessT_mod.initialize_routine:model time is')
+   write(*,*)'obs_def_brightnessT_mod.initialize_routine: model timetags ',yyyymmdd, sssss
+   call print_time(model_time,' obs_def_brightnessT_mod.initialize_routine:model time is')
+   call print_date(model_time,' obs_def_brightnessT_mod.initialize_routine:model date is')
 endif
 
 if (debug .and. do_output()) then
@@ -1159,7 +1170,7 @@ endif
 
 allocate( snowcolumn%thickness(nlayers)     , &
           snowcolumn%density(nlayers)       , &
-          snowcolumn%grain_diameter(nlayers), &
+          snowcolumn%grain_radius(nlayers)  , &
           snowcolumn%liquid_water(nlayers)  , &
           snowcolumn%temperature(nlayers)   )
 
@@ -1180,10 +1191,12 @@ do ilayer = (nlevsno-nlayers+1),nlevsno
    ij = ij + 1
    snowcolumn%thickness(ij)      = dzsno(ilayer)
    snowcolumn%density(ij)        = (h2osoi_liq(ilayer) + h2osoi_ice(ilayer)) / dzsno(ilayer)
-   snowcolumn%grain_diameter(ij) = snw_rds(ilayer)
+   snowcolumn%grain_radius(ij)   = snw_rds(ilayer)
    snowcolumn%liquid_water(ij)   = h2osoi_liq(ilayer)
    snowcolumn%temperature(ij)    = t_soisno(ilayer)
-   write(*,*)'   get_column_snow: filling layer ',ij,' with info from ilayer ',ilayer
+   if (debug .and. do_output()) &
+   write(*,*)'   get_column_snow: filling column ',snow_column, &
+             ' layer ',ij,' with info from ilayer ',ilayer
 enddo
 
 deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
@@ -1197,7 +1210,7 @@ subroutine destroy_column_snow
 
 if (associated(snowcolumn%thickness))      deallocate(snowcolumn%thickness)
 if (associated(snowcolumn%density))        deallocate(snowcolumn%density)
-if (associated(snowcolumn%grain_diameter)) deallocate(snowcolumn%grain_diameter)
+if (associated(snowcolumn%grain_radius))   deallocate(snowcolumn%grain_radius)
 if (associated(snowcolumn%liquid_water))   deallocate(snowcolumn%liquid_water)
 if (associated(snowcolumn%temperature))    deallocate(snowcolumn%temperature)
 
@@ -1261,7 +1274,8 @@ y(:,5) = (/ 266.1220, 256.7763, 247.9525, 240.4609, 235.8929 /) ! temperature (K
 
 call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
 
-write(*,*)'TEST case: tb_out is ',tb_out
+write(     *     ,*)'ss_model() TEST: tb_out is ',tb_out,' should be  205.9256 206.9057'
+write(logfileunit,*)'ss_model() TEST: tb_out is ',tb_out,' should be  205.9256 206.9057'
 
 deallocate( y )
 

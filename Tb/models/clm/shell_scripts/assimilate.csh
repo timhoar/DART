@@ -18,16 +18,6 @@ set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following 
 switch ("`hostname`")
-   case be*:
-      # NCAR "bluefire"
-      set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/usr/local/bin/ln -fvs'
-      set REMOVE = '/usr/local/bin/rm -fr'
-
-      set BASEOBSDIR = /glade/proj3/image/Observations/FluxTower
-      set  LAUNCHCMD = mpirun.lsf
-   breaksw
 
    case ys*:
       # NCAR "yellowstone"
@@ -36,7 +26,7 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /glade/p/image/Observations/land
+      set BASEOBSDIR = /glade/p/image/Observations/land/Tb_pmo
       set  LAUNCHCMD = mpirun.lsf
    breaksw
 
@@ -62,15 +52,25 @@ switch ("`hostname`")
       set  LAUNCHCMD = "mpiexec -n $NTASKS"
    breaksw
 
-   default:
-      # NERSC "hopper"
+   case disc*:
+      # NCCS Discover
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
-      set  LAUNCHCMD = "aprun -n $NTASKS"
+      set BASEOBSDIR = /discover/nobackup/projects/ms_snow_da/DATA/DART_DATA/Observations/land
+      set  LAUNCHCMD = "mpirun -n $NTASKS_LND"
+   breaksw
+
+   default:
+      set   MOVE = 'mv -fv'
+      set   COPY = 'cp -fv --preserve=timestamps'
+      set   LINK = 'ln -fvs'
+      set REMOVE = 'rm -fr'
+
+      set BASEOBSDIR = /your/observation/directory/here
+      set  LAUNCHCMD = "mpirun -n $NTASKS_LND"
    breaksw
 endsw
 

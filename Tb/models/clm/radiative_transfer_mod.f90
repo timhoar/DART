@@ -11,7 +11,7 @@ private
 
 public :: ss_model
 
-logical :: debug = .true.
+logical :: debug = .false.
 
 contains
 
@@ -227,26 +227,35 @@ DO K=1,NFREQ
   !  A.2. ALLOCATE AND UNIT CONVERSION STATEMENTS
   ALLOCATE(ROI(1:NUM),GDIMM(1:NUM),PCI(1:NUM),ice_frac(1:NUM))
   
-  ROI  = ROIKG/1000
-  TETA = TETAD(K)*PI/180
+  ROI  = ROIKG/1000.0
+  TETA = TETAD(K)*PI/180.0
+
+  ! ice_frac = snow_density/ice_density
+  ice_frac(:) = ROI(:) / 0.917
 
   ! Original correlation length used GDI as 'measured' grain diameter (Dmax).
   ! Code modified 2 July 2013 to use 'effective' grain diameter. TJH 
   ! FIXME ... there may be a better algorithm for correlation length.
 
-  GDIMM = GDI*1000          ! TJH microns to millimeters
-  ! PCI   = GDIMM*SNGDPCI   ! TJH
+  GDIMM(:) = GDI*1000 ! TJH meters to millimeters
 
-  ! ice_frac = snow_density/ice_density
-  ice_frac = ROI(:) / 0.917
-  pci(:)   = 0.5 * GDIMM * (1.0 - ice_frac)
-  !pci(:)   = .67*GDIMM * (1.0 - ice_frac)
+ !PCI(:)   =        GDIMM * SNGDPCI
+  PCI(:)   = 0.50 * GDIMM * (1.0 - ice_frac)
+ !PCI(:)   = 0.67 * GDIMM * (1.0 - ice_frac)
+ !PCI(:)   =        GDIMM * (1.0 - ice_frac)
+
+  !ALLY - FIXME : pseudocode follows
+  !if snowdensity>917kg/m3
+  !   Set snowdensity = 917
+  !   and
+  !   Pci =0 %% correlation length
+  !endif
 
   if ( debug ) then
      write(*,*)'ss_model: Specific grain size : GDIMM    ', GDIMM
      write(*,*)'ss_model: Snow density        : ROI      ', ROI
      write(*,*)'ss_model: ice fraction        : ice_frac ', ice_frac
-     write(*,*)'ss_model: Correlation length  : pci      ', pci
+     write(*,*)'ss_model: Correlation length  : PCI      ', PCI
   endif
 
   deallocate(ice_frac)
