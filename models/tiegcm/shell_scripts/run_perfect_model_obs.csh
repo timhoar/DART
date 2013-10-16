@@ -34,9 +34,9 @@
 #BSUB -J perfect
 #BSUB -o perfect.%J.log
 #BSUB -P 35071364
-#BSUB -q debug
+#BSUB -q premium
 #BSUB -n 1
-#BSUB -W 6:00
+#BSUB -W 0:30
 #BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
@@ -83,7 +83,7 @@ echo
 # Make a unique, (empty, clean) temporary directory.
 #----------------------------------------------------------------------
 
-setenv TMPDIR /ptmp/${user}/DART/${JOBNAME}/job_${JOBID}
+setenv TMPDIR /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
 
 mkdir -p ${TMPDIR}
 cd ${TMPDIR}
@@ -118,9 +118,9 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # Set variables containing various directory names where we will GET things
 #-----------------------------------------------------------------------------
 
-set    DARTDIR = /blhome/tmatsuo/DART/models/tiegcm
-set  TIEGCMDIR = /blhome/tmatsuo/DART/models/tiegcm/tiegcm_files
-set EXPERIMENT = /ptmp/tmatsuo/DART/tiegcm/2002_03_28
+set    DARTDIR = /glade/u/home/tmatsuo/DART/models/tiegcm
+set  TIEGCMDIR = /glade/u/home/tmatsuo/DART/models/tiegcm/tiegcm_files
+set EXPERIMENT = /glade/scratch/tmatsuo/2002_03_28_tiegcm
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
@@ -136,7 +136,7 @@ set EXPERIMENT = /ptmp/tmatsuo/DART/tiegcm/2002_03_28
  ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .
 
 # data files
- ${COPY} ${EXPERIMENT}/initial/obs_seq.in           .
+ ${COPY} ${DARTDIR}/work/obs_seq.in                 .
  ${COPY} ${DARTDIR}/work/input.nml                  .
 
 #-----------------------------------------------------------------------------
@@ -144,17 +144,16 @@ set EXPERIMENT = /ptmp/tmatsuo/DART/tiegcm/2002_03_28
 #-----------------------------------------------------------------------------
 
  ${COPY} ${TIEGCMDIR}/tiegcm-nompi                  tiegcm
-#${COPY} ${TIEGCMDIR}/tiegcm                        .
 
- ${COPY} ${EXPERIMENT}/initial/tiegcm_restart_p.nc  .
- ${COPY} ${EXPERIMENT}/initial/tiegcm_s.nc          .
- ${COPY} ${EXPERIMENT}/initial/tiegcm.nml           tiegcm.nml.original
+ ${COPY} ${TIEGCMDIR}/tiegcm_restart_p.nc           .
+ ${COPY} ${TIEGCMDIR}/tiegcm_s.nc                   .
+ ${COPY} ${TIEGCMDIR}/tiegcm.nml                    tiegcm.nml.original
 
 #-----------------------------------------------------------------------------
 # Remove all the comments that follow (;) symbol from tiegcm.nml namelist file
 #-----------------------------------------------------------------------------
 
-sed -e 's/;.*//' -e '/^$/ d' tiegcm.nml.original >! tiegcm.nml
+grep -v "^;" tiegcm.nml.original >! tiegcm.nml
 
 #-----------------------------------------------------------------------------
 # Check that everything moved OK, and the table is set.

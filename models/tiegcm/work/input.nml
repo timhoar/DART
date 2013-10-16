@@ -94,6 +94,16 @@
    /
 
 &model_nml
+   debug                        = 0,
+   primary_state_variables      = 'TN',  'KIND_TEMPERATURE',
+                                  'O1',  'KIND_ATOMIC_OXYGEN_MIXING_RATIO',
+                                  'O2',  'KIND_MOLEC_OXYGEN_MIXING_RATIO',
+                                  'UN',  'KIND_U_WIND_COMPONENT',
+                                  'VN',  'KIND_V_WIND_COMPONENT',
+                                  'NE',  'KIND_ELECTRON_DENSITY',
+                                  'OP',  'KIND_DENSITY_ION_OP',
+                                  'VTEC', 'KIND_VERTICAL_TEC',
+   secondary_state_variables    = 'ZG',  'KIND_GEOPOTENTIAL_HEIGHT'
    /
 
 &cov_cutoff_nml
