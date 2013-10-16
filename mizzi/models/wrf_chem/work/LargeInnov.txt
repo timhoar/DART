@@ -1,8 +1,0 @@
-Any observations flagged as bad are dumped into the last bin.
-   day   secs    lon      lat    level         obs    guess   zscore   key   kind
- 
-last bin contains all (flagged) bad observations
-(prior) innovations in stdev bin   1 =      73971
-(prior) innovations in stdev bin   2 =      22828
-(prior) innovations in stdev bin   3 =       6342
-(prior) innovations in stdev bin 101 =    5632458

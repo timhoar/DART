@@ -1,8 +1,0 @@
-&ensemble_manager_nml
-   single_restart_file_in  = .true.,
-   single_restart_file_out = .true.,
-   perturbation_amplitude  = 0.2,
-   use_copy2var_send_loop = .true.,
-   use_var2copy_rec_loop = .true. 
- /
-
