@@ -33,8 +33,8 @@
 #
 #BSUB -J perfect
 #BSUB -o perfect.%J.log
-#BSUB -P 35071364
-#BSUB -q premium
+#BSUB -P P3507xxxx
+#BSUB -q economy
 #BSUB -n 1
 #BSUB -W 0:30
 #BSUB -N -u ${USER}@ucar.edu

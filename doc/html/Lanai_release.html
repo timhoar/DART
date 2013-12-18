@@ -18,7 +18,7 @@
     </td>
     <td>
        <p>Jump to DART Documentation Main Index 
-       <a href="https://proxy.subversion.ucar.edu/DAReS/DART/releases/Kodiak/index.html">Website</a>  
+       <a href="https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/index.html">Website</a>  
        or <a href="../../index.html">local file</a><br />
           <small><small>version information for this file: <br />
           <!-- version tag follows, do not edit -->
@@ -156,7 +156,7 @@ and dicing.<br /><br />
 
 <strong>Matlab</strong>&reg;: A set of 
 <a href="http://www.mathworks.com/">Matlab&reg;</a> scripts designed to 
-produce graphical diagnostics from DART netCDF output files are also part
+produce graphical diagnostics from DART. netCDF output files are also part
 of the DART project.<br /><br />
 
 <strong>MPI</strong>: The DART system includes an MPI
@@ -271,7 +271,7 @@ After the installation, you might want to peruse the following.
 <p>You should <i>absolutely</i> run the DARTLAB
 interactive tutorial (if you have Matlab available) and look at the
 DARTLAB presentation slides 
-<a href="https://proxy.subversion.ucar.edu/DAReS/DART/releases/Kodiak/DART_LAB/DART_LAB.html">
+<a href="https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/DART_LAB/DART_LAB.html">
 Website</a> or <a href="../../DART_LAB/DART_LAB.html">local file</a>
 in the
 <em class="file">DART_LAB</em> directory, and then take the tutorial 
@@ -284,18 +284,16 @@ in the <em class="file">DART/tutorial</em> directory.</p>
 <h3>Requirements: an F90 Compiler</h3>
 
 <p>
-The DART software has been successfully built on several Linux/x86
-platforms with several versions of the 
-<a href="http://www.intel.com/software/products/compilers/flin">Intel Fortran
-Compiler for Linux</a>, which (at one point) is/was free for individual 
-scientific use.  Also Intel Fortran for Mac OSX.
-It has also been built and successfully run with several 
-versions of each of the following:
+The DART software has been successfully built on many Linux,
+OS/X, and supercomputer platforms with compilers that include
+<a href="http://gcc.gnu.org/fortran">GNU Fortran Compiler ("gfortran")</a>
+(free), 
+<a href="http://software.intel.com/en-us/fortran-compilers">Intel Fortran
+Compiler for Linux and Mac OS/X</a>,
 <a href="http://www.pgroup.com">Portland Group Fortran Compiler</a>, 
 <a href="http://www.lahey.com">Lahey Fortran Compiler</a>, 
 <a href="http://www.pathscale.com">Pathscale Fortran Compiler</a>, 
-<a href="http://gcc.gnu.org/fortran">GNU Fortran 95 Compiler ("gfortran")</a>, 
-<a href="http://www.absoft.com">Absoft Fortran 90/95 Compiler (Mac OSX)</a>. 
+and the Cray native compiler.
 Since recompiling the code is a necessity to experiment
 with different models, there are no binaries to distribute.
 </p>
@@ -329,9 +327,6 @@ for building the library or installing from an RPM may be found at
 the netCDF home page: 
 <a href="http://www.unidata.ucar.edu/packages/netcdf/">
 http://www.unidata.ucar.edu/packages/netcdf/</a> 
-Pay particular attention to the compiler-specific patches that must 
-be applied for the Intel Fortran Compiler. (Or the PG compiler, for
-that matter.)
 </p>
 
 <p>
@@ -1889,7 +1884,7 @@ this model?
 There are many more options for inflation, including spatially
 and temporarily varying values, with and without damping.  See 
 the discussion of all inflation-related namelist items 
-<a href="https://proxy.subversion.ucar.edu/DAReS/DART/releases/Kodiak/filter/filter.html#Inflation">Website</a> 
+<a href="https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/filter/filter.html#Inflation">Website</a> 
 or <a href="../../filter/filter.html#Inflation">local file</a>.
 </p>
 
@@ -1958,9 +1953,9 @@ DART tree.
 <h2>Non-backwards Compatible Changes</h2>
 
 <p>
-Changes in the Lanai release (SVN revision number NNNN, dd mmm 2013)
+Changes in the Lanai release (13 Dec 2013)
 which are <em>not</em> backwards compatible
-with the Kodiak release (SVN revision number 5018, 15 June 2011):
+with the Kodiak release (30 June 2011):
 </p>
 
 <ol>
@@ -2006,6 +2001,14 @@ The base location and specific type remains the same as before.  If you
 have a <em class=code>get_close_obs()</em> routine in your <em class=file>
 model_mod.f90</em> file and have questions about usage, 
 <a href="mailto:dart@ucar.edu">contact</a> the DART development team.</li>
+
+<li>The <em class=program>obs_common_subset</em> program namelist has
+changed.  The program compares <em class=file>obs_seq.final</em> files
+that were produced by different runs of filter using the same input
+obs_sequence file.  The old version supported comparing only 2 files
+at a time; this version supports up to 50.  It also enforces the
+implicit assumption that the incoming obs_seq.final files are identical
+except for the DART QC and the obs values.</li>
 
 <li>The simple_advection model was incorrectly calling the random number
 generator initialization routines after generating some random numbers.
@@ -2341,8 +2344,6 @@ with the framework can be used.</li>
 <li>Support for the SE core (HOMME) has been developed but is NOT part
 of this release.  Please contact the <a href="mailto:dart@ucar.edu">DART
 Development Group</a> if you have an interest in this configuration of CAM.</li>
-that must be made to the CAM source tree and incorporated into the CAM
-executable</li>
 </ul>
 </li>
 <br /> 

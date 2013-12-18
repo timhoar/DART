@@ -24,7 +24,7 @@
 
 &filter_nml
    async                    = 0,
-   adv_ens_command          = "./no_advance_model.csh",
+   adv_ens_command          = "no_advance_script",
    ens_size                 =  80,
    start_from_restart       = .true.,
    output_restart           = .true.,
@@ -42,8 +42,8 @@
    num_output_obs_members   = 20,
    output_interval          = 1,
    num_groups               = 1,
-   input_qc_threshold       =  1.0,
-   outlier_threshold        =  -1.0,
+   input_qc_threshold       = 1.0,
+   outlier_threshold        = 3.0,
    output_forward_op_errors = .false.,
    output_timestamps        = .false.,
    output_inflation         = .true.,
