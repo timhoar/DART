@@ -15,25 +15,29 @@ program dart_to_model
 !
 !         Replace 'mtime' variable in the TIEGCM restart file
 !         with the 'valid time' of the DART state vector.
-!         Write out updated namelist variables (e.g., model_time, adv_to_time) 
+!         Write out updated namelist variables (e.g., model_time, adv_to_time)
 !         in a file called 'namelist_update'
 !
+!         The dart_to_model_nml namelist setting for advance_time_present
+!         determines whether or not the input file has an 'advance_to_time'.
+!         Typically, only temporary files like 'assim_model_state_ic' have
+!         an 'advance_to_time'.
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
 use    utilities_mod, only : get_unit, initialize_utilities, E_ERR, E_MSG, &
-                             error_handler, finalize_utilities, do_output
+                             error_handler, finalize_utilities, do_output, &
+                             find_namelist_in_file, check_namelist_read
 use        model_mod, only : model_type, get_model_size, init_model_instance, &
                              vector_to_prog_var, update_TIEGCM_restart, &
-                             static_init_model
+                             static_init_model, get_restart_file_name
 use  assim_model_mod, only : assim_model_type, aread_state_restart, &
                              open_restart_read, close_restart
 use time_manager_mod, only : time_type, get_time, get_date, set_calendar_type, &
-                             print_time, print_date, set_date, set_time, &      
+                             print_time, print_date, set_date, set_time, &
                              operator(*),  operator(+), operator(-), &
                              operator(>),  operator(<), operator(/), &
                              operator(/=), operator(<=)
-
 
 implicit none
 
@@ -43,66 +47,100 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+!-----------------------------------------------------------------------
+! namelist parameters with default values.
+!-----------------------------------------------------------------------
+
+character(len=128) :: file_in              = 'dart_restart'
+character(len=128) :: file_namelist_out    = 'namelist_update'
+logical            :: advance_time_present = .false.
+
+namelist /dart_to_model_nml/ file_in, file_namelist_out, advance_time_present
+
+!-----------------------------------------------------------------------
+! global storage
+!-----------------------------------------------------------------------
+
+character(len=128)     :: file_name
 type(model_type)       :: var
 type(time_type)        :: model_time, adv_to_time, jan1, tbase, target_time
 real(r8), allocatable  :: x_state(:)
-integer                :: file_unit, x_size, ens_member, io
-character (len = 128)  :: file_name = 'tiegcm_restart_p.nc', file_in = 'temp_ic'
-character (len = 128)  :: file_namelist_out = 'namelist_update'
-integer                :: model_doy, model_hour, model_minute    ! current tiegcm mtime (doy,hour,mitute) 
-integer                :: adv_to_doy, adv_to_hour, adv_to_minute ! advance tiegcm mtime
-integer                :: target_doy, target_hour, target_minute ! forecast time interval in mtime format 
-integer                :: utsec, year, month, day, sec, model_year
+integer                :: iunit, io, file_unit, x_size
 
-!----------------------------------------------------------------------
-!----------------------------------------------------------------------
+!======================================================================
 
 call initialize_utilities(progname='dart_to_model', output_flag=.true.)
 
-call static_init_model()        ! reads input.nml, etc., sets the table 
+call find_namelist_in_file("input.nml", "dart_to_model_nml", iunit)
+read(iunit, nml = dart_to_model_nml, iostat = io)
+call check_namelist_read(iunit, io, "dart_to_model_nml")
+
+call static_init_model()        ! reads input.nml, etc., sets the table
 x_size = get_model_size()       ! now that we know how big state vector is ...
 allocate(x_state(x_size))       ! allocate space for the (empty) state vector
 
-! Open the DART model state ... 
-! Read in the time to which TIEGCM must advance.  
+! Open the DART model state ...
+! (possibly) Read in the time to which TIEGCM must advance.
 ! Read in the valid time for the model state
 ! Read in state vector from DART
 
-file_unit = open_restart_read(file_in)
+file_unit = open_restart_read(trim(file_in))
 
-call aread_state_restart(model_time, x_state, file_unit, adv_to_time)
+if ( advance_time_present ) then
+   call aread_state_restart(model_time, x_state, file_unit, adv_to_time)
+else
+   call aread_state_restart(model_time, x_state, file_unit)
+endif
 call close_restart(file_unit)
 
-if (do_output()) &
+if (do_output()) then
     call print_time(model_time,'time for restart file '//trim(file_in))
-if (do_output()) &
     call print_date(model_time,'date for restart file '//trim(file_in))
+endif
 
-if (do_output()) &
-    call print_time(adv_to_time,'time for restart file '//trim(file_in))
-if (do_output()) &
-    call print_date(adv_to_time,'date for restart file '//trim(file_in))
-
+if (do_output() .and. advance_time_present) then
+    call print_time(adv_to_time,'advance-to-time')
+    call print_date(adv_to_time,'advance-to-date')
+endif
 
 ! Parse the vector into TIEGCM fields (prognostic variables)
 call init_model_instance(var, model_time)
 call vector_to_prog_var(x_state, var)
 deallocate(x_state)
 
-!----------------------------------------------------------------------
-! This program writes out parameters to a file called 'namelist_update' 
-! for TIEGCM namelist update used in advance_model.csh 
-!----------------------------------------------------------------------
-
-file_unit = get_unit()
-open(unit = file_unit, file = file_namelist_out)
-
 ! write fields to the binary TIEGCM restart file
-call update_TIEGCM_restart(file_name, var)
+
+file_name = get_restart_file_name()
+call update_TIEGCM_restart(trim(file_name), var)
+
+if ( advance_time_present ) then
+   ! update TIEGCM namelist variables used in advance_model.csh
+   call write_tiegcm_time_control(trim(file_namelist_out), model_time, adv_to_time)
+endif
+
+call error_handler(E_MSG,'dart_to_model','Finished successfully.',source,revision,revdate)
+call finalize_utilities()
 
 
-! Get updated TIEGCM namelist variables 
-!
+!======================================================================
+contains
+!======================================================================
+
+
+subroutine write_tiegcm_time_control(filename, model_time, adv_to_time)
+character(len=*), intent(in) :: filename
+type(time_type),  intent(in) :: model_time
+type(time_type),  intent(in) :: adv_to_time
+
+integer :: model_doy, model_hour, model_minute    ! current tiegcm mtime (doy,hour,mitute)
+integer :: adv_to_doy, adv_to_hour, adv_to_minute ! advance tiegcm mtime
+integer :: target_doy, target_hour, target_minute ! forecast time interval in mtime format
+integer :: utsec, year, month, day, sec, model_year
+
+! Get updated TIEGCM namelist variables
+file_unit = get_unit()
+open(unit = file_unit, file = filename)
+
 call get_date(model_time, model_year, month, day, model_hour, model_minute, sec)
 jan1  = set_date(model_year,1,1)
 tbase = model_time - jan1    ! total time since the start of the year
@@ -169,9 +207,7 @@ endif
 
 close(file_unit)
 
-call error_handler(E_MSG,'dart_to_model','Finished successfully.',source,revision,revdate)
-call finalize_utilities()
-
+end subroutine write_tiegcm_time_control
 
 end program dart_to_model
 
