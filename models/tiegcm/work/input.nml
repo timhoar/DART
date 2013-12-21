@@ -94,18 +94,24 @@
    /
 
 &model_nml
-   debug                      = 0,
+   debug                      = 9,
    tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
-   tiegcm_auxiliary_file_name = 'tiegcm_s.nc',
+   tiegcm_secondary_file_name = 'tiegcm_s.nc',
    tiegcm_namelist_file_name  = 'tiegcm.nml',
-   state_variables      = 'TN',   'KIND_TEMPERATURE',
-                          'O1',   'KIND_ATOMIC_OXYGEN_MIXING_RATIO',
-                          'O2',   'KIND_MOLEC_OXYGEN_MIXING_RATIO',
-                          'UN',   'KIND_U_WIND_COMPONENT',
-                          'VN',   'KIND_V_WIND_COMPONENT',
-                          'NE',   'KIND_ELECTRON_DENSITY',
-                          'OP',   'KIND_DENSITY_ION_OP',
-                          'VTEC', 'KIND_VERTICAL_TEC',
+   estimate_f10_7       = .true.,
+   state_variables      = 'TN',      'KIND_TEMPERATURE',
+                          'TN_NM',   'KIND_TEMPERATURE',
+                          'O1',      'KIND_ATOMIC_OXYGEN_MIXING_RATIO',
+                          'O1_NM',   'KIND_ATOMIC_OXYGEN_MIXING_RATIO',
+                          'O2',      'KIND_MOLEC_OXYGEN_MIXING_RATIO',
+                          'O2_NM',   'KIND_MOLEC_OXYGEN_MIXING_RATIO',
+                          'UN',      'KIND_U_WIND_COMPONENT',
+                          'UN_NM',   'KIND_U_WIND_COMPONENT',
+                          'VN',      'KIND_V_WIND_COMPONENT',
+                          'VN_NM',   'KIND_V_WIND_COMPONENT',
+                          'NE',      'KIND_ELECTRON_DENSITY',
+                          'OP',      'KIND_DENSITY_ION_OP',
+                          'VTEC',    'KIND_VERTICAL_TEC',
    auxiliary_variables  = 'ZG'
    /
 
