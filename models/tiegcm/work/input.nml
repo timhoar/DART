@@ -95,11 +95,15 @@
 
 &model_nml
    debug                      = 9,
+   output_state_vector        = .false.,
    tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
    tiegcm_secondary_file_name = 'tiegcm_s.nc',
    tiegcm_namelist_file_name  = 'tiegcm.nml',
    estimate_f10_7       = .true.,
-   state_variables      = 'TN',      'KIND_TEMPERATURE',
+   state_variables      = 'VTEC',    'KIND_VERTICAL_TEC',
+   auxiliary_variables  = 'ZG'
+   /
+                          'TN',      'KIND_TEMPERATURE',
                           'TN_NM',   'KIND_TEMPERATURE',
                           'O1',      'KIND_ATOMIC_OXYGEN_MIXING_RATIO',
                           'O1_NM',   'KIND_ATOMIC_OXYGEN_MIXING_RATIO',
@@ -112,8 +116,6 @@
                           'NE',      'KIND_ELECTRON_DENSITY',
                           'OP',      'KIND_DENSITY_ION_OP',
                           'VTEC',    'KIND_VERTICAL_TEC',
-   auxiliary_variables  = 'ZG'
-   /
 
 &model_to_dart_nml
    file_out      = 'dart_ics'
@@ -171,7 +173,7 @@
 
 &utilities_nml
    TERMLEVEL = 1,
-   module_details = .false.,
+   module_details = .true.,
    logfilename = 'dart_log.out',
    nmlfilename = 'dart_log.nml',
    write_nml   = 'file'
@@ -277,8 +279,8 @@
 &model_mod_check_nml
    input_file           = "dart_ics",        
    output_file          = "check_me_out",
-   advance_time_present = .TRUE.,
-   verbose              = .TRUE.,
+   advance_time_present = .false.,
+   verbose              = .true.,
    x_ind                = 36288,
    loc_of_interest      = 240.0, 10, 0.000004270,
    /
