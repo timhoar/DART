@@ -15,7 +15,8 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check,
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read, error_handler, E_MSG
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
-                             query_location, LocationDims, get_location
+                             query_location, LocationDims, get_location, &
+                             set_location, VERTISUNDEF
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
@@ -26,8 +27,9 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              print_date, get_date, &
                              print_time, write_time, &
                              operator(-)
-use        model_mod, only : static_init_model, get_model_size, get_state_meta_data
-               !             test_interpolate, get_gridsize
+use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
+                             ens_mean_for_model
+               !             test_interpolate
 
 implicit none
 
@@ -44,7 +46,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 character (len = 129) :: input_file  = 'dart_ics'
 character (len = 129) :: output_file = 'check_me'
 logical               :: advance_time_present = .FALSE.
-logical               :: verbose              = .FALSE.
+logical               :: verbose              = .TRUE.
 integer               :: x_ind = -1
 real(r8), dimension(3) :: loc_of_interest = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
@@ -56,10 +58,8 @@ namelist /model_mod_check_nml/ input_file, output_file, &
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
 
-integer :: in_unit, out_unit, ios_out, iunit, io, offset
+integer :: iunit, io
 integer :: x_size
-integer :: year, month, day, hour, minute, second
-integer :: secs, days
 
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
@@ -67,12 +67,17 @@ real(r8), allocatable :: statevector(:)
 character(len=metadatalength) :: state_meta(1)
 type(netcdf_file_type) :: ncFileID
 
+type(location_type) :: loc
+
 !----------------------------------------------------------------------
 ! This portion checks the geometry information. 
+! The call to set_location is just to initialize the location module;
+! which causes the registration information to get printed immediately.
 !----------------------------------------------------------------------
 
 call initialize_utilities(progname='model_mod_check', output_flag=verbose)
 call set_calendar_type(GREGORIAN)
+loc = set_location(0.0_r8, 0.0_r8, 0.0_r8, VERTISUNDEF)
 
 write(*,*)
 write(*,*)'Reading the namelist to get the input filename.'
@@ -134,6 +139,11 @@ call close_restart(iunit)
 call print_date( model_time,'model_mod_check:model date')
 call print_time( model_time,'model_mod_check:model time')
 
+! Set the ensemble mean (to a single value) so that it is available
+! for the metadata/conversion routines
+
+call ens_mean_for_model(statevector)
+
 !----------------------------------------------------------------------
 ! Output the state vector to a netCDF file ...
 ! This is the same procedure used by 'perfect_model_obs' & 'filter'
@@ -174,15 +184,18 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 ! PS( 1741825 : 1752193)    (only 144x72)
 !----------------------------------------------------------------------
 
-if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+! if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+
+do x_ind = 1,x_size
+   call check_meta_data(x_ind)
+enddo
 
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
 ! Checking for valid input is tricky ... we don't know much. 
 !----------------------------------------------------------------------
 
-if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
-
+! if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
 call error_handler(E_MSG, 'model_mod_check', 'FINISHED successfully.',&
                    source,revision,revdate)
@@ -199,8 +212,8 @@ type(location_type) :: loc
 integer             :: var_type
 character(len=129)  :: string1
 
-write(*,*)
-write(*,*)'Checking metadata routines.'
+! write(*,*)
+! write(*,*)'Checking metadata routines.'
 
 call get_state_meta_data( iloc, loc, var_type)
 

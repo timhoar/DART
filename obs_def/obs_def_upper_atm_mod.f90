@@ -46,7 +46,7 @@
 ! SAT_F107,                  KIND_1D_PARAMETER,          COMMON_CODE
 ! SAT_RHO,                   KIND_DENSITY,               COMMON_CODE
 ! GPS_PROFILE,               KIND_ELECTRON_DENSITY,      COMMON_CODE
-! GND_GPS_VTEC,		     KIND_GND_GPS_VTEC
+! GND_GPS_VTEC,              KIND_GND_GPS_VTEC
 ! CHAMP_DENSITY,             KIND_DENSITY
 ! MIDAS_TEC,                 KIND_VERTICAL_TEC,          COMMON_CODE
 ! END DART PREPROCESS KIND LIST
@@ -102,8 +102,7 @@ use     obs_kind_mod, only : KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
 implicit none
 private
 public :: get_expected_upper_atm_density, &
-          get_expected_gnd_gps_vtec, &
-          get_expected_vtec
+          get_expected_gnd_gps_vtec
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -187,8 +186,8 @@ integer,            intent(out) :: istatus
 ! error (different values can be used to indicate different error types).
 ! Negative istatus values are reserved for internal use only by DART.
 
-integer  :: nLons, nLats, nAlts, iAlt
-real(r8), allocatable :: LON(:), LAT(:), ALT(:), IDensityS_ie(:) 
+integer  :: nAlts, iAlt
+real(r8), allocatable :: ALT(:), IDensityS_ie(:) 
 real(r8) :: loc_vals(3)
 real(r8) :: tec
 type(location_type) :: probe
