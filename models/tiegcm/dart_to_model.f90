@@ -27,12 +27,11 @@ program dart_to_model
 use        types_mod, only : r8
 use    utilities_mod, only : get_unit, initialize_utilities, E_ERR, E_MSG, &
                              error_handler, finalize_utilities, do_output, &
-                             find_namelist_in_file, check_namelist_read
-use        model_mod, only : model_type, get_model_size, init_model_instance, &
-                             vector_to_prog_var, update_TIEGCM_restart, &
-                             static_init_model, get_restart_file_name
-use  assim_model_mod, only : assim_model_type, aread_state_restart, &
-                             open_restart_read, close_restart
+                             find_namelist_in_file, check_namelist_read,   &
+                             logfileunit
+use        model_mod, only : get_model_size, static_init_model, get_f107_value, &
+                             get_restart_file_name, update_TIEGCM_restart
+use  assim_model_mod, only : aread_state_restart, open_restart_read, close_restart
 use time_manager_mod, only : time_type, get_time, get_date, set_calendar_type, &
                              print_time, print_date, set_date, set_time, &
                              operator(*),  operator(+), operator(-), &
@@ -62,7 +61,6 @@ namelist /dart_to_model_nml/ file_in, file_namelist_out, advance_time_present
 !-----------------------------------------------------------------------
 
 character(len=128)     :: file_name
-type(model_type)       :: var
 type(time_type)        :: model_time, adv_to_time, jan1, tbase, target_time
 real(r8), allocatable  :: x_state(:)
 integer                :: iunit, io, file_unit, x_size
@@ -94,30 +92,28 @@ endif
 call close_restart(file_unit)
 
 if (do_output()) then
-    call print_time(model_time,'time for restart file '//trim(file_in))
-    call print_date(model_time,'date for restart file '//trim(file_in))
+    call print_time(model_time,'time of restart file '//trim(file_in))
+    call print_date(model_time,'date of restart file '//trim(file_in))
 endif
 
 if (do_output() .and. advance_time_present) then
-    call print_time(adv_to_time,'advance-to-time')
-    call print_date(adv_to_time,'advance-to-date')
+   call print_time(adv_to_time,'advance-to-time for  '//trim(file_in))
+   call print_date(adv_to_time,'advance-to-date for  '//trim(file_in))
 endif
-
-! Parse the vector into TIEGCM fields (prognostic variables)
-call init_model_instance(var, model_time)
-call vector_to_prog_var(x_state, var)
-deallocate(x_state)
 
 ! write fields to the binary TIEGCM restart file
 
 file_name = get_restart_file_name()
-call update_TIEGCM_restart(trim(file_name), var)
+call update_TIEGCM_restart(x_state, trim(file_name), model_time)
+deallocate(x_state)
 
 if ( advance_time_present ) then
    ! update TIEGCM namelist variables used in advance_model.csh
    call write_tiegcm_time_control(trim(file_namelist_out), model_time, adv_to_time)
 endif
 
+write(     *     ,*)''
+write(logfileunit,*)''
 call error_handler(E_MSG,'dart_to_model','Finished successfully.',source,revision,revdate)
 call finalize_utilities()
 
@@ -137,9 +133,11 @@ integer :: adv_to_doy, adv_to_hour, adv_to_minute ! advance tiegcm mtime
 integer :: target_doy, target_hour, target_minute ! forecast time interval in mtime format
 integer :: utsec, year, month, day, sec, model_year
 
-! Get updated TIEGCM namelist variables
+real(r8) :: f10_7
+
+! Write updated TIEGCM namelist variables
 file_unit = get_unit()
-open(unit = file_unit, file = filename)
+open(unit = file_unit, file = trim(filename))
 
 call get_date(model_time, model_year, month, day, model_hour, model_minute, sec)
 jan1  = set_date(model_year,1,1)
@@ -163,46 +161,45 @@ target_minute = (sec - target_hour*3600)/60
 !START_YEAR
 write(file_unit, *, iostat = io )  model_year
 if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write model_year to STDOUT', &
+   call error_handler(E_ERR,'dart_to_model:','cannot write model_year to '//trim(filename), &
          source,revision,revdate)
 endif
+
 !START_DAY
 write(file_unit, *, iostat = io )  model_doy
 if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write model_day to STDOUT', &
+   call error_handler(E_ERR,'dart_to_model:','cannot write model_day to '//trim(filename), &
          source,revision,revdate)
 endif
+
 !SOURCE_START, START, SECSTART
 write(file_unit, *, iostat = io )  model_doy,',',model_hour,',',model_minute
 if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write mtime (day/hour/minute) to STDOUT', &
+   call error_handler(E_ERR,'dart_to_model:','cannot write (day,hour,minute) to '//trim(filename), &
          source,revision,revdate)
 endif
+
 !STOP, SECSTOP
 write(file_unit, *, iostat = io )  adv_to_doy,',',adv_to_hour,',',adv_to_minute
 if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write adv_to_time mtime (day/hour/minute) to STDOUT', &
+   call error_handler(E_ERR,'dart_to_model:','cannot write adv_to_time (day,hour,minute) to '//trim(filename), &
          source,revision,revdate)
 endif
+
 !HIST, SAVE, SECHIST, SECSAVE
 write(file_unit, *, iostat = io )  target_doy,',',target_hour,',',target_minute
 if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write target_time mtime (day/hour/minute) to STDOUT', &
+   call error_handler(E_ERR,'dart_to_model:','cannot write target_time (day,hour,minute) to '//trim(filename), &
          source,revision,revdate)
 endif
+
 !F107
-if (size(var%vars_1d) > 0) then
-  write(file_unit, *, iostat = io )  var%vars_1d(1)
-  if (io /= 0 )then
-    call error_handler(E_ERR,'dart_to_model:','cannot write f107 (var%vars_1d) to STDOUT', &
-         source,revision,revdate)
-  endif
-else
-  write(file_unit, *, iostat = io ) 'NA'
-  if (io /= 0 )then
-    call error_handler(E_ERR,'dart_to_model:','cannot write f107 (var%vars_1d) to STDOUT', &
-         source,revision,revdate)
-  endif
+f10_7 = get_f107_value()
+
+write(file_unit, *, iostat = io ) f10_7 
+if (io /= 0 )then
+   call error_handler(E_ERR,'dart_to_model:','cannot write f107 to '//trim(filename), &
+        source,revision,revdate)
 endif
 
 close(file_unit)
