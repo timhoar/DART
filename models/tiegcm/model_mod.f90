@@ -80,7 +80,8 @@ public :: get_model_size,         &
 public ::   read_TIEGCM_restart, &
           update_TIEGCM_restart, &
           get_restart_file_name, &
-          get_f107_value
+          get_f107_value,        &
+          test_interpolate
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -491,6 +492,11 @@ if ((vert_is_undef(location)) .or. (ikind == KIND_VERTICAL_TEC)) then !2D fields
 
 else !3D fields
 
+  ! get_val() must return/interpolate the state vector locations to the same
+  ! vertical height as the observation. THEN, it is the same as the 2D case.
+
+   call error_handler(E_ERR,'model_interpolate','TJH FIXME 3D vertical check', source, revision, revdate)
+
                      call get_val(val(1,1),x,lon_below,lat_below,height,ikind,vstatus)
    if (vstatus /= 1) call get_val(val(1,2),x,lon_below,lat_above,height,ikind,vstatus)
    if (vstatus /= 1) call get_val(val(2,1),x,lon_above,lat_below,height,ikind,vstatus)
@@ -502,6 +508,10 @@ endif
 ! 0         obs and model are fine;  yes                    yes
 ! 1         fatal problem;           no                     no
 ! 2         exclude valid obs        yes                    no
+
+! Now that we have the four surrounding points and their relative weights,
+! actually perform the bilinear interpolation to get the value at the 
+! (arbitrary) desired location.
 
 istatus = vstatus
 if(istatus /= 1) then
@@ -1213,6 +1223,11 @@ integer                              :: k, t_ind
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                                            num_close, close_ind, dist)
 
+! FIXME ... make the ivarZG part of the state vector far from everything
+!           so it does not get updated.
+
+call error_handler(E_ERR,'get_close_obs','TJH FIXME whole routine', source, revision, revdate)
+
 ! Localize
 if (estimate_f10_7) then
 
@@ -1567,6 +1582,7 @@ UPDATE : do ivar = 1,nfields
    where(dimIDs == TimeDimID) mycount = 1
 
    ! TOMOKO FIXME ... do not update top level of TN, UN, VN, O1, O2
+   ! if (trim(progvar(ivar)%verticalvar) == 'lev') then what ...
    ! if (varname(1:2) == ' ' .or. ' ' .or. ' ') then
    !    where(dimIDs == levDimID) mycount = mycount - 1
    ! endif
@@ -1610,6 +1626,21 @@ get_f107_value = f10_7
 
 end function get_f107_value
 
+
+!-------------------------------------------------------------------------------
+
+
+subroutine test_interpolate(x, location)
+! This is used to debug other functions. Used by check_model_mod - ONLY.
+! Not use in any other DART program.
+
+real(r8), dimension(:), intent(in) :: x
+type(location_type),    intent(in) :: location
+
+write(string1,*) 'TJH FIXME routine not written'
+call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
+
+end subroutine test_interpolate
 
 
 !===============================================================================
@@ -2325,7 +2356,9 @@ integer :: levdim
 
 levdim = 0
 
-! FIXME ... extend
+! FIXME ... extend ... instead of checking variable names, use this instead?
+! if ( trim(progvar(ivar)%verticalvar) == 'lev') then
+
 ! only certain variables get this treatment
 if ((varname(1:2) == 'TN') .or. &
     (varname(1:2) == 'UN') .or. &
@@ -2497,6 +2530,11 @@ NE            = NE * 1.0e+6_r8           ! Convert NE in #/cm^3 to #/m^3
 
 
 ! TOMOKO FIXME ... if we have ZG already, we don't need to calculate ZGG ...
+! Get the ZG that is part of the DART state vector, reshape it into a tensor
+! and then use it. The 'ZG' in module storage is from a SINGLE tiegcm_s.nc file.
+! unfortunately, Tim wrote a crummy vector_to_prog_var() routine.
+
+! ZG = vector_to_prog_var(ivarZG,
 
 ! Convert to geometric height from geopotential height
 ZGG  = (earth_radiusm * Z) / (earth_radiusm - Z)
@@ -2790,6 +2828,8 @@ if ( present(indx3) ) ix3 = indx3
 if ( present(indx4) ) ix4 = indx4
 
 ! FIXME ... protect against providing wrong # of indices for variable rank/shape
+! If progvar(ivar)%rank = 3 and you call this function with indx1-4, this should FAIL.
+! Presently, it does not fail.
 
 if     (progvar(ivar)%rank == 0) then ! scalars
 
@@ -3460,8 +3500,12 @@ integer, intent(in) :: ivar
 integer  :: ios
 real(r8) :: minvalue, maxvalue
 
+! set the default values
+
 minvalue = MISSING_R8
 maxvalue = MISSING_R8
+progvar(ivar)%minvalue = MISSING_R8
+progvar(ivar)%maxvalue = MISSING_R8
 
 read(variable_table(ivar,3),*,iostat=ios) minvalue
 if (ios == 0) progvar(ivar)%minvalue = minvalue
@@ -3474,28 +3518,20 @@ if (ios == 0) progvar(ivar)%maxvalue = maxvalue
 ! rangeRestricted == 2 ... maximum, but no minimum
 ! rangeRestricted == 3 ... minimum and maximum
 
-if (   (minvalue /= MISSING_R8) .and. (maxvalue /= MISSING_R8) ) then
+if (   (progvar(ivar)%minvalue /= MISSING_R8) .and. &
+       (progvar(ivar)%maxvalue /= MISSING_R8) ) then
    progvar(ivar)%rangeRestricted = 3
-elseif (maxvalue /= MISSING_R8) then
+
+elseif (progvar(ivar)%maxvalue /= MISSING_R8) then
    progvar(ivar)%rangeRestricted = 2
-elseif (minvalue /= MISSING_R8) then
+
+elseif (progvar(ivar)%minvalue /= MISSING_R8) then
    progvar(ivar)%rangeRestricted = 1
+
 else
    progvar(ivar)%rangeRestricted = 0
+
 endif
-
-! Check to make sure min is less than max if both are specified.
-
-if ( progvar(ivar)%rangeRestricted == 3 ) then
-   if (maxvalue < minvalue) then
-      write(string1,*)'&model_nml state_variable input error for ',trim(progvar(ivar)%varname)
-      write(string2,*)'minimum value (',minvalue,') must be less than '
-      write(string3,*)'maximum value (',maxvalue,')'
-      call error_handler(E_ERR,'SetVariableLimits',string1, &
-         source,revision,revdate,text2=trim(string2),text3=trim(string3))
-   endif
-endif
-
 
 if (do_output() .and. debug > 99) then
    if (progvar(ivar)%rangeRestricted == 0) then
@@ -3505,11 +3541,25 @@ if (do_output() .and. debug > 99) then
    elseif (progvar(ivar)%rangeRestricted == 2) then
       write(*,*)'TJH ',trim(progvar(ivar)%varname),' has max ',progvar(ivar)%maxvalue
    elseif (progvar(ivar)%rangeRestricted == 3) then
-      write(*,*)'TJH ',trim(progvar(ivar)%varname),' has min ',progvar(ivar)%minvalue,'and max',progvar(ivar)%maxvalue
+      write(*,*)'TJH ',trim(progvar(ivar)%varname),' has min ',progvar(ivar)%minvalue, &
+                                                   ' and max',progvar(ivar)%maxvalue
    else
-      write(string1,*)'Unable to determine if ',trim(progvar(ivar)%varname),' is range-restricted.'
+      write(string1,*)'Unable to determine if ',trim(progvar(ivar)%varname), &
+                      ' is range-restricted.'
       write(string2,*)'minimum value string is ',trim(variable_table(ivar,3))
       write(string3,*)'maximum value string is ',trim(variable_table(ivar,4))
+      call error_handler(E_ERR,'SetVariableLimits',string1, &
+         source,revision,revdate,text2=trim(string2),text3=trim(string3))
+   endif
+endif
+
+! Check to make sure min is less than max if both are specified.
+
+if ( progvar(ivar)%rangeRestricted == 3 ) then
+   if (maxvalue < minvalue) then
+      write(string1,*)'&model_nml state_variable input error for ',trim(progvar(ivar)%varname)
+      write(string2,*)'minimum value (',minvalue,') must be less than '
+      write(string3,*)'maximum value (',maxvalue,')'
       call error_handler(E_ERR,'SetVariableLimits',string1, &
          source,revision,revdate,text2=trim(string2),text3=trim(string3))
    endif

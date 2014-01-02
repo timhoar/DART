@@ -28,8 +28,7 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              print_time, write_time, &
                              operator(-)
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             ens_mean_for_model
-               !             test_interpolate
+                             ens_mean_for_model, test_interpolate
 
 implicit none
 
@@ -195,7 +194,7 @@ enddo
 ! Checking for valid input is tricky ... we don't know much. 
 !----------------------------------------------------------------------
 
-! if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
 call error_handler(E_MSG, 'model_mod_check', 'FINISHED successfully.',&
                    source,revision,revdate)
@@ -217,8 +216,8 @@ character(len=129)  :: string1
 
 call get_state_meta_data( iloc, loc, var_type)
 
-call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
+! call write_location(42, loc, fform='formatted', charstring=string1)
+! write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
 
 end subroutine check_meta_data
 
@@ -292,7 +291,7 @@ if (.not. matched) then
    return
 endif
 
-! Now that we know the distances ... report 
+! Now that we know the horizontal distances ... report 
 
 matched = .false.
 do i = 1,get_model_size()
@@ -300,11 +299,15 @@ do i = 1,get_model_size()
    if ( thisdist(i) == closest ) then
       call get_state_meta_data(i, loc1, var_type)
       rloc      = get_location(loc1)
+      ! Only report those that are on the same vertical level.
       if (nint(rloc(3)) == nint(rlev)) then
          kind_name = get_raw_obs_kind_name(var_type)
          write(*,'(''lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
              rloc, i, trim(kind_name)
          matched = .true.
+      else
+         write(*,'(''lon/lat    '',2(1x,f10.5),'' is index '',i10,'' for '',a)') &
+             rloc(1), rloc(2), i, trim(kind_name)
       endif
    endif
 
