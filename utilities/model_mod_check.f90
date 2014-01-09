@@ -11,24 +11,32 @@ program model_mod_check
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8, digits12, metadatalength
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read, error_handler, E_MSG
+
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, &
-                             set_location, VERTISUNDEF
+                             set_location, VERTISUNDEF, VERTISHEIGHT, &
+                             get_close_obs_init, get_close_maxdist_init, &
+                             get_close_type, get_close_obs_destroy
+
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index
+
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
                              init_diag_output, finalize_diag_output
+         
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              read_time, get_time, set_time,  &
                              print_date, get_date, &
                              print_time, write_time, &
                              operator(-)
+
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             ens_mean_for_model, test_interpolate
+                             ens_mean_for_model, test_interpolate, get_close_obs
 
 implicit none
 
@@ -67,6 +75,16 @@ character(len=metadatalength) :: state_meta(1)
 type(netcdf_file_type) :: ncFileID
 
 type(location_type) :: loc
+
+! stuff to test get_close_obs()
+
+type(get_close_type) :: gc_type
+type(location_type), dimension(:), allocatable :: my_locs
+integer, dimension(:), allocatable :: my_kinds
+integer, dimension(:), allocatable :: close_indices
+real(r8), dimension(:), allocatable :: close_distances
+integer :: num_close, base_type
+real(r8) :: cutoff
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information. 
@@ -163,17 +181,6 @@ call aoutput_diagnostics(ncFileID, model_time, statevector, 1)
 call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize')
 
 !----------------------------------------------------------------------
-! Check the interpolation - print initially to STDOUT
-!----------------------------------------------------------------------
-! Use 500 mb ~ level 30 (in the 42-level version)
-
-!write(*,*)
-!write(*,*)'Testing the interpolation ...'
-
-! call test_interpolate(statevector, test_pressure=500.0_r8, &
-!                       start_lon=142.5_r8)
-
-!----------------------------------------------------------------------
 ! Checking get_state_meta_data (and get_state_indices, get_state_kind)
 ! nx = 144; ny=72; nz=42; produce the expected values :
 !  U(       1 :  435456)
@@ -182,12 +189,14 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 !  Q( 1306369 : 1741824)
 ! PS( 1741825 : 1752193)    (only 144x72)
 !----------------------------------------------------------------------
+write(*,*)
+write(*,*)'Checking metadata routines.'
 
-! if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
 
-do x_ind = 1,x_size
-   call check_meta_data(x_ind)
-enddo
+! do x_ind = 1,x_size
+!    call check_meta_data(x_ind)
+! enddo
 
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
@@ -196,6 +205,48 @@ enddo
 
 if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
+!----------------------------------------------------------------------
+! Check the get_close() routines.
+!----------------------------------------------------------------------
+
+allocate(my_locs(x_size), my_kinds(x_size))
+allocate(close_indices(x_size), close_distances(x_size))
+
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+base_type = 1   ! observation type, just use first in list (like CHAMP_DENSITY)
+
+do x_ind = 1,x_size
+   call get_state_meta_data( x_ind, my_locs(x_ind), my_kinds(x_ind))
+enddo
+
+cutoff = 0.02
+
+call get_close_maxdist_init(gc_type, 2.0_r8*cutoff)
+call get_close_obs_init(gc_type, x_size, my_locs)
+
+call get_close_obs(gc_type, loc, base_type, my_locs, my_kinds, &
+         num_close, close_indices, close_distances)
+
+do x_ind = 1,num_close
+   write(*,*)'close # ',x_ind,' has distance ',close_distances(x_ind),&
+             'from element ',close_indices(x_ind)
+enddo
+
+deallocate(my_locs, my_kinds, close_indices, close_distances)
+call get_close_obs_destroy(gc_type)
+
+!----------------------------------------------------------------------
+! Check the interpolation - print initially to STDOUT
+!----------------------------------------------------------------------
+! Use 500 mb ~ level 30 (in the 42-level version)
+
+write(*,*)
+write(*,*)'Testing the interpolation ...'
+
+call test_interpolate(statevector, loc_of_interest)
+
+
+!----------------------------------------------------------------------
 call error_handler(E_MSG, 'model_mod_check', 'FINISHED successfully.',&
                    source,revision,revdate)
 call finalize_utilities()
@@ -211,13 +262,9 @@ type(location_type) :: loc
 integer             :: var_type
 character(len=129)  :: string1
 
-! write(*,*)
-! write(*,*)'Checking metadata routines.'
-
 call get_state_meta_data( iloc, loc, var_type)
-
-! call write_location(42, loc, fform='formatted', charstring=string1)
-! write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
+call write_location(42, loc, fform='formatted', charstring=string1)
+write(*,'(''indx '',i8,'' is type '',i4,1x,A)') iloc,var_type,trim(string1)
 
 end subroutine check_meta_data
 
@@ -248,7 +295,7 @@ endif
 
 write(*,*)
 write(*,'(''Checking for the indices into the state vector that are at'')')
-write(*,'(''lon/lat/lev'',3(1x,f10.5))')loc_of_interest(1:LocationDims)
+write(*,'(''lon/lat/lev'',2(1x,f10.5),1x,f20.10)')loc_of_interest(1:LocationDims)
 
 allocate( thisdist(get_model_size()) )
 thisdist  = 9999999999.9_r8         ! really far away 
@@ -287,7 +334,7 @@ enddo
 closest = minval(thisdist)
 
 if (.not. matched) then
-   write(*,*)'No state vector elements of type '//trim(kind_of_interest)
+   write(*,*)'No state vector elements of kind '//trim(kind_of_interest)
    return
 endif
 
@@ -298,10 +345,11 @@ do i = 1,get_model_size()
 
    if ( thisdist(i) == closest ) then
       call get_state_meta_data(i, loc1, var_type)
+      kind_name = get_raw_obs_kind_name(var_type)
+
       rloc      = get_location(loc1)
       ! Only report those that are on the same vertical level.
       if (nint(rloc(3)) == nint(rlev)) then
-         kind_name = get_raw_obs_kind_name(var_type)
          write(*,'(''lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
              rloc, i, trim(kind_name)
          matched = .true.
