@@ -46,7 +46,7 @@ use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,           &
                              KIND_GEOPOTENTIAL_HEIGHT,        &
                              KIND_DENSITY_ION_OP,             &! Atomic oxygen ion obs
                              KIND_VERTICAL_TEC,               &! total electron content
-                             get_raw_obs_kind_index
+                             get_raw_obs_kind_index, get_raw_obs_kind_name
 
 use   random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
@@ -477,8 +477,6 @@ else                        ! North of top lat
    lat_fract = 1.0_r8
 endif
 
-call error_handler(E_ERR,'model_interpolate','TJH FIXME unfinished', source, revision, revdate)
-
 ! Now, need to find the values for the four corners
 if ((vert_is_undef(location)) .or. (ikind == KIND_VERTICAL_TEC)) then !2D fields
 
@@ -495,12 +493,12 @@ else !3D fields
   ! get_val() must return/interpolate the state vector locations to the same
   ! vertical height as the observation. THEN, it is the same as the 2D case.
 
-   call error_handler(E_ERR,'model_interpolate','TJH FIXME 3D vertical check', source, revision, revdate)
+   call error_handler(E_MSG,'model_interpolate','TJH FIXME 3D vertical check', source, revision, revdate)
 
                      call get_val(val(1,1),x,lon_below,lat_below,height,ikind,vstatus)
-   if (vstatus /= 1) call get_val(val(1,2),x,lon_below,lat_above,height,ikind,vstatus)
-   if (vstatus /= 1) call get_val(val(2,1),x,lon_above,lat_below,height,ikind,vstatus)
-   if (vstatus /= 1) call get_val(val(2,2),x,lon_above,lat_above,height,ikind,vstatus)
+   if (vstatus == 0) call get_val(val(1,2),x,lon_below,lat_above,height,ikind,vstatus)
+   if (vstatus == 0) call get_val(val(2,1),x,lon_above,lat_below,height,ikind,vstatus)
+   if (vstatus == 0) call get_val(val(2,2),x,lon_above,lat_above,height,ikind,vstatus)
 
 endif
 
@@ -601,7 +599,7 @@ elseif (progvar(ivar)%rank == 3) then  ! [Fortran ordering] = lon, lat, time
       absindx   = get_index(ivar, lon_index, lat_index)
       if (absindx /= index_in) then
          write(*,*)'TJH gsmd, index_in, relindx, loni, lati', &
-                   index_in, relindx, lon_index, lat_index
+                   index_in, relindx, lon_index, lat_index, lons(lon_index), lats(lat_index)
          write(string1,*)'FAILURE ... original index /= get_index() value'
          write(string2,*)'original index = ',index_in
          write(string3,*)'get_index()    = ',absindx
@@ -627,9 +625,9 @@ elseif (progvar(ivar)%rank == 4) then  ! [Fortran ordering] = lon, lat, lev, tim
 
    if (do_output() .and. (debug > 8)) then
       absindx   = get_index( ivar, lon_index, lat_index, lev_index)
-      if (absindx /= index_in) then
          write(*,*)'TJH gsmd, index_in, relindx, loni, lati, levi', &
-                   index_in, relindx, lon_index, lat_index, lev_index, height
+                   index_in, relindx, lon_index, lat_index, lev_index, lons(lon_index), lats(lat_index), height
+      if (absindx /= index_in) then
          write(string1,*)'FAILURE ... original index /= get_index() value'
          write(string2,*)'original index = ',index_in
          write(string2,*)'get_index()    = ',absindx
@@ -1220,13 +1218,25 @@ real(r8),             intent(out)    :: dist(:)
 
 integer                              :: k, t_ind
 
+! Finds all the locations or observations that are close.
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                                            num_close, close_ind, dist)
 
-! FIXME ... make the ivarZG part of the state vector far from everything
-!           so it does not get updated.
+! Make the ZG part of the state vector far from everything so it does not get updated.
+! Scroll through all the obs_loc(:) and obs_kind(:) elements
 
-call error_handler(E_ERR,'get_close_obs','TJH FIXME whole routine', source, revision, revdate)
+do k = 1,num_close
+   t_ind  = close_ind(k) 
+   if (obs_kind(t_ind) == KIND_GEOPOTENTIAL_HEIGHT) then
+      if (do_output() .and. debug > 99) then ! TJH ... checked and is OK
+         write(     *     ,*)'get_close_obs ZG distance is ',dist(k),' changing to ',10.0_r8 * PI
+         write(logfileunit,*)'get_close_obs ZG distance is ',dist(k),' changing to ',10.0_r8 * PI
+      endif
+      dist(k) = 10.0_r8 * PI
+   endif
+enddo
+
+! FIXME ... why do we not update the state when estimating a parameter.
 
 ! Localize
 if (estimate_f10_7) then
@@ -1235,19 +1245,22 @@ if (estimate_f10_7) then
 
       t_ind  = close_ind(k)
 
-      if ( (obs_kind(t_ind) == KIND_MOLEC_OXYGEN_MIXING_RATIO) &
+      if (    (obs_kind(t_ind) == KIND_MOLEC_OXYGEN_MIXING_RATIO) &
          .or. (obs_kind(t_ind) == KIND_U_WIND_COMPONENT) &
          .or. (obs_kind(t_ind) == KIND_V_WIND_COMPONENT) &
          .or. (obs_kind(t_ind) == KIND_TEMPERATURE) ) then
 
          !set distance to a very large value so that it won't get updated
-         dist(k) = 2.0_r8 * PI
+         dist(k) = 10.0_r8 * PI
 
       elseif (obs_kind(t_ind) == KIND_1D_PARAMETER) then
+
+         ! FIXME ... makes no sense.
+         ! We know estimate_f10_7 is true if we are here.
          if (estimate_f10_7) then
             dist(k) = dist(k)*0.25_r8
          else !not estimate_f10_7
-            dist(k) = 2.0_r8 * PI
+            dist(k) = 10.0_r8 * PI
          endif
 
       endif
@@ -1630,15 +1643,22 @@ end function get_f107_value
 !-------------------------------------------------------------------------------
 
 
-subroutine test_interpolate(x, location)
+subroutine test_interpolate(x, locarray)
 ! This is used to debug other functions. Used by check_model_mod - ONLY.
 ! Not use in any other DART program.
 
 real(r8), dimension(:), intent(in) :: x
-type(location_type),    intent(in) :: location
+real(r8), dimension(3), intent(in) :: locarray
 
-write(string1,*) 'TJH FIXME routine not written'
-call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
+type(location_type) :: location
+real(r8) :: obs_val
+integer  :: istatus
+
+location = set_location(locarray(1), locarray(2), locarray(3), VERTISHEIGHT)
+
+call model_interpolate(x, location, KIND_TEMPERATURE, obs_val, istatus)
+
+write(*,*)'TEMPERATURE value at ',locarray,' is ',obs_val,' stautus is ',istatus
 
 end subroutine test_interpolate
 
@@ -2003,6 +2023,12 @@ subroutine verify_state_variables( state_variables, filename, ngood )
 ! This routine checks the user input against the variables available in the
 ! input netcdf file to see if it is possible to construct the DART state vector
 ! specified by the input.nml:model_nml:state_variables  variable.
+!
+! There is an additional complication that if the user requests VTEC to be part
+! of the state, there are good scientific reasons to include the variables
+! that are used to derive VTEC to be part of the DART state. So, if VTEC is
+! included, then there are other variables that get included even if not
+! explicitly mentioned in model_nml:state_variables
 
 character(len=*), dimension(:),   intent(in)  :: state_variables
 character(len=*),                 intent(in)  :: filename
@@ -2107,6 +2133,23 @@ if ( estimate_f10_7 ) then
    variable_table(ngood,2) = 'KIND_1D_PARAMETER'
    variable_table(ngood,3) = 'NA'
    variable_table(ngood,4) = 'NA'
+endif
+
+if (include_vTEC_in_state) then 
+   ! FIXME ... check to make sure all required variables are part of the DART
+   ! state vector. These should be part of the DART state vector :
+   ! If this is the case, then we _could_ use a more standard obs_def approach
+   ! and call model_interpolate to return the VTEC on demand. What we have now
+   ! is basically 'cached' the forward obs operator and created VTEC. HOWEVER,
+   ! if we are doing prior state-space inflation, this has an impact on the
+   ! VTEC in the state vector. Also ... same for ZG ... this is not great.
+   
+
+   ! NE
+   ! TI
+   ! TE
+   ! OP
+
 endif
 
 ! Record the contents of the DART state vector
@@ -2580,22 +2623,29 @@ end subroutine create_vtec
 !-------------------------------------------------------------------------------
 
 
-subroutine get_val(val, x, lon_index, lat_index, height, obs_kind, istatus)
-! returns the value at an arbitrary height.
-real(r8),           intent(out) :: val
-real(r8),           intent(in)  :: x(:)
-integer,            intent(in)  :: lon_index, lat_index
-real(r8),           intent(in)  :: height
-integer,            intent(in)  :: obs_kind
-integer,            intent(out) :: istatus
+subroutine get_val(val, x, lon_index, lat_index, height, ikind, istatus)
+! returns the value at an arbitrary height on an existing horizontal grid location.
+! istatus == 0 is a 'good' return code. 
+
+real(r8), intent(out) :: val
+real(r8), intent(in)  :: x(:)
+integer,  intent(in)  :: lon_index, lat_index
+real(r8), intent(in)  :: height
+integer,  intent(in)  :: ikind
+integer,  intent(out) :: istatus
 
 integer                         :: ivar
 integer                         :: k, lev_top, lev_bottom
 real(r8)                        :: zgrid, delta_z, zgrid_top, zgrid_bottom
 real(r8)                        :: val_top, val_bottom, frac_lev
 
-! No errors to start with
-istatus = 0
+! Presume the worst. Failure. 
+istatus    = 1
+val        = MISSING_R8
+delta_z    = MISSING_R8
+frac_lev   = MISSING_R8
+lev_top    = 0
+lev_bottom = 0
 
 ! To find a layer height: what's the unit of height [m]
 ! pressure level ln(p0/p) -- interface [-7.0 7.0] and midlevel [-6.75 7.25]
@@ -2605,9 +2655,8 @@ istatus = 0
 ! but filled in DART with the values at nlev -1
 
 write(string1,*) 'FIXME routine needs to be checked thoroughly'
-call error_handler(E_ERR,'get_val',string1,source,revision,revdate)
+call error_handler(E_MSG,'get_val',string1,source,revision,revdate)
 
-val = MISSING_R8
 ivar = -1
 
 ! FIXME There is some confusion about using the T-minus-1 variables
@@ -2616,41 +2665,49 @@ ivar = -1
 ! must preceed TN_NM, for example.
 
 VARLOOP : do k = 1,nfields
-   if (progvar(ivar)%dart_kind == obs_kind) then
+   if (progvar(k)%dart_kind == ikind) then
       ivar = k
       exit VARLOOP
    endif
 enddo VARLOOP
 
-! FIXME ... what do we do if no variable with the KIND of interest
-
-if (ivar < 0 ) then ! Failed
-   istatus = 1
-   val = 0.0_r8
+if (ivar < 0 ) then
+   ! FIXME ... this message can be removed once we get comfortable with
+   ! the routine. the 'return' must stay, however ...
+   write(string1,*)'DART state does not have anything with kind ',ikind
+   write(string2,*)get_raw_obs_kind_name(ikind)
+   call error_handler(E_MSG,'get_val',string1,source,revision,revdate,text2=string2)
    return
+else
+   write(string1,*)'DART state using kind ',ikind
+   write(string2,*)get_raw_obs_kind_name(ikind)
+   write(string3,*)trim(progvar(ivar)%varname)
+   call error_handler(E_MSG,'get_val',string1,source,revision,revdate,&
+                                text2=string2, text3=string3)
 endif
 
 ! FIXME ... convert ZG to m when we stick it in the dart state vector?
 !               would remove all the divide by 100's
-! I think we can use the 'get_height() routine for a lot of this.
+! I think we can use the 'get_height() routine for a lot of this if we
+! want to use the ensemble mean height.
 
-if (obs_kind == KIND_ELECTRON_DENSITY) then
+! FIXME ... originally ... if (ikind == KIND_ELECTRON_DENSITY) then
+if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
 
    zgrid_bottom = x(get_index(ivarZG, lon_index, lat_index,    1)) / 100.0_r8  ![m] = /100 [cm]
    zgrid_top    = x(get_index(ivarZG, lon_index, lat_index, nlev)) / 100.0_r8
-   if ((zgrid_bottom > height) .or. (zgrid_top < height)) then
-      istatus = 1 !obs height is above or below the model boundary
-      val = 0.0
-      return
-   endif
 
+   ! cannot extrapolate below bottom or beyond top ... fail ...
+   if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
+
+   ! Figure out what level is above/below, and by how much
    h_loop_interface : do k = 2, nilev
 
       zgrid = x(get_index(ivarZG, lon_index, lat_index, k)) / 100.0_r8 ![m] = /100 [cm]
 
       if (height   <= zgrid) then
          lev_top    = k
-         lev_bottom = lev_top -1
+         lev_bottom = lev_top - 1
          delta_z    = zgrid - x(get_index(ivarZG,lon_index,lat_index,lev_bottom)) / 100.0_r8
          frac_lev   = (zgrid - height)/delta_z
          exit h_loop_interface
@@ -2658,7 +2715,14 @@ if (obs_kind == KIND_ELECTRON_DENSITY) then
 
    enddo h_loop_interface
 
-else
+elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
+   ! Variable is on a midpoint level.
+   ! Get height as the average of the interface levels. 
+
+   ! ilev index    1      2      3      4    ...  27    28    29
+   ! ilev value  -7.00, -6.50, -6.00, -5.50, ... 6.00, 6.50, 7.00 ;
+   !  lev value  -6.75, -6.25, -5.75, -5.25, ... 6.25, 6.75, 7.25 ;
+   !  lev index    1      2      3      4    ...  27    28    29
 
    !mid_level 1      [m] = /100 [cm]
    zgrid_bottom = 0.50_r8 / 100.0_r8 * &
@@ -2670,12 +2734,10 @@ else
                   (x(get_index(ivarZG, lon_index, lat_index, nlev-1)) + &
                    x(get_index(ivarZG, lon_index, lat_index, nlev)))
 
-   if ((zgrid_bottom > height) .or. (zgrid_top < height)) then
-     istatus = 1 !obs height is above or below the model boundary
-     val = 0.0
-     return
-   endif
+   ! cannot extrapolate below bottom or beyond top ... fail ...
+   if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
 
+   ! Figure out what level is above/below, and by how much
    h_loop_midpoint:do k = 2, nilev-1
 
      zgrid = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
@@ -2683,19 +2745,36 @@ else
               x(get_index(ivarZG, lon_index, lat_index, k+1)))
 
      if (height  <= zgrid) then
-       lev_top    = k
-       lev_bottom = lev_top -1
-       delta_z    = zgrid -  0.50_r8 / 100.0_r8 * &
-                    (x(get_index(ivarZG, lon_index, lat_index, lev_bottom  )) + &
-                     x(get_index(ivarZG, lon_index, lat_index, lev_bottom+1)))
-         frac_lev = (zgrid - height)/delta_z
-       exit h_loop_midpoint
+        lev_top    = k
+        lev_bottom = lev_top - 1
+        delta_z    = zgrid -  0.50_r8 / 100.0_r8 * &
+                     (x(get_index(ivarZG, lon_index, lat_index, lev_bottom  )) + &
+                      x(get_index(ivarZG, lon_index, lat_index, lev_bottom+1)))
+          frac_lev = (zgrid - height)/delta_z
+        exit h_loop_midpoint
      endif
 
    enddo h_loop_midpoint
+
+else
+   write(string1,*)trim(progvar(ivar)%varname), &
+       ' has an unknown vertical coordinate system ',trim(progvar(ivar)%verticalvar)
+   call error_handler(E_MSG,'get_val', string1, source, revision, revdate )
 endif
 
-if (obs_kind == KIND_PRESSURE) then
+! Check to make sure we didn't fall through the h_loop ... unlikely (impossible?)
+if ((delta_z == MISSING_R8) .or. (frac_lev == MISSING_R8) .or.  &
+    (lev_top == 0)          .or. (lev_bottom == 0) ) then
+   write(string1,*)'Should not be here ... fell through loop.'
+   call error_handler(E_MSG,'get_val', string1, source, revision, revdate )
+   return
+endif
+
+! If we made it this far, it worked.
+
+istatus = 0
+
+if (ikind == KIND_PRESSURE) then
 
    val_top    = plevs(lev_top)     !pressure at midpoint [Pa]
    val_bottom = plevs(lev_bottom)  !pressure at midpoint [Pa]
