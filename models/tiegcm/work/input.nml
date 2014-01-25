@@ -93,35 +93,35 @@
    print_every_nth_obs             = 0
    /
 
-# Each state variable must have 4 entries.
+# Each variable must have 4 entries.
 # 1: variable name
 # 2: DART KIND
 # 3: minimum value - as a character string - if none, use 'NA'
 # 4: maximum value - as a character string - if none, use 'NA'
+# 5: what file contains the variable - anything from 'restart' also gets UPDATED BY DART.
 
 &model_nml
-   debug                      = 9,
+   debug                      = 3,
    output_state_vector        = .false.,
    tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
    tiegcm_secondary_file_name = 'tiegcm_s.nc',
    tiegcm_namelist_file_name  = 'tiegcm.nml',
-   estimate_f10_7       = .true.,
-   state_variables      = 'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',
-                          'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',
-                          'TN_NM', 'KIND_TEMPERATURE',               '0.0',     '6000.0',
-                          'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888',
-                          'O1_NM', 'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888',
-                          'UN',    'KIND_U_WIND_COMPONENT',          'NA',      'NA',
-                          'UN_NM', 'KIND_U_WIND_COMPONENT',          'NA',      'NA',
-                          'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',
-   auxiliary_variables  = 'ZG'
+   estimate_f10_7             = .true.,
+   variables      = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',
+                    'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',
+                    'TN_NM', 'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',
+                    'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888', 'restart',
+                    'O1_NM', 'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888', 'restart',
+                    'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888', 'restart',
+                    'O2_NM', 'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888', 'restart',
+                    'UN',    'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'UN_NM', 'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'VN',    'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',
+                    'ZG',    'KIND_GEOPOTENTIAL_HEIGHT',       'NA',      'NA',      'secondary',
    /
-                          'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888',
-                          'O2_NM', 'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888',
-                          'VN',    'KIND_V_WIND_COMPONENT',          'NA',      'NA',
-                          'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',
-                          'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',
-                          'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',
+                    'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',
 
 &model_to_dart_nml
    file_out      = 'dart_ics'
@@ -160,7 +160,7 @@
 
 &location_nml
    horiz_dist_only             = .true.,
-   vert_normalization_pressure = 100000.0, 
+   vert_normalization_pressure = 100000.0,
    vert_normalization_height   = 10000.0,
    vert_normalization_level    = 20.0,
    approximate_distance        = .false.,
@@ -283,11 +283,11 @@
    /
 
 &model_mod_check_nml
-   input_file           = "dart_ics",        
+   input_file           = "dart_ics",
    output_file          = "check_me_out",
    advance_time_present = .false.,
    verbose              = .true.,
    x_ind                = 36288,
-   loc_of_interest      = 240.0, 10, 0.000004270,
+   loc_of_interest      = 240.0, 12.49, 100000.0,
    /
 

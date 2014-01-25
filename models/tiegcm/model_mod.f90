@@ -12,7 +12,7 @@ module model_mod
 !
 !-------------------------------------------------------------------------------
 
-use        types_mod, only : r8, digits12, missing_r8, i4, PI,                      &
+use        types_mod, only : r4, r8, MISSING_R8, MISSING_R4, PI, &
                              earth_radius, gravity, obstypelength
 
 use time_manager_mod, only : time_type, set_calendar_type, set_time_missing,        &
@@ -105,13 +105,13 @@ integer            :: debug = 0
 logical            :: estimate_f10_7 = .false.
 
 integer, parameter :: StateVarNmax = 80
-integer, parameter :: Ncolumns = 4
-character(len=NF90_MAX_NAME) :: state_variables(StateVarNmax * Ncolumns) = ' '
+integer, parameter :: Ncolumns = 5
+character(len=NF90_MAX_NAME) :: variables(StateVarNmax * Ncolumns) = ' '
 character(len=NF90_MAX_NAME) :: auxiliary_variables(StateVarNmax)
 
 namelist /model_nml/ output_state_vector, tiegcm_restart_file_name, &
                      tiegcm_secondary_file_name, tiegcm_namelist_file_name, &
-                     state_variables, auxiliary_variables, debug, &
+                     variables, auxiliary_variables, debug, &
                      estimate_f10_7
 
 !-------------------------------------------------------------------------------
@@ -136,12 +136,14 @@ type progvartype
    real(r8) :: minvalue
    real(r8) :: maxvalue
    real(r8) :: missingR8
+   real(r4) :: missingR4
    logical  :: has_missing_value
-   logical  :: prognostic  ! is this a prognostic variable (updateable)
+   logical  :: state  ! is this a state variable (updateable)
+   character(len=NF90_MAX_NAME) :: origin
 end type progvartype
 
 type(progvartype), dimension(StateVarNmax) :: progvar
-integer :: nfields  ! number of prognostic variables
+integer :: nfields  ! number of state variables
 
 !-------------------------------------------------------------------------------
 ! define model parameters
@@ -252,8 +254,8 @@ call read_TIEGCM_definition(trim(restart_file))
 call read_TIEGCM_secondary(trim(secondary_file))
 
 ! error-check and convert namelist input to variable_table
-! and the module 'progvar' database
-call verify_state_variables( state_variables, restart_file, nfields)
+! and the 'progvar' database in the scope of the module
+call verify_variables( variables, restart_file, secondary_file, nfields)
 
 ! Compute overall model size
 
@@ -429,7 +431,7 @@ lat         = lon_lat_lev(2) ! degree
 if(vert_is_height(location)) then
    height = lon_lat_lev(3)
 elseif ((vert_is_undef(location)) .or. (ikind == KIND_VERTICAL_TEC)) then
-   height = missing_r8
+   height = MISSING_R8
 else
    which_vert = nint(query_location(location))
    write(string1,*) 'vertical coordinate type:',which_vert,' cannot be handled'
@@ -508,7 +510,7 @@ endif
 ! 2         exclude valid obs        yes                    no
 
 ! Now that we have the four surrounding points and their relative weights,
-! actually perform the bilinear interpolation to get the value at the 
+! actually perform the bilinear interpolation to get the value at the
 ! (arbitrary) desired location.
 
 istatus = vstatus
@@ -518,7 +520,7 @@ if(istatus /= 1) then
    end do
    obs_val = lat_fract * a(2) + (1.0_r8 - lat_fract) * a(1)
 else
-   obs_val = missing_r8
+   obs_val = MISSING_R8
 endif
 
 end subroutine model_interpolate
@@ -862,7 +864,7 @@ if ( output_state_vector ) then
 else
 
    !----------------------------------------------------------------------------
-   ! We need to process the prognostic variables.
+   ! We need to process the reshaped variables.
    !----------------------------------------------------------------------------
    ! Define the dimensions IDs
    !----------------------------------------------------------------------------
@@ -927,7 +929,7 @@ else
              'nc_write_model_atts')
 
    !----------------------------------------------------------------------------
-   ! Create the (empty) Prognostic Variables and their Attributes
+   ! Create the (empty) Variables and their Attributes
    !----------------------------------------------------------------------------
 
    do ivar=1, nfields
@@ -952,7 +954,7 @@ else
            'nc_write_model_atts', trim(varname)//' put_att dart_kind' )
    enddo
 
-   call nc_check(nf90_enddef(ncid), 'nc_write_model_atts', 'prognostic enddef')
+   call nc_check(nf90_enddef(ncid), 'nc_write_model_atts', 'reshaped enddef')
 
    !----------------------------------------------------------------------------
    ! Fill the variables
@@ -1060,7 +1062,7 @@ if ( output_state_vector ) then
 else
 
    !----------------------------------------------------------------------------
-   ! We need to process the prognostic variables.
+   ! We need to process the reshaped variables.
    !----------------------------------------------------------------------------
 
    do ivar = 1,nfields
@@ -1226,7 +1228,7 @@ call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
 ! Scroll through all the obs_loc(:) and obs_kind(:) elements
 
 do k = 1,num_close
-   t_ind  = close_ind(k) 
+   t_ind  = close_ind(k)
    if (obs_kind(t_ind) == KIND_GEOPOTENTIAL_HEIGHT) then
       if (do_output() .and. debug > 99) then ! TJH ... checked and is OK
          write(     *     ,*)'get_close_obs ZG distance is ',dist(k),' changing to ',10.0_r8 * PI
@@ -1257,16 +1259,11 @@ if (estimate_f10_7) then
 
          ! FIXME ... makes no sense.
          ! We know estimate_f10_7 is true if we are here.
-         if (estimate_f10_7) then
             dist(k) = dist(k)*0.25_r8
-         else !not estimate_f10_7
-            dist(k) = 10.0_r8 * PI
          endif
 
       endif
-
    enddo ! loop over k = 1, num_close
-
 endif
 
 end subroutine get_close_obs
@@ -1474,7 +1471,7 @@ ReadVariable: do ivar = 1,nfields
       call nc_check(nf90_get_var(ncid, VarID, values=temp4D, &
               start = mystart(1:ncNdims), count = mycount(1:ncNdims)), &
               'read_TIEGCM_restart', 'get_var '//trim(string2))
-      call fill_top(progvar(ivar)%varname,temp4D,dimIDs,LevDimID,iLevDimID)
+      call fill_top(ivar,temp4D,dimIDs,LevDimID,iLevDimID)
       call prog_var_to_vector(ivar, temp4D, statevec)
       deallocate(temp4D)
    else
@@ -1499,7 +1496,7 @@ end subroutine read_TIEGCM_restart
 
 
 subroutine update_TIEGCM_restart(statevec, filename, dart_time)
-! Updates TIEGCM restart file fields with the prognostic variables
+! Updates TIEGCM restart file fields with the reshaped variables
 ! in the DART state vector
 
 real(r8), dimension(:), intent(in) :: statevec
@@ -1556,7 +1553,7 @@ UPDATE : do ivar = 1,nfields
    string2 = trim(filename)//' '//trim(varname)
 
    ! Skip the variables that are not supposed to be updated.
-   if ( .not. progvar(ivar)%prognostic ) cycle UPDATE
+   if ( .not. progvar(ivar)%state ) cycle UPDATE
 
    ! Ensure netCDF variable is conformable with DART progvar quantity.
    ! At the same time, create the mystart(:) and mycount(:) arrays.
@@ -1655,6 +1652,8 @@ real(r8) :: obs_val
 integer  :: istatus
 
 location = set_location(locarray(1), locarray(2), locarray(3), VERTISHEIGHT)
+
+! test get_val() and print stuff ...
 
 call model_interpolate(x, location, KIND_TEMPERATURE, obs_val, istatus)
 
@@ -1978,7 +1977,7 @@ character(len=*), intent(in):: file_name
 integer :: ncid
 integer :: TimeDimID, time_dimlen, VarID
 
-real(r8) :: spvalR8
+real(r8) :: spvalR8, spvalR4
 
 if( .not. file_exist(file_name)) then
   write(string1,*) trim(file_name),' not available.'
@@ -2019,25 +2018,27 @@ end subroutine read_TIEGCM_secondary
 !-------------------------------------------------------------------------------
 
 
-subroutine verify_state_variables( state_variables, filename, ngood )
+subroutine verify_variables( variables, filename1, filename2, ngood )
 ! This routine checks the user input against the variables available in the
 ! input netcdf file to see if it is possible to construct the DART state vector
-! specified by the input.nml:model_nml:state_variables  variable.
+! specified by the input.nml:model_nml:variables  variable.
 !
 ! There is an additional complication that if the user requests VTEC to be part
 ! of the state, there are good scientific reasons to include the variables
 ! that are used to derive VTEC to be part of the DART state. So, if VTEC is
 ! included, then there are other variables that get included even if not
-! explicitly mentioned in model_nml:state_variables
+! explicitly mentioned in model_nml:variables
 
-character(len=*), dimension(:),   intent(in)  :: state_variables
-character(len=*),                 intent(in)  :: filename
+character(len=*), dimension(:),   intent(in)  :: variables
+character(len=*),                 intent(in)  :: filename1
+character(len=*),                 intent(in)  :: filename2
 integer,                          intent(out) :: ngood
 
+logical  :: state
 integer  :: i, nrows, ncols
 integer  :: ivar, index1, indexN, varsize
-integer  :: ncid, ncerr, VarID, dimlen
-real(r8) :: spvalR8
+integer  :: ncid, ncid1, ncid2, ncerr, VarID, dimlen
+real(r8) :: spvalR8, spvalR4
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME) :: varname
@@ -2045,42 +2046,50 @@ character(len=NF90_MAX_NAME) :: dartstr
 character(len=NF90_MAX_NAME) :: minvalstring
 character(len=NF90_MAX_NAME) :: maxvalstring
 character(len=obstypelength) :: dimname
+character(len=NF90_MAX_NAME) :: filename    ! FIXME ... kinda dangerous
 
-call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-              'verify_state_variables','open '//trim(filename))
+call nc_check(nf90_open(trim(filename1), NF90_NOWRITE, ncid1), &
+              'verify_variables','open '//trim(filename1))
+
+call nc_check(nf90_open(trim(filename2), NF90_NOWRITE, ncid2), &
+              'verify_variables','open '//trim(filename2))
 
 nrows = size(variable_table,1)
 ncols = size(variable_table,2)
 
-! Convert the (input) 1D array "state_variables" into a table with four columns.
+! Convert the (input) 1D array "variables" into a table with four columns.
 ! The number of rows in the table correspond to the number of variables in the
 ! DART state vector.
 ! Column 1 is the netCDF variable name.
 ! Column 2 is the corresponding DART kind.
 ! Column 3 is the minimum value ("NA" if there is none) Not Applicable
 ! Column 4 is the maximum value ("NA" if there is none) Not Applicable
+! Column 5 is the file of origin 'restart' or 'secondary' or 'calculate'
 
 ngood = 0
 MyLoop : do i = 1, nrows
 
-   varname      = trim(state_variables(4*i -3))
-   dartstr      = trim(state_variables(4*i -2))
-   minvalstring = trim(state_variables(4*i -1))
-   maxvalstring = trim(state_variables(4*i   ))
-   
+   varname      = trim(variables(5*i - 4))
+   dartstr      = trim(variables(5*i - 3))
+   minvalstring = trim(variables(5*i - 2))
+   maxvalstring = trim(variables(5*i - 1))
+   filename     = trim(variables(5*i    ))
+
    variable_table(i,1) = trim(varname)
    variable_table(i,2) = trim(dartstr)
    variable_table(i,3) = trim(minvalstring)
    variable_table(i,4) = trim(maxvalstring)
+   variable_table(i,5) = trim(filename)
 
-   if ((variable_table(i,1) == ' ') .and. (variable_table(i,2) == ' ') .and. &
-       (variable_table(i,3) == ' ') .and. (variable_table(i,4) == ' ')) exit MyLoop ! Found end of list.
+   ! If the first two elements are empty, we have found the end of the list.
+   if ((variable_table(i,1) == ' ') .and. (variable_table(i,2) == ' ')) exit MyLoop
 
+   ! Any other condition is an error.
    if ( any(variable_table(i,:) == ' ') ) then
-      string1 = 'input.nml &model_nml:state_variables not fully specified.'
+      string1 = 'input.nml &model_nml:variables not fully specified.'
       string2 = 'Must be 4 entries per variable, last known variable name is'
-      string3 = trim(variable_table(i,1)) 
-      call error_handler(E_ERR,'verify_state_variables',string1, &
+      string3 = trim(variable_table(i,1))
+      call error_handler(E_ERR,'verify_variables',string1, &
           source,revision,revdate,text2=trim(string2),text3=trim(string3))
    endif
 
@@ -2090,13 +2099,25 @@ MyLoop : do i = 1, nrows
    if (varname == 'VTEC') then
       include_vTEC_in_state = .true.
    else
-      write(string1,'(''No variable '',a,'' in '',a)') trim(varname), trim(filename)
-      string2 = 'If variable name is not what you were expecting, check input namelist.'
-      string3 = 'Make sure each variable has a DART kind, min, and max values.'
-      
+      ! Check to see which file contains the variable.
+      if (variable_table(i,5) == 'restart') then
+         ncid     = ncid1
+         filename = trim(filename1)
+      elseif (variable_table(i,5) == 'secondary') then
+         ncid     = ncid2
+         filename = trim(filename2)
+      else
+         write(string1,'(''unknown option ['',a,''] for variable '',a)') &
+                                trim(variable_table(i,5)), trim(varname)
+         call error_handler(E_ERR,'verify_variables',string1,source,revision,revdate)
+      endif
+
       ncerr = NF90_inq_varid(ncid, trim(varname), VarID)
       if (ncerr /= NF90_NOERR) then
-         call error_handler(E_ERR, 'verify_state_variables', string1, &
+         write(string1,'(''No variable '',a,'' in '',a)') trim(varname), trim(filename)
+         string2 = 'If variable name is unexpected, check against input namelist.'
+         string3 = 'Make sure each variable has a DART kind, min, and max values.'
+         call error_handler(E_ERR, 'verify_variables', string1, &
          source,revision,revdate, text2=trim(string2), text3=trim(string3))
       endif
    endif
@@ -2105,26 +2126,19 @@ MyLoop : do i = 1, nrows
 
    if( get_raw_obs_kind_index(dartstr) < 0 ) then
       write(string1,'(''No obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+      call error_handler(E_ERR,'verify_variables',string1,source,revision,revdate)
    endif
 
    ngood = ngood + 1
 
 enddo MyLoop
 
-if (ngood == (nrows-2)) then
+if (ngood == (nrows-1)) then
    string1 = 'WARNING: There is a possibility you need to increase ''StateVarNmax'''
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG, 'verify_state_variables', string1, &
+   call error_handler(E_MSG, 'verify_variables', string1, &
                       source, revision, revdate, text2=trim(string2))
 endif
-
-! Augment the state vector with the geopotential height
-ngood = ngood + 1
-variable_table(ngood,1) = 'ZG'
-variable_table(ngood,2) = 'KIND_GEOPOTENTIAL_HEIGHT'
-variable_table(ngood,3) = 'NA'
-variable_table(ngood,4) = 'NA'
 
 ! Do we need to augment the state vector with the parameter to estimate?
 if ( estimate_f10_7 ) then
@@ -2133,9 +2147,10 @@ if ( estimate_f10_7 ) then
    variable_table(ngood,2) = 'KIND_1D_PARAMETER'
    variable_table(ngood,3) = 'NA'
    variable_table(ngood,4) = 'NA'
+   variable_table(ngood,5) = 'calculate'
 endif
 
-if (include_vTEC_in_state) then 
+if (include_vTEC_in_state) then
    ! FIXME ... check to make sure all required variables are part of the DART
    ! state vector. These should be part of the DART state vector :
    ! If this is the case, then we _could_ use a more standard obs_def approach
@@ -2143,7 +2158,7 @@ if (include_vTEC_in_state) then
    ! is basically 'cached' the forward obs operator and created VTEC. HOWEVER,
    ! if we are doing prior state-space inflation, this has an impact on the
    ! VTEC in the state vector. Also ... same for ZG ... this is not great.
-   
+
 
    ! NE
    ! TI
@@ -2155,11 +2170,18 @@ endif
 ! Record the contents of the DART state vector
 if (do_output() .and. (debug > 99)) then
    do i = 1,ngood
-      write(*,'(''variable'',i4,'' is '',a12,1x,a32,1x,a20,1x,a20)') i, &
+      write(*,'(''variable'',i4,'' is '',a12,1x,a32,1x,a20,1x,a20,1x,a)') i, &
              trim(variable_table(i,1)), &
              trim(variable_table(i,2)), &
              trim(variable_table(i,3)), &
-             trim(variable_table(i,4)) 
+             trim(variable_table(i,4)), &
+             trim(variable_table(i,5))
+      write(logfileunit,'(''variable'',i4,'' is '',a12,1x,a32,1x,a20,1x,a20,1x,a)') i, &
+             trim(variable_table(i,1)), &
+             trim(variable_table(i,2)), &
+             trim(variable_table(i,3)), &
+             trim(variable_table(i,4)), &
+             trim(variable_table(i,5))
    enddo
 endif
 
@@ -2172,6 +2194,21 @@ endif
 index1  = 1;
 indexN  = 0;
 FillLoop : do ivar = 1, ngood
+
+   ! Check to see which file contains the variable.
+   if (variable_table(ivar,5) == 'restart') then
+      ncid     = ncid1
+      filename = trim(filename1)
+      state    = .true.
+   elseif (variable_table(ivar,5) == 'secondary') then
+      ncid     = ncid2
+      filename = trim(filename2)
+      state    = .false.
+   else
+      ncid     = -1
+      filename = 'calculate'
+      state    = .false.
+   endif
 
    varname                         = trim(variable_table(ivar,1))
    progvar(ivar)%varname           = varname
@@ -2188,35 +2225,16 @@ FillLoop : do ivar = 1, ngood
    progvar(ivar)%dart_kind         = get_raw_obs_kind_index( progvar(ivar)%kind_string )
    progvar(ivar)%xtype             = -1
    progvar(ivar)%missingR8         = MISSING_R8
+   progvar(ivar)%missingR4         = MISSING_R4
    progvar(ivar)%rangeRestricted   = -1
    progvar(ivar)%minvalue          = MISSING_R8
    progvar(ivar)%maxvalue          = MISSING_R8
    progvar(ivar)%has_missing_value = .false.
-   progvar(ivar)%prognostic        = .true.
+   progvar(ivar)%state             = state
+   progvar(ivar)%origin            = trim(filename)
 
    ! Convert the information in columns 3 and 4 into the appropriate variables
    call SetVariableLimits(ivar)
-
-   if (trim(varname) == 'ZG') then
-      ivarZG = ivar
-      ! must come from auxiliary file.  sort-of-cheating by hardwiring ...
-      varsize = nlon*nlat*nilev*1
-      progvar(ivar)%long_name         = 'Geometric height'
-      progvar(ivar)%units             = 'cm'
-      progvar(ivar)%dimnames(1:4)     = (/'lon ','lat ','ilev', 'time'/)
-      progvar(ivar)%dimlens(1:4)      = (/nlon,  nlat,  nilev,      1 /)
-      progvar(ivar)%rank              = 4
-      progvar(ivar)%varsize           = varsize
-      progvar(ivar)%index1            = index1
-      progvar(ivar)%indexN            = index1 + varsize - 1
-      progvar(ivar)%verticalvar       = 'ilev'
-      progvar(ivar)%xtype             = NF90_DOUBLE
-      progvar(ivar)%missingR8         = 1.e+36
-      progvar(ivar)%has_missing_value = .true.
-      progvar(ivar)%prognostic        = .false.  ! do not update - localize far away
-      index1                          = index1 + varsize ! sets up for next variable
-      cycle FillLoop
-   endif
 
    if (trim(varname) == 'f10_7') then
       ! parameter to estimate, value comes from tiegcm.nml
@@ -2230,7 +2248,6 @@ FillLoop : do ivar = 1, ngood
       progvar(ivar)%index1            = index1
       progvar(ivar)%indexN            = index1 + varsize - 1
       progvar(ivar)%xtype             = NF90_DOUBLE
-      progvar(ivar)%prognostic        = .false.
       index1                          = index1 + varsize ! sets up for next variable
 
       cycle FillLoop
@@ -2248,11 +2265,12 @@ FillLoop : do ivar = 1, ngood
       progvar(ivar)%index1            = index1
       progvar(ivar)%indexN            = index1 + varsize - 1
       progvar(ivar)%xtype             = NF90_DOUBLE
-      progvar(ivar)%prognostic        = .false.
       index1                          = index1 + varsize ! sets up for next variable
 
       cycle FillLoop
    endif
+
+   if (trim(varname) == 'ZG') ivarZG = ivar
 
    ! Now that the "special" cases are handled, just read the information
    ! from the input netCDF file and insert into our structure.
@@ -2260,25 +2278,25 @@ FillLoop : do ivar = 1, ngood
    string2 = trim(filename)//' '//trim(varname)
 
    call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), &
-            'verify_state_variables', 'inq_varid '//trim(string2))
+            'verify_variables', 'inq_varid '//trim(string2))
 
    call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, &
                  ndims=progvar(ivar)%rank, xtype=progvar(ivar)%xtype), &
-            'verify_state_variables', 'inquire '//trim(string2))
+            'verify_variables', 'inquire '//trim(string2))
 
    ! If the long_name and/or units attributes are set, get them.
    ! They are not REQUIRED to exist but are nice to use if they are present.
 
    if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
       call nc_check( nf90_get_att(ncid, VarID, 'long_name' , progvar(ivar)%long_name), &
-                  'verify_state_variables', 'get_att long_name '//trim(string2))
+                  'verify_variables', 'get_att long_name '//trim(string2))
    else
       progvar(ivar)%long_name = varname
    endif
 
    if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
       call nc_check( nf90_get_att(ncid, VarID, 'units' , progvar(ivar)%units), &
-                  'verify_state_variables', 'get_att units '//trim(string2))
+                  'verify_variables', 'get_att units '//trim(string2))
    else
       progvar(ivar)%units = 'unknown'
    endif
@@ -2288,6 +2306,11 @@ FillLoop : do ivar = 1, ngood
    if (progvar(ivar)%xtype == NF90_DOUBLE) then
       if (nf90_get_att(ncid, VarID, 'missing_value' , spvalR8) == NF90_NOERR) then
          progvar(ivar)%missingR8         = spvalR8
+         progvar(ivar)%has_missing_value = .true.
+      endif
+   elseif (progvar(ivar)%xtype == NF90_FLOAT) then
+      if (nf90_get_att(ncid, VarID, 'missing_value' , spvalR4) == NF90_NOERR) then
+         progvar(ivar)%missingR4         = spvalR4
          progvar(ivar)%has_missing_value = .true.
       endif
    else
@@ -2300,7 +2323,7 @@ FillLoop : do ivar = 1, ngood
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), name=dimname, len=dimlen), &
-                                          'verify_state_variables', string1)
+                                          'verify_variables', string1)
       ! read_TIEGCM_restart only reads the latest time step, so no matter how many
       ! time steps are defined, the time dimension is only 1
       if (trim(dimname) == 'time') dimlen = 1
@@ -2326,61 +2349,65 @@ FillLoop : do ivar = 1, ngood
 enddo FillLoop
 
 ReportLoop : do ivar = 1, ngood
-   if (do_output() .and. (debug > 1)) then
-      write(logfileunit,*)
-      write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(logfileunit,*) '  long_name         ',trim(progvar(ivar)%long_name)
-      write(logfileunit,*) '  units             ',trim(progvar(ivar)%units)
-      write(logfileunit,*) '  dimnames          ',progvar(ivar)%dimnames(1:progvar(ivar)%rank)
-      write(logfileunit,*) '  dimlens           ',progvar(ivar)%dimlens( 1:progvar(ivar)%rank)
-      write(logfileunit,*) '  rank              ',progvar(ivar)%rank
-      write(logfileunit,*) '  varsize           ',progvar(ivar)%varsize
-      write(logfileunit,*) '  index1            ',progvar(ivar)%index1
-      write(logfileunit,*) '  indexN            ',progvar(ivar)%indexN
-      write(logfileunit,*) '  dart_kind         ',progvar(ivar)%dart_kind
-      write(logfileunit,*) '  kind_string       ',trim(progvar(ivar)%kind_string)
-      write(logfileunit,*) '  verticalvar       ',trim(progvar(ivar)%verticalvar)
-      write(logfileunit,*) '  xtype             ',progvar(ivar)%xtype
-      write(logfileunit,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
-      write(logfileunit,*) '  minvalue          ',progvar(ivar)%minvalue
-      write(logfileunit,*) '  maxvalue          ',progvar(ivar)%maxvalue
-      write(logfileunit,*) '  missingR8         ',progvar(ivar)%missingR8
-      write(logfileunit,*) '  has_missing_value ',progvar(ivar)%has_missing_value
-      write(logfileunit,*) '  prognostic        ',progvar(ivar)%prognostic
+if (do_output() .and. (debug > 1)) then
+   write(logfileunit,*)
+   write(logfileunit,*)trim(progvar(ivar)%varname),' variable number ',ivar
+   write(logfileunit,*)'long_name         ',trim(progvar(ivar)%long_name)
+   write(logfileunit,*)'units             ',trim(progvar(ivar)%units)
+   write(logfileunit,*)'dimnames          ',progvar(ivar)%dimnames(1:progvar(ivar)%rank)
+   write(logfileunit,*)'dimlens           ',progvar(ivar)%dimlens( 1:progvar(ivar)%rank)
+   write(logfileunit,*)'rank              ',progvar(ivar)%rank
+   write(logfileunit,*)'varsize           ',progvar(ivar)%varsize
+   write(logfileunit,*)'index1            ',progvar(ivar)%index1
+   write(logfileunit,*)'indexN            ',progvar(ivar)%indexN
+   write(logfileunit,*)'dart_kind         ',progvar(ivar)%dart_kind
+   write(logfileunit,*)'kind_string       ',trim(progvar(ivar)%kind_string)
+   write(logfileunit,*)'verticalvar       ',trim(progvar(ivar)%verticalvar)
+   write(logfileunit,*)'xtype             ',progvar(ivar)%xtype
+   write(logfileunit,*)'rangeRestricted   ',progvar(ivar)%rangeRestricted
+   write(logfileunit,*)'minvalue          ',progvar(ivar)%minvalue
+   write(logfileunit,*)'maxvalue          ',progvar(ivar)%maxvalue
+   write(logfileunit,*)'missingR8         ',progvar(ivar)%missingR8
+   write(logfileunit,*)'missingR4         ',progvar(ivar)%missingR4
+   write(logfileunit,*)'has_missing_value ',progvar(ivar)%has_missing_value
+   write(logfileunit,*)'state             ',progvar(ivar)%state
+   write(logfileunit,*)'origin            ',trim(progvar(ivar)%origin)
 
-      write(    *      ,*)
-      write(    *      ,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(    *      ,*) '  long_name         ',trim(progvar(ivar)%long_name)
-      write(    *      ,*) '  units             ',trim(progvar(ivar)%units)
-      write(    *      ,*) '  dimnames          ',progvar(ivar)%dimnames(1:progvar(ivar)%rank)
-      write(    *      ,*) '  dimlens           ',progvar(ivar)%dimlens( 1:progvar(ivar)%rank)
-      write(    *      ,*) '  rank              ',progvar(ivar)%rank
-      write(    *      ,*) '  varsize           ',progvar(ivar)%varsize
-      write(    *      ,*) '  index1            ',progvar(ivar)%index1
-      write(    *      ,*) '  indexN            ',progvar(ivar)%indexN
-      write(    *      ,*) '  dart_kind         ',progvar(ivar)%dart_kind
-      write(    *      ,*) '  kind_string       ',trim(progvar(ivar)%kind_string)
-      write(    *      ,*) '  verticalvar       ',trim(progvar(ivar)%verticalvar)
-      write(    *      ,*) '  xtype             ',progvar(ivar)%xtype
-      write(    *      ,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
-      write(    *      ,*) '  minvalue          ',progvar(ivar)%minvalue
-      write(    *      ,*) '  maxvalue          ',progvar(ivar)%maxvalue
-      write(    *      ,*) '  missingR8         ',progvar(ivar)%missingR8
-      write(    *      ,*) '  has_missing_value ',progvar(ivar)%has_missing_value
-      write(    *      ,*) '  prognostic        ',progvar(ivar)%prognostic
-   endif
-
+   write(    *      ,*)
+   write(    *      ,*)trim(progvar(ivar)%varname),' variable number ',ivar
+   write(    *      ,*)'long_name         ',trim(progvar(ivar)%long_name)
+   write(    *      ,*)'units             ',trim(progvar(ivar)%units)
+   write(    *      ,*)'dimnames          ',progvar(ivar)%dimnames(1:progvar(ivar)%rank)
+   write(    *      ,*)'dimlens           ',progvar(ivar)%dimlens( 1:progvar(ivar)%rank)
+   write(    *      ,*)'rank              ',progvar(ivar)%rank
+   write(    *      ,*)'varsize           ',progvar(ivar)%varsize
+   write(    *      ,*)'index1            ',progvar(ivar)%index1
+   write(    *      ,*)'indexN            ',progvar(ivar)%indexN
+   write(    *      ,*)'dart_kind         ',progvar(ivar)%dart_kind
+   write(    *      ,*)'kind_string       ',trim(progvar(ivar)%kind_string)
+   write(    *      ,*)'verticalvar       ',trim(progvar(ivar)%verticalvar)
+   write(    *      ,*)'xtype             ',progvar(ivar)%xtype
+   write(    *      ,*)'rangeRestricted   ',progvar(ivar)%rangeRestricted
+   write(    *      ,*)'minvalue          ',progvar(ivar)%minvalue
+   write(    *      ,*)'maxvalue          ',progvar(ivar)%maxvalue
+   write(    *      ,*)'missingR8         ',progvar(ivar)%missingR8
+   write(    *      ,*)'missingR4         ',progvar(ivar)%missingR4
+   write(    *      ,*)'has_missing_value ',progvar(ivar)%has_missing_value
+   write(    *      ,*)'state             ',progvar(ivar)%state
+   write(    *      ,*)'origin            ',trim(progvar(ivar)%origin)
+endif
 enddo ReportLoop
 
-call nc_check(nf90_close(ncid),'verify_state_variables','close '//trim(filename))
+call nc_check(nf90_close(ncid1),'verify_variables','close '//trim(filename1))
+call nc_check(nf90_close(ncid2),'verify_variables','close '//trim(filename2))
 
-end subroutine verify_state_variables
+end subroutine verify_variables
 
 
 !-------------------------------------------------------------------------------
 
 
-subroutine fill_top(varname,temp4D,dimIDs,LevDimID,iLevDimID)
+subroutine fill_top(ivar,temp4D,dimIDs,LevDimID,iLevDimID)
 ! Some variables need to have the top level replaced by the level underneath it.
 ! At present, I do not know of a rule to identify which varibles.
 ! It is _not_ as simple as the variables on 'lev' get theirs replaced while
@@ -2389,7 +2416,7 @@ subroutine fill_top(varname,temp4D,dimIDs,LevDimID,iLevDimID)
 ! perhaps we need to check the top level of everyone for all missing values
 ! and key on that ... TJH
 
-character(len=*),             intent(in)    :: varname
+integer,                      intent(in)    :: ivar
 real(r8), dimension(:,:,:,:), intent(inout) :: temp4D
 integer, dimension(:),        intent(in)    :: dimIDs
 integer,                      intent(in)    :: LevDimID, iLevDimID
@@ -2399,14 +2426,9 @@ integer :: levdim
 
 levdim = 0
 
-! FIXME ... extend ... instead of checking variable names, use this instead?
-! if ( trim(progvar(ivar)%verticalvar) == 'lev') then
+! FIXME ... check ... 
 
-! only certain variables get this treatment
-if ((varname(1:2) == 'TN') .or. &
-    (varname(1:2) == 'UN') .or. &
-    (varname(1:2) == 'VN') .or. &
-    (varname(1:2) == 'OP') ) then
+if ( trim(progvar(ivar)%verticalvar) == 'lev') then  ! on midpoints
 
    DIMLoop : do i = 1,size(dimIDs)
       if ((dimIDs(i) == LevDimID) .or. (dimIDs(i) == iLevDimID)) then
@@ -2416,7 +2438,7 @@ if ((varname(1:2) == 'TN') .or. &
    enddo DIMLoop
 
    if (levdim == 0) then
-      write(string1,*)'cannot find level dimension for ['//trim(varname)//']'
+      write(string1,*)'cannot find level dimension for ['//trim(progvar(ivar)%varname)//']'
       call error_handler(E_ERR,'fill_top',string1,source,revision,revdate)
    elseif (levdim == 1) then
       nlevels   = size(temp4D,levdim)
@@ -2506,7 +2528,7 @@ subroutine create_vtec( ncid, last_time, vTEC)
 !
 ! Create the vTEC from constituents in the netCDF file.
 !
-! FIXME ... check the calculation of vTEC ... 
+! FIXME ... check the calculation of vTEC ...
 
 integer,                  intent(in)  :: ncid
 integer,                  intent(in)  :: last_time
@@ -2625,7 +2647,7 @@ end subroutine create_vtec
 
 subroutine get_val(val, x, lon_index, lat_index, height, ikind, istatus)
 ! returns the value at an arbitrary height on an existing horizontal grid location.
-! istatus == 0 is a 'good' return code. 
+! istatus == 0 is a 'good' return code.
 
 real(r8), intent(out) :: val
 real(r8), intent(in)  :: x(:)
@@ -2634,12 +2656,13 @@ real(r8), intent(in)  :: height
 integer,  intent(in)  :: ikind
 integer,  intent(out) :: istatus
 
-integer                         :: ivar
-integer                         :: k, lev_top, lev_bottom
-real(r8)                        :: zgrid, delta_z, zgrid_top, zgrid_bottom
-real(r8)                        :: val_top, val_bottom, frac_lev
+integer  :: ivar
+integer  :: k, lev_top, lev_bottom
+real(r8) :: zgrid, delta_z, zgrid_top, zgrid_bottom
+real(r8) :: zgrid_upper, zgrid_lower
+real(r8) :: val_top, val_bottom, frac_lev
 
-! Presume the worst. Failure. 
+! Presume the worst. Failure.
 istatus    = 1
 val        = MISSING_R8
 delta_z    = MISSING_R8
@@ -2694,8 +2717,8 @@ endif
 ! FIXME ... originally ... if (ikind == KIND_ELECTRON_DENSITY) then
 if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
 
-   zgrid_bottom = x(get_index(ivarZG, lon_index, lat_index,    1)) / 100.0_r8  ![m] = /100 [cm]
-   zgrid_top    = x(get_index(ivarZG, lon_index, lat_index, nlev)) / 100.0_r8
+   zgrid_bottom = x(get_index(ivarZG, lon_index, lat_index,     1)) / 100.0_r8  ![m] = /100 [cm]
+   zgrid_top    = x(get_index(ivarZG, lon_index, lat_index, nilev)) / 100.0_r8
 
    ! cannot extrapolate below bottom or beyond top ... fail ...
    if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
@@ -2716,8 +2739,8 @@ if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
    enddo h_loop_interface
 
 elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
-   ! Variable is on a midpoint level.
-   ! Get height as the average of the interface levels. 
+   ! Variable is on levels, not ilevels.
+   ! Get height as the average of the ilevels.
 
    ! ilev index    1      2      3      4    ...  27    28    29
    ! ilev value  -7.00, -6.50, -6.00, -5.50, ... 6.00, 6.50, 7.00 ;
@@ -2738,19 +2761,21 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
    if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
 
    ! Figure out what level is above/below, and by how much
-   h_loop_midpoint:do k = 2, nilev-1
+   h_loop_midpoint:do k = 2, nlev-1
 
-     zgrid = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
+     zgrid_lower = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
+             (x(get_index(ivarZG, lon_index, lat_index, k-1 )) + &
+              x(get_index(ivarZG, lon_index, lat_index, k   )))
+
+     zgrid_upper = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
              (x(get_index(ivarZG, lon_index, lat_index, k  )) + &
               x(get_index(ivarZG, lon_index, lat_index, k+1)))
 
-     if (height  <= zgrid) then
-        lev_top    = k
-        lev_bottom = lev_top - 1
-        delta_z    = zgrid -  0.50_r8 / 100.0_r8 * &
-                     (x(get_index(ivarZG, lon_index, lat_index, lev_bottom  )) + &
-                      x(get_index(ivarZG, lon_index, lat_index, lev_bottom+1)))
-          frac_lev = (zgrid - height)/delta_z
+     if (height  <= zgrid_upper) then
+        ! FIXME ... make sure delta_z is not zero
+        ! FIXME ... set lev_top & lev_bottom
+        delta_z   = zgrid_upper - zgrid_lower
+        frac_lev  = (zgrid_upper - height)/delta_z
         exit h_loop_midpoint
      endif
 
@@ -2763,8 +2788,7 @@ else
 endif
 
 ! Check to make sure we didn't fall through the h_loop ... unlikely (impossible?)
-if ((delta_z == MISSING_R8) .or. (frac_lev == MISSING_R8) .or.  &
-    (lev_top == 0)          .or. (lev_bottom == 0) ) then
+if ( (frac_lev == MISSING_R8) .or. (lev_top == 0) .or. (lev_bottom == 0) ) then
    write(string1,*)'Should not be here ... fell through loop.'
    call error_handler(E_MSG,'get_val', string1, source, revision, revdate )
    return
@@ -3569,7 +3593,7 @@ end function get_state_time
 
 subroutine SetVariableLimits(ivar)
 
-! Convert the information in the variable_table into appropriate 
+! Convert the information in the variable_table into appropriate
 ! numerical limits for each variable.
 ! If the limit does not apply, it is set to MISSING_R8, even if
 ! it is the maximum that does not apply.
