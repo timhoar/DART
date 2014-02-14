@@ -1242,28 +1242,21 @@ enddo
 
 ! Localize
 if (estimate_f10_7) then
-
    do k = 1, num_close
 
       t_ind  = close_ind(k)
 
+      ! set distance to a very large value so that it won't get updated
       if (    (obs_kind(t_ind) == KIND_MOLEC_OXYGEN_MIXING_RATIO) &
          .or. (obs_kind(t_ind) == KIND_U_WIND_COMPONENT) &
          .or. (obs_kind(t_ind) == KIND_V_WIND_COMPONENT) &
          .or. (obs_kind(t_ind) == KIND_TEMPERATURE) ) then
-
-         !set distance to a very large value so that it won't get updated
          dist(k) = 10.0_r8 * PI
-
-      elseif (obs_kind(t_ind) == KIND_1D_PARAMETER) then
-
-         ! FIXME ... makes no sense.
-         ! We know estimate_f10_7 is true if we are here.
-            dist(k) = dist(k)*0.25_r8
-         endif
-
+      elseif  (obs_kind(t_ind) == KIND_1D_PARAMETER) then
+         dist(k) = dist(k)*0.25_r8
       endif
-   enddo ! loop over k = 1, num_close
+
+   enddo
 endif
 
 end subroutine get_close_obs
@@ -2772,6 +2765,8 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
               x(get_index(ivarZG, lon_index, lat_index, k+1)))
 
      if (height  <= zgrid_upper) then
+        lev_top=k
+        lev_bottom = k-1     
         ! FIXME ... make sure delta_z is not zero
         ! FIXME ... set lev_top & lev_bottom
         delta_z   = zgrid_upper - zgrid_lower
@@ -3063,7 +3058,7 @@ elseif ( numdims == 1 ) then
 
    icount = progvar(ivar)%index1
 
-   do idim1 = mystart(1),mycount(1)
+   do idim1 = 1, mycount(1)
       data_1d_array(idim1) = statevec(icount)
       icount = icount + 1
    enddo
@@ -3096,8 +3091,8 @@ elseif ( numdims == 2 ) then
 
    icount = progvar(ivar)%index1
 
-   do idim2 = mystart(2),mycount(2)
-   do idim1 = mystart(1),mycount(1)
+   do idim2 = 1, mycount(2)
+   do idim1 = 1, mycount(1)
       data_2d_array(idim1,idim2) = statevec(icount)
       icount = icount + 1
    enddo
@@ -3131,9 +3126,9 @@ elseif ( numdims == 3 ) then
 
    icount = progvar(ivar)%index1
 
-   do idim3 = mystart(3),mycount(3)
-   do idim2 = mystart(2),mycount(2)
-   do idim1 = mystart(1),mycount(1)
+   do idim3 = 1, mycount(3)
+   do idim2 = 1, mycount(2)
+   do idim1 = 1, mycount(1)
       data_3d_array(idim1,idim2,idim3) = statevec(icount)
       icount = icount + 1
    enddo
@@ -3168,10 +3163,10 @@ elseif ( numdims == 4 ) then
 
    icount = progvar(ivar)%index1
 
-   do idim4 = mystart(4),mycount(4)
-   do idim3 = mystart(3),mycount(3)
-   do idim2 = mystart(2),mycount(2)
-   do idim1 = mystart(1),mycount(1)
+   do idim4 = 1, mycount(4)
+   do idim3 = 1, mycount(3)
+   do idim2 = 1, mycount(2)
+   do idim1 = 1, mycount(1)
       data_4d_array(idim1,idim2,idim3,idim4) = statevec(icount)
       icount = icount + 1
    enddo
@@ -3207,11 +3202,11 @@ elseif ( numdims == 5 ) then
 
    icount = progvar(ivar)%index1
 
-   do idim5 = mystart(5),mycount(5)
-   do idim4 = mystart(4),mycount(4)
-   do idim3 = mystart(3),mycount(3)
-   do idim2 = mystart(2),mycount(2)
-   do idim1 = mystart(1),mycount(1)
+   do idim5 = 1, mycount(5)
+   do idim4 = 1, mycount(4)
+   do idim3 = 1, mycount(3)
+   do idim2 = 1, mycount(2)
+   do idim1 = 1, mycount(1)
       data_5d_array(idim1,idim2,idim3,idim4,idim5) = statevec(icount)
       icount = icount + 1
    enddo
@@ -3581,7 +3576,7 @@ utsec = (mtime(2)*60 + mtime(3))*60
 get_state_time = set_time(utsec, doy-1) + set_date(year, 1, 1)  ! Jan 1 of whatever year.
 
 if (do_output() .and. (debug > 0)) then
-   print *, trim(filename)//'get_state_time: tiegcm (doy,hour,minute) and year:', mtime, year
+   print *, trim(filename)//':get_state_time: tiegcm (doy,hour,minute) and year:', mtime, year
    call print_date(get_state_time, str=trim(filename)//':get_state_time: date ')
    call print_time(get_state_time, str=trim(filename)//':get_state_time: time ')
 endif
