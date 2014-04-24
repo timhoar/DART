@@ -16,24 +16,20 @@ module obs_sequence_mod
 ! copy subroutines. USERS MUST BE VERY CAREFUL TO NOT DO DEFAULT ASSIGNMENT
 ! FOR THESE TYPES THAT HAVE COPY SUBROUTINES.
 
-use        types_mod, only : r8, DEG2RAD, MISSING_R8, metadatalength
-use     location_mod, only : location_type, interactive_location, &
-                             is_location_in_region
+use        types_mod, only : r8, MISSING_R8, metadatalength
+use     location_mod, only : location_type, is_location_in_region
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, read_obs_def, &
                              write_obs_def, destroy_obs_def, copy_obs_def, &
                              interactive_obs_def, get_obs_def_location, &
-                             get_expected_obs_from_def, get_obs_kind, &
-                             get_obs_def_key
+                             get_expected_obs_from_def, get_obs_kind
 use     obs_kind_mod, only : write_obs_kind, read_obs_kind, max_obs_kinds, &
                              get_obs_kind_index
 use time_manager_mod, only : time_type, operator(>), operator(<), &
                              operator(>=), operator(/=), set_time, &
                              operator(-), operator(+), operator(==)
-use    utilities_mod, only : get_unit, close_file,                       &
-                             register_module, error_handler,             &
-                             find_namelist_in_file, check_namelist_read,   &
-                             E_ERR, E_WARN, E_MSG, nmlfileunit, do_output, &
-                             do_nml_file, do_nml_term
+use    utilities_mod, only : get_unit, close_file, register_module, error_handler, &
+                             find_namelist_in_file, check_namelist_read, &
+                             E_ERR, E_MSG, nmlfileunit, do_nml_file, do_nml_term
 
 implicit none
 private
@@ -80,8 +76,8 @@ type obs_sequence_type
    ! F95 allows pointers to be initialized to a known value.
    ! However, if you get an error on the following lines from your
    ! compiler, remove the => NULL() from the end of the 5 lines below.
-   character(len = metadatalength), pointer :: copy_meta_data(:)  => NULL()
-   character(len = metadatalength), pointer :: qc_meta_data(:)    => NULL()
+   character(len=metadatalength), pointer :: copy_meta_data(:)  => NULL()
+   character(len=metadatalength), pointer :: qc_meta_data(:)    => NULL()
    integer :: first_time
    integer :: last_time
 !   integer :: first_avail_time, last_avail_time
@@ -105,7 +101,6 @@ end type obs_type
 type obs_cov_type
    private
    integer :: num_cov_groups
-! ??????
 end type obs_cov_type
 
 ! for errors
@@ -926,13 +921,14 @@ endif
 end subroutine delete_obs_from_seq
 
 !-------------------------------------------------
+
 subroutine set_copy_meta_data(seq, copy_num, meta_data)
 
 ! Need all sorts of error checking to avoid silly stuff eventually
 
 type(obs_sequence_type), intent(inout) :: seq
 integer,                 intent(in)    :: copy_num
-character(len = *),      intent(in)    :: meta_data
+character(len=*),        intent(in)    :: meta_data
 
 character(len=len(meta_data)) :: lj_meta_data ! left justified version
 
@@ -962,7 +958,7 @@ subroutine set_qc_meta_data(seq, qc_num, meta_data)
 ! Need error checks
 type(obs_sequence_type), intent(inout) :: seq
 integer,                 intent(in)    :: qc_num
-character(len = *),      intent(in)    :: meta_data
+character(len=*),        intent(in)    :: meta_data
 
 character(len=len(meta_data)) :: lj_meta_data ! left justified version
 
@@ -1033,7 +1029,7 @@ subroutine add_copies(seq, num_to_add)
 type(obs_sequence_type), intent(inout) :: seq
 integer, intent(in) :: num_to_add
 
-character(len = metadatalength) :: meta_temp(seq%num_copies)
+character(len=metadatalength) :: meta_temp(seq%num_copies)
 real(r8) :: values_temp(seq%num_copies)
 integer :: i, old_num
 
@@ -1080,7 +1076,7 @@ subroutine add_qc(seq, num_to_add)
 type(obs_sequence_type), intent(inout) :: seq
 integer,                    intent(in) :: num_to_add
 
-character(len = metadatalength) ::     qc_temp(seq%num_qc)
+character(len=metadatalength) ::     qc_temp(seq%num_qc)
 real(r8)                        :: values_temp(seq%num_qc)
 integer                         :: i, old_num
 
@@ -1119,7 +1115,7 @@ end subroutine add_qc
 subroutine write_obs_seq(seq, file_name)
 
 type(obs_sequence_type), intent(in) :: seq
-character(len = *),      intent(in) :: file_name
+character(len=*),        intent(in) :: file_name
 
 integer :: i, file_id, rc
 integer :: have(max_obs_kinds)
@@ -1209,14 +1205,14 @@ subroutine read_obs_seq(file_name, add_copies, add_qc, add_obs, seq)
 
 ! Be able to increase size at read in time for efficiency
 
-character(len = *),      intent(in)  :: file_name
+character(len=*),        intent(in)  :: file_name
 integer,                 intent(in)  :: add_copies, add_qc, add_obs
 type(obs_sequence_type), intent(out) :: seq
 
 integer :: i, num_copies, num_qc, num_obs, max_num_obs, file_id, io
-character(len = 16) :: label(2)
+character(len=16) :: label(2)
 logical :: pre_I_format
-character(len = 129) :: read_format
+character(len=32) :: read_format
 
 ! Use read_obs_seq_header to get file format and header info
 call read_obs_seq_header(file_name, num_copies, num_qc, num_obs, &
@@ -1307,14 +1303,14 @@ subroutine read_obs_seq_header(file_name, num_copies, num_qc, num_obs, &
 
 ! Be able to increase size at read in time for efficiency
 
-character(len = *),     intent(in) :: file_name
-integer,               intent(out) :: num_copies, num_qc, num_obs, max_num_obs, file_id
-character(len = *),    intent(out) :: read_format
-logical,               intent(out) :: pre_I_format
-logical,      intent(in), optional :: close_the_file
+character(len=*),  intent(in)  :: file_name
+integer,           intent(out) :: num_copies, num_qc, num_obs, max_num_obs, file_id
+character(len=*),  intent(out) :: read_format
+logical,           intent(out) :: pre_I_format
+logical, optional, intent(in)  :: close_the_file
 
-character(len = 16) label(2)
-character(len = 12) header
+character(len=16) :: label(2)
+character(len=12) :: header
 integer :: ios
 
 ! Determine the format for an obs_sequence file to be read. Options are:
@@ -2062,7 +2058,7 @@ type(obs_sequence_type),   intent(out) :: newseq
 type(time_type), optional, intent(in)  :: time1, time2
 
 integer :: i, num_copies, num_qc, max_num_obs
-integer :: num_obs, num_keys, key_bounds(2)
+integer :: num_keys, key_bounds(2)
 integer, pointer :: keylist(:)
 type(obs_type) :: obs
 type(time_type) :: first_time, last_time
@@ -2071,7 +2067,6 @@ logical :: out_of_range
 ! Get existing header info
 num_copies  = get_num_copies(oldseq)
 num_qc      = get_num_qc(oldseq)
-num_obs     = get_num_obs(oldseq)
 max_num_obs = get_max_num_obs(oldseq)
 
 call init_obs(obs, num_copies, num_qc)
@@ -2473,11 +2468,11 @@ subroutine read_obs(file_id, num_copies, add_copies, num_qc, add_qc, key, &
 ! Are the checks for num_copies == 0 or <0 necessary? 
 ! Yes, they happen in create_fixed_network_sequence
 
-integer,              intent(in)    :: file_id, num_copies, add_copies
-integer,              intent(in)    :: num_qc, add_qc, key
-character(len = *),   intent(in)    :: read_format
-type(obs_type),       intent(inout) :: obs
-integer, optional,    intent(in)    :: max_obs
+integer,            intent(in)    :: file_id, num_copies, add_copies
+integer,            intent(in)    :: num_qc, add_qc, key
+character(len=*),   intent(in)    :: read_format
+type(obs_type),     intent(inout) :: obs
+integer, optional,  intent(in)    :: max_obs
 
 integer  :: i, io
 real(r8) :: temp_val

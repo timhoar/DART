@@ -23,8 +23,8 @@ use        types_mod, only : r4, r8, digits12, MISSING_R8, MISSING_R4, MISSING_I
                              metadatalength
 use obs_sequence_mod, only : read_obs_seq, obs_type, obs_sequence_type, get_first_obs, &
                              get_obs_from_key, get_obs_def, get_copy_meta_data, &
-                             get_obs_time_range, get_time_range_keys, get_num_obs, &
-                             get_next_obs, get_num_times, get_obs_values, init_obs, &
+                             get_obs_time_range, get_time_range_keys, &
+                             get_obs_values, init_obs, &
                              assignment(=), get_num_copies, static_init_obs_sequence, &
                              get_qc, destroy_obs_sequence, read_obs_seq_header, &
                              get_last_obs, destroy_obs, get_num_qc, get_qc_meta_data
@@ -51,8 +51,7 @@ use    utilities_mod, only : open_file, close_file, register_module, &
                              initialize_utilities, logfileunit, nmlfileunit,   &
                              find_namelist_in_file, check_namelist_read,       &
                              nc_check, do_nml_file, do_nml_term, finalize_utilities, &
-                             next_file, get_next_filename, find_textfile_dims, &
-                             file_to_text
+                             next_file, get_next_filename
 use         sort_mod, only : sort
 use   random_seq_mod, only : random_seq_type, init_random_seq, several_random_gaussians
 
@@ -86,9 +85,9 @@ type(obs_type)          :: obs1, obsN
 type(obs_def_type)      :: obs_def
 type(location_type)     :: obs_loc
 
-character(len = 129) :: obs_seq_in_file_name
-character(len = 129), allocatable, dimension(:) :: obs_seq_filenames
-character(len = stringlength), dimension(MaxTrusted) :: trusted_list = 'null'
+character(len=256) :: obs_seq_in_file_name
+character(len=256), allocatable, dimension(:) :: obs_seq_filenames
+character(len=stringlength), dimension(MaxTrusted) :: trusted_list = 'null'
 
 ! Storage with fixed size for observation space diagnostics
 real(r8), dimension(1) :: prior_mean, posterior_mean, prior_spread, posterior_spread
@@ -121,7 +120,7 @@ integer :: ens_size, rank_histogram_bin
 type(random_seq_type) :: ran_seq
 real(r8) :: obs_error_variance
 
-character(len=129) :: obs_seq_read_format
+character(len=stringlength) :: obs_seq_read_format
 logical :: pre_I_format
 
 integer,  dimension(2) :: key_bounds
@@ -171,8 +170,8 @@ integer :: numqcvals
 ! Namelist with (some scalar) default values
 !-----------------------------------------------------------------------
 
-character(len = 129) :: obs_sequence_name = 'obs_seq.final'
-character(len = 129) :: obs_sequence_list = ''
+character(len=256) :: obs_sequence_name = 'obs_seq.final'
+character(len=256) :: obs_sequence_list = ''
 integer, dimension(6) :: first_bin_center = (/ 2003, 1, 1, 0, 0, 0 /)
 integer, dimension(6) :: last_bin_center  = (/ 2003, 1, 2, 0, 0, 0 /)
 integer, dimension(6) :: bin_separation   = (/    0, 0, 0, 6, 0, 0 /)
@@ -190,10 +189,10 @@ real(r8), dimension(MaxLevels+1) :: mlevel_edges = MISSING_R8 ! model levels (no
 integer :: Nregions = 0
 real(r8), dimension(MaxRegions) :: lonlim1= MISSING_R8, lonlim2= MISSING_R8
 real(r8), dimension(MaxRegions) :: latlim1= MISSING_R8, latlim2= MISSING_R8
-character(len = stringlength), dimension(MaxRegions) :: reg_names = 'null'
+character(len=stringlength), dimension(MaxRegions) :: reg_names = 'null'
 type(location_type), dimension(MaxRegions) :: min_loc, max_loc
 
-character(len = stringlength), dimension(MaxTrusted) :: trusted_obs = 'null'
+character(len=stringlength), dimension(MaxTrusted) :: trusted_obs = 'null'
 
 real(r8):: rat_cri               = 5000.0_r8 ! QC ratio
 real(r8):: input_qc_threshold    = 3.0_r8    ! maximum NCEP QC factor
@@ -219,7 +218,7 @@ namelist /obs_diag_nml/ obs_sequence_name, obs_sequence_list,                 &
 !-----------------------------------------------------------------------
 
 integer, parameter :: Ncopies = 22
-character(len = stringlength), dimension(Ncopies) :: copy_names =                &
+character(len=stringlength), dimension(Ncopies) :: copy_names =                &
    (/ 'Nposs      ', 'Nused      ', 'NbigQC     ', 'NbadIZ     ', 'NbadUV     ', &
       'NbadLV     ', 'rmse       ', 'bias       ', 'spread     ', 'totalspread', &
       'NbadDARTQC ', 'observation', 'ens_mean   ',                               &
@@ -298,7 +297,7 @@ integer,  allocatable, dimension(:) :: ob_defining_vert ! obs index defining ver
 
 ! List of observations types augmented with 'WIND' types if need be.
 ! Replace calls to 'get_obs_kind_name' ---> index into 'obs_type_strings'
-character(len = stringlength), pointer, dimension(:) :: obs_type_strings
+character(len=stringlength), pointer, dimension(:) :: obs_type_strings
 
 ! These pairs of variables are used when we diagnose which observations
 ! are far from the background.
@@ -315,8 +314,8 @@ type(time_type) :: seqT1, seqTN        ! first,last time in entire observation s
 type(time_type) :: AllseqT1, AllseqTN  ! first,last time in ALL observation sequences
 type(time_type) :: obs_time, skip_time
 
-character(len = 256) :: ncName, string1, string2, string3
-character(len = stringlength) :: obsname
+character(len=512) :: string1, string2, string3
+character(len=stringlength) :: obsname, ncName
 
 integer  :: Nidentity  = 0   ! identity observations
 
@@ -1846,7 +1845,7 @@ Subroutine CountTrustedObsTypes()
 
 integer :: i
 logical :: matched
-character(len = stringlength) :: possible_obs_type
+character(len=stringlength) :: possible_obs_type
 
 ! Loop over all user input candidates for 'trusted' observations.
 ! Check each candidate against list of known observation names.
@@ -1935,7 +1934,7 @@ Subroutine  SetScaleFactors()
 ! the scale_factor should be defined to reflect the type, which are not
 ! guaranteed to be numbered sequentially ... vortices 81, for example
 
-character(len = stringlength) :: obs_string
+character(len=stringlength) :: obs_string
 integer :: ivar
 
 scale_factor = 1.0_r8
@@ -3392,7 +3391,7 @@ do i=0,MaxSigmaBins
       write(nsigmaUnit,'(''(prior) innovations in stdev bin '',i3,'' = '',i10)')i+1,nsigma(i)
    endif
 enddo
-close(nsigmaUnit)
+call close_file(nsigmaUnit)
 
 end Subroutine Normalize4Dvars
 
@@ -3490,7 +3489,7 @@ end Subroutine Normalize3Dvars
 
 
 Subroutine WriteNetCDF(fname)
-character(len=129), intent(in) :: fname
+character(len=*), intent(in) :: fname
 
 integer :: ncid, i, indx1, nobs, typesdimlen
 integer ::  RegionDimID,  RegionVarID

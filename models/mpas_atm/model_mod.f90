@@ -191,6 +191,13 @@ logical :: update_u_from_reconstruct = .true.
 ! assimilation, and use only the increments to update the edge winds
 logical :: use_increments_for_u_update = .true.
 
+! if > 0, amount of distance in fractional model levels that a vertical
+! point can be above or below the top or bottom of the grid and still be
+! evaluated without error.  if extrapolate is true, extrapolate from the
+! first or last model level.  if extrapolate is false, use level 1 or N.
+real(r8) :: outside_grid_level_tolerance = -1.0_r8
+logical  :: extrapolate = .false.
+
 namelist /model_nml/             &
    model_analysis_filename,      &
    grid_definition_filename,     &
@@ -208,6 +215,8 @@ namelist /model_nml/             &
    update_u_from_reconstruct,    &
    use_increments_for_u_update,  &
    highest_obs_pressure_mb,      &
+   outside_grid_level_tolerance, &
+   extrapolate,                  &
    sfc_elev_max_diff
 
 ! DART state vector contents are specified in the input.nml:&mpas_vars_nml namelist.
@@ -740,6 +749,12 @@ if ((get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE) < 0) .or. &
                       text2=string2, text3=string3)
 endif
 
+
+if (extrapolate) then
+   call error_handler(E_MSG,'static_init_model',&
+                      'extrapolate not supported yet; will use level 1 or N values', &
+                      source, revision, revdate)
+endif
 
 allocate( ens_mean(model_size) )
 
@@ -2043,10 +2058,10 @@ if (.not. horiz_dist_only) then
   else if (base_which /= vert_localization_coord) then
       call vert_convert(ens_mean, base_obs_loc, base_obs_kind, ztypeout, istatus1)
       if(debug > 5) then
-      call write_location(0,base_obs_loc,charstring=string1)
-      call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
-  endif
-endif
+         call write_location(0,base_obs_loc,charstring=string1)
+         call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
+     endif
+   endif
 endif
 
 if (istatus1 == 0) then
@@ -2070,6 +2085,7 @@ if (istatus1 == 0) then
       if (.not. horiz_dist_only) then
           if (local_obs_which /= vert_localization_coord) then
               call vert_convert(ens_mean, local_obs_loc, obs_kind(t_ind), ztypeout, istatus2)
+              obs_loc(t_ind) = local_obs_loc
           else
               istatus2 = 0
           endif
@@ -4604,6 +4620,7 @@ integer,  intent(out) :: ier
 ! models get to be huge.
 
 integer :: i
+real(r8) :: hlevel
 
 ! Initialization
 ier = 0
@@ -4611,9 +4628,51 @@ fract = -1.0_r8
 lower = -1
 upper = -1
 
-! Bounds check
-if(height < bounds(1)) ier = 998
-if(height > bounds(nbounds)) ier = 9998
+! FIXME:
+! difficult to allow extrapolation because this routine only returns
+! an upper and lower level, plus a fraction.  it would have to return
+! a fraction < 0 or > 1 and then the calling code would have to test for
+! and support extrapolation at some later point in the code.  so ignore
+! extrapolation for now.
+!
+! do try to convert heights to grid levels and if within the limits
+! return the top or bottom level as the value.  convert lower locations
+! based on bounds(1)/(2) and upper on bounds(nbounds-1)/bounds(nbounds)
+
+! Bounds checks:
+
+! too low?
+if(height < bounds(1)) then
+   if(outside_grid_level_tolerance <= 0.0_r8) then
+      ier = 998
+   else
+      ! let points outside the grid but "close enough" use the
+      ! bottom level as the height.  hlevel should come back < 1
+      hlevel = extrapolate_level(height, bounds(1), bounds(2))
+      if (hlevel + outside_grid_level_tolerance >= 1.0_r8) then
+         fract = 0.0_r8
+         lower = 1
+         upper = 2
+      endif
+   endif
+endif
+
+! too high?
+if(height > bounds(nbounds)) then
+   if(outside_grid_level_tolerance <= 0.0_r8) then
+      ier = 9998
+   else
+      ! let points outside the grid but "close enough" use the
+      ! top level as the height.  hlevel should come back > nbounds
+      hlevel = extrapolate_level(height, bounds(nbounds-1), bounds(nbounds))
+      if (hlevel - outside_grid_level_tolerance <= real(nbounds, r8)) then
+         fract = 1.0_r8
+         lower = nbounds-1
+         upper = nbounds
+      endif
+   endif
+endif
+
 if (ier /= 0) return
 
 ! Search two adjacent layers that enclose the given point
@@ -4865,10 +4924,18 @@ do i = 2, nbounds
       if (pressure(i) == pressure(i-1)) then
          fract = 0.0_r8
       else if (log_p_vert_interp) then
-         fract = exp((log(p) - log(pressure(i-1))) / &
-                    (log(pressure(i)) - log(pressure(i-1))))
+         fract = (log(p) - log(pressure(i-1))) / &
+                 (log(pressure(i)) - log(pressure(i-1)))
       else
          fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
+      endif
+      ! shouldn't happen but with roundoff i suppose could be one
+      ! least-significant-bit out of range. so don't print unless some
+      ! level of debugging is enabled.
+      if ((fract < 0.0_r8 .or. fract > 1.0_r8) .and. debug > 0) then
+         print '(A,3F26.18,2I4,F22.18)', &
+          "find_pressure_bounds: bad fract!  p_in, pr(i-1), pr(i), lower, upper, fract = ", &
+           p, pressure(i-1), pressure(i), lower, upper, fract
       endif
 
       if ((debug > 9) .and. do_output()) print '(A,3F26.18,2I4,F22.18)', &
@@ -5432,6 +5499,12 @@ nedges = 0
 edge_list = 0
 
 select case (use_rbf_option)
+  case (0)
+      ! use edges on the closest cell only.
+      nedges = nEdgesOnCell(cellid)
+      do i=1, nedges
+         edge_list(i) = edgesOnCell(i, cellid)
+      enddo
   case (1)
       ! fill in the number of unique edges and fills the
       ! edge list with the edge ids.  the code that detects
@@ -6083,6 +6156,42 @@ enddo
 ier = 0
 
 end subroutine move_pressure_to_edges
+
+!------------------------------------------------------------
+
+function extrapolate_level(h, lb, ub)
+
+! Given a test height and two level heights, extrapolate the
+! actual level number which would correspond to that height.
+
+real(r8), intent(in) :: h
+real(r8), intent(in) :: lb
+real(r8), intent(in) :: ub
+real(r8)             :: extrapolate_level
+
+real(r8) :: thickness, fract
+
+thickness = ub - lb
+
+if (h < lb) then
+   ! extrapolate down - not in data values but in level
+   ! relative to the height difference in levels 1-2
+   extrapolate_level = lb - (((lb - h) + lb) / thickness)
+   
+else if (h > ub) then
+   ! extrapolate up - not in data values but in level
+   ! relative to the height difference in levels nb-1 to nb
+   extrapolate_level = ub + ((ub - (h - ub)) / thickness)
+
+else
+   write(string1, *) h, ' not outside range of ', lb, ' and ', ub
+   call error_handler(E_ERR, 'extrapolate_level', &
+                      'extrapolate code called for height not out of range', &
+                      source, revision, revdate, text2=string1)
+endif
+
+if (debug > 1) print *, 'extrapolate: ', h, lb, ub, extrapolate_level
+end function extrapolate_level
 
 !------------------------------------------------------------
 
