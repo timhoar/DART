@@ -81,50 +81,43 @@ while($state_copy <= $num_states)
 
    cp -p tiegcm.nml tiegcm.nml.original
 
-   set start_year   = " START_YEAR = "`head -n 1 namelist_update | tail -n 1`
-   set start_day    = " START_DAY = "`head -n 2 namelist_update | tail -n 1`
+   set start_year   = " START_YEAR = "`  head -n 1 namelist_update | tail -n 1`
+   set start_day    = " START_DAY = "`   head -n 2 namelist_update | tail -n 1`
    set source_start = " SOURCE_START = "`head -n 3 namelist_update | tail -n 1`
-   set start        = " START = "`head -n 3 namelist_update | tail -n 1`
-   set secstart     = " SECSTART = "`head -n 3 namelist_update | tail -n 1`
-   set stop         = " STOP = "`head -n 4 namelist_update | tail -n 1`
-   set secstop      = " SECSTOP = "`head -n 4 namelist_update | tail -n 1`
-   set hist         = " HIST = "`head -n 5 namelist_update | tail -n 1`
-   set sechist      = " SECHIST = "`head -n 5 namelist_update | tail -n 1`
-   set f107value    = `head -n 6 namelist_update | tail -n 1`
+   set start        = " START = "`       head -n 3 namelist_update | tail -n 1`
+   set secstart     = " SECSTART = "`    head -n 3 namelist_update | tail -n 1`
+   set stop         = " STOP = "`        head -n 4 namelist_update | tail -n 1`
+   set secstop      = " SECSTOP = "`     head -n 4 namelist_update | tail -n 1`
+   set hist         = " HIST = "`        head -n 5 namelist_update | tail -n 1`
+   set sechist      = " SECHIST = "`     head -n 5 namelist_update | tail -n 1`
+   set save         = " SAVE = "`        head -n 5 namelist_update | tail -n 1`
+   set secsave      = " SECSAVE = "`     head -n 5 namelist_update | tail -n 1`
+   set f107value    = `                  head -n 6 namelist_update | tail -n 1`
    set f107         = " F107 = ""$f107value"
 
+# According to Alex, these are deprecated from most versions of tiegcm
+#  -e 's/'"`grep 'SAVE'         tiegcm.nml.original | head -n 1`"'/'"$save"'/' \
+#  -e 's/'"`grep 'SECSAVE'      tiegcm.nml.original`"'/'"$secsave"'/' \
+
+   sed \
+   -e 's/'"`grep 'START_YEAR'   tiegcm.nml.original`"'/'"$start_year"'/' \
+   -e 's/'"`grep 'START_DAY'    tiegcm.nml.original`"'/'"$start_day"'/' \
+   -e 's/'"`grep 'SOURCE_START' tiegcm.nml.original`"'/'"$source_start"'/' \
+   -e 's/'"`grep 'START'        tiegcm.nml.original | head -n 4 | tail -n 1`"'/'"$start"'/' \
+   -e 's/'"`grep 'STOP'         tiegcm.nml.original | head -n 1`"'/'"$stop"'/' \
+   -e 's/'"`grep 'HIST'         tiegcm.nml.original | head -n 1`"'/'"$hist"'/' \
+   -e 's/'"`grep 'SECSTART'     tiegcm.nml.original`"'/'"$secstart"'/' \
+   -e 's/'"`grep 'SECSTOP'      tiegcm.nml.original`"'/'"$secstop"'/' \
+   -e 's/'"`grep 'SECHIST'      tiegcm.nml.original`"'/'"$sechist"'/' \
+   tiegcm.nml.original >! tiegcm.nml.update
+
    if ( $f107value != "NA" ) then
-
-   sed \
-   -e 's/'"`grep 'START_YEAR' tiegcm.nml.original`"'/'"$start_year"'/' \
-   -e 's/'"`grep 'START_DAY' tiegcm.nml.original`"'/'"$start_day"'/' \
-   -e 's/'"`grep 'SOURCE_START' tiegcm.nml.original`"'/'"$source_start"'/' \
-   -e 's/'"`grep 'START' tiegcm.nml.original | head -n 4 | tail -n 1`"'/'"$start"'/' \
-   -e 's/'"`grep 'STOP' tiegcm.nml.original | head -n 1`"'/'"$stop"'/' \
-   -e 's/'"`grep 'HIST' tiegcm.nml.original | head -n 1`"'/'"$hist"'/' \
-   -e 's/'"`grep 'SECSTART' tiegcm.nml.original`"'/'"$secstart"'/' \
-   -e 's/'"`grep 'SECSTOP' tiegcm.nml.original`"'/'"$secstop"'/' \
-   -e 's/'"`grep 'SECHIST' tiegcm.nml.original`"'/'"$sechist"'/' \
-   -e 's/'"`grep 'F107' tiegcm.nml.original | head -n 1`"'/'"$f107"'/' \
-   tiegcm.nml.original >! tiegcm.nml.update
-
+      # one more thing to change
+      sed -e 's/'"`grep 'F107'  tiegcm.nml.update | head -n 1`"'/'"$f107"'/' \
+      tiegcm.nml.update >! tiegcm.nml
    else
-
-   sed \
-   -e 's/'"`grep 'START_YEAR' tiegcm.nml.original`"'/'"$start_year"'/' \
-   -e 's/'"`grep 'START_DAY' tiegcm.nml.original`"'/'"$start_day"'/' \
-   -e 's/'"`grep 'SOURCE_START' tiegcm.nml.original`"'/'"$source_start"'/' \
-   -e 's/'"`grep 'START' tiegcm.nml.original | head -n 4 | tail -n 1`"'/'"$start"'/' \
-   -e 's/'"`grep 'STOP' tiegcm.nml.original | head -n 1`"'/'"$stop"'/' \
-   -e 's/'"`grep 'HIST' tiegcm.nml.original | head -n 1`"'/'"$hist"'/' \
-   -e 's/'"`grep 'SECSTART' tiegcm.nml.original`"'/'"$secstart"'/' \
-   -e 's/'"`grep 'SECSTOP' tiegcm.nml.original`"'/'"$secstop"'/' \
-   -e 's/'"`grep 'SECHIST' tiegcm.nml.original`"'/'"$sechist"'/' \
-   tiegcm.nml.original >! tiegcm.nml.update
-     
+      mv tiegcm.nml.update tiegcm.nml  
    endif
-
-   mv tiegcm.nml.update tiegcm.nml  
 
    #----------------------------------------------------------------------
    # Block 3: Run the model
@@ -168,8 +161,8 @@ while($state_copy <= $num_states)
 
    @ state_copy++
    @ ensemble_member_line = $ensemble_member_line + 3
-   @ input_file_line = $input_file_line + 3
-   @ output_file_line = $output_file_line + 3
+   @ input_file_line      = $input_file_line + 3
+   @ output_file_line     = $output_file_line + 3
 end
 
 # Change back to original directory 
