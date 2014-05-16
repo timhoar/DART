@@ -167,7 +167,7 @@ set EXPERIMENT = /glade/scratch/tmatsuo/2002_03_28_tiegcm
 # model advance directory. 
 #-----------------------------------------------------------------------------
 
-set ENSEMBLESTRING = `/usr/local/bin/grep -A 42 filter_nml input.nml | grep ens_size`
+set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
 set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
 @ i = 1

@@ -199,6 +199,13 @@ interface prog_var_to_vector
    module procedure var4d_to_vector
 end interface
 
+interface apply_attributes
+   module procedure apply_attributes_1D
+   module procedure apply_attributes_2D
+   module procedure apply_attributes_3D
+   module procedure apply_attributes_4D
+end interface
+
 !===============================================================================
 contains
 !===============================================================================
@@ -409,7 +416,6 @@ if ( .not. module_initialized ) call static_init_model
 
 ! Default for successful return
 istatus = 0
-vstatus = 0
 
 ! TIEGCM should not be able to use obs_def_upper_atm_mod:get_expected_gnd_gps_vtec()
 ! This test makes sure that routine is not supported.
@@ -482,25 +488,20 @@ endif
 ! Now, need to find the values for the four corners
 if ((vert_is_undef(location)) .or. (ikind == KIND_VERTICAL_TEC)) then !2D fields
 
-  if (ikind == KIND_VERTICAL_TEC) then
-
-    val(1, 1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below))
-    val(1, 2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above))
-    val(2, 1) = x(get_index(ivar, indx1=lon_above, indx2=lat_below))
-    val(2, 2) = x(get_index(ivar, indx1=lon_above, indx2=lat_above))
-  endif
+   val(1,1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below))
+   val(1,2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above))
+   val(2,1) = x(get_index(ivar, indx1=lon_above, indx2=lat_below))
+   val(2,2) = x(get_index(ivar, indx1=lon_above, indx2=lat_above))
 
 else !3D fields
 
-  ! get_val() must return/interpolate the state vector locations to the same
-  ! vertical height as the observation. THEN, it is the same as the 2D case.
+  ! vert_interp() must return/interpolate the surrounding state vector locations to 
+  ! the same vertical height as the observation. THEN, it is the same as the 2D case.
 
-   call error_handler(E_MSG,'model_interpolate','TJH FIXME 3D vertical check', source, revision, revdate)
-
-                     call get_val(val(1,1),x,lon_below,lat_below,height,ikind,vstatus)
-   if (vstatus == 0) call get_val(val(1,2),x,lon_below,lat_above,height,ikind,vstatus)
-   if (vstatus == 0) call get_val(val(2,1),x,lon_above,lat_below,height,ikind,vstatus)
-   if (vstatus == 0) call get_val(val(2,2),x,lon_above,lat_above,height,ikind,vstatus)
+                     call vert_interp(x,lon_below,lat_below,height,ikind,val(1,1),istatus)
+   if (istatus == 0) call vert_interp(x,lon_below,lat_above,height,ikind,val(1,2),istatus)
+   if (istatus == 0) call vert_interp(x,lon_above,lat_below,height,ikind,val(2,1),istatus)
+   if (istatus == 0) call vert_interp(x,lon_above,lat_above,height,ikind,val(2,2),istatus)
 
 endif
 
@@ -513,7 +514,7 @@ endif
 ! actually perform the bilinear interpolation to get the value at the
 ! (arbitrary) desired location.
 
-istatus = vstatus
+!istatus = vstatus
 if(istatus /= 1) then
    do i = 1, 2
       a(i) = lon_fract * val(2, i) + (1.0_r8 - lon_fract) * val(1, i)
@@ -1372,7 +1373,6 @@ ReadVariable: do ivar = 1,nfields
    endif
 
    if (trim(progvar(ivar)%varname) == 'ZG') then
-      ! FIXME ... convert ZG to meters here and be done with it ...
       call prog_var_to_vector(ivar, ZG, statevec)
       deallocate(ZG)
       cycle ReadVariable
@@ -1440,6 +1440,7 @@ ReadVariable: do ivar = 1,nfields
       call nc_check(nf90_get_var(ncid, VarID, values=temp1D, &
               start = mystart(1:ncNdims), count = mycount(1:ncNdims)), &
               'read_TIEGCM_restart', 'get_var '//trim(string2))
+      call apply_attributes(ivar, ncid, VarID, temp1D)
       call prog_var_to_vector(ivar, temp1D, statevec)
       deallocate(temp1D)
 
@@ -1448,6 +1449,7 @@ ReadVariable: do ivar = 1,nfields
       call nc_check(nf90_get_var(ncid, VarID, values=temp2D, &
               start = mystart(1:ncNdims), count = mycount(1:ncNdims)), &
               'read_TIEGCM_restart', 'get_var '//trim(string2))
+      call apply_attributes(ivar, ncid, VarID, temp2D)
       call prog_var_to_vector(ivar, temp2D, statevec)
       deallocate(temp2D)
 
@@ -1456,6 +1458,7 @@ ReadVariable: do ivar = 1,nfields
       call nc_check(nf90_get_var(ncid, VarID, values=temp3D, &
               start = mystart(1:ncNdims), count = mycount(1:ncNdims)), &
               'read_TIEGCM_restart', 'get_var '//trim(string2))
+      call apply_attributes(ivar, ncid, VarID, temp3D)
       call prog_var_to_vector(ivar, temp3D, statevec)
       deallocate(temp3D)
 
@@ -1464,7 +1467,8 @@ ReadVariable: do ivar = 1,nfields
       call nc_check(nf90_get_var(ncid, VarID, values=temp4D, &
               start = mystart(1:ncNdims), count = mycount(1:ncNdims)), &
               'read_TIEGCM_restart', 'get_var '//trim(string2))
-      call fill_top(ivar,temp4D,dimIDs,LevDimID,iLevDimID)
+      call apply_attributes(ivar, ncid, VarID, temp4D)
+!     call fill_top(ivar,temp4D,dimIDs,LevDimID,iLevDimID)   TJH FIXME ... is this needed ...
       call prog_var_to_vector(ivar, temp4D, statevec)
       deallocate(temp4D)
    else
@@ -1490,7 +1494,8 @@ end subroutine read_TIEGCM_restart
 
 subroutine update_TIEGCM_restart(statevec, filename, dart_time)
 ! Updates TIEGCM restart file fields with the reshaped variables
-! in the DART state vector
+! in the DART state vector. The variable MISSING attribute has to be
+! reinstated ... etc.
 
 real(r8), dimension(:), intent(in) :: statevec
 character(len=*),       intent(in) :: filename
@@ -1646,11 +1651,13 @@ integer  :: istatus
 
 location = set_location(locarray(1), locarray(2), locarray(3), VERTISHEIGHT)
 
-! test get_val() and print stuff ...
+! FIXME test vert_interp() and print stuff ...
+!
+! call vert_interp(x,lon_below,lat_below,height,ikind,val(1,1),istatus)
 
 call model_interpolate(x, location, KIND_TEMPERATURE, obs_val, istatus)
 
-write(*,*)'TEMPERATURE value at ',locarray,' is ',obs_val,' stautus is ',istatus
+write(*,*)'TEMPERATURE value at ',locarray,' is ',obs_val,' status is ',istatus
 
 end subroutine test_interpolate
 
@@ -2152,7 +2159,6 @@ if (include_vTEC_in_state) then
    ! if we are doing prior state-space inflation, this has an impact on the
    ! VTEC in the state vector. Also ... same for ZG ... this is not great.
 
-
    ! NE
    ! TI
    ! TE
@@ -2307,7 +2313,9 @@ FillLoop : do ivar = 1, ngood
          progvar(ivar)%has_missing_value = .true.
       endif
    else
-      ! FIXME ... do some error checking ... do we support variables other than 'double'
+      ! The missing_value and _FillValue attributes, specifically ...
+      write(string1,*)'do not support variables of type ',progvar(ivar)%xtype
+      call error_handler(E_ERR,'verify_variables',string1,source,revision,revdate)
    endif
 
    varsize = 1
@@ -2326,7 +2334,6 @@ FillLoop : do ivar = 1, ngood
       if (trim(dimname) == 'ilev') progvar(ivar)%verticalvar = 'ilev'
 
       ! FIXME ... TN,UN,VN,O1,O2 actually have useless 'top' levels.
-      !       ... should we skip reading/declaring them.
 
       progvar(ivar)%dimlens( i) = dimlen
       progvar(ivar)%dimnames(i) = dimname
@@ -2419,8 +2426,6 @@ integer :: levdim
 
 levdim = 0
 
-! FIXME ... check ... 
-
 if ( trim(progvar(ivar)%verticalvar) == 'lev') then  ! on midpoints
 
    DIMLoop : do i = 1,size(dimIDs)
@@ -2433,6 +2438,7 @@ if ( trim(progvar(ivar)%verticalvar) == 'lev') then  ! on midpoints
    if (levdim == 0) then
       write(string1,*)'cannot find level dimension for ['//trim(progvar(ivar)%varname)//']'
       call error_handler(E_ERR,'fill_top',string1,source,revision,revdate)
+
    elseif (levdim == 1) then
       nlevels   = size(temp4D,levdim)
       nlevelsm1 = nlevels - 1
@@ -2452,6 +2458,7 @@ if ( trim(progvar(ivar)%verticalvar) == 'lev') then  ! on midpoints
       nlevels   = size(temp4D,levdim)
       nlevelsm1 = nlevels - 1
       temp4D(:,:,:,nlevels) = temp4D(:,:,:,nlevelsm1)
+
    endif
 
 endif
@@ -2638,15 +2645,15 @@ end subroutine create_vtec
 !-------------------------------------------------------------------------------
 
 
-subroutine get_val(val, x, lon_index, lat_index, height, ikind, istatus)
+subroutine vert_interp(x, lon_index, lat_index, height, ikind, val, istatus)
 ! returns the value at an arbitrary height on an existing horizontal grid location.
 ! istatus == 0 is a 'good' return code.
 
-real(r8), intent(out) :: val
 real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: lon_index, lat_index
 real(r8), intent(in)  :: height
 integer,  intent(in)  :: ikind
+real(r8), intent(out) :: val
 integer,  intent(out) :: istatus
 
 integer  :: ivar
@@ -2671,7 +2678,7 @@ lev_bottom = 0
 ! but filled in DART with the values at nlev -1
 
 write(string1,*) 'FIXME routine needs to be checked thoroughly'
-call error_handler(E_MSG,'get_val',string1,source,revision,revdate)
+call error_handler(E_MSG,'vert_interp',string1,source,revision,revdate)
 
 ivar = -1
 
@@ -2692,22 +2699,19 @@ if (ivar < 0 ) then
    ! the routine. the 'return' must stay, however ...
    write(string1,*)'DART state does not have anything with kind ',ikind
    write(string2,*)get_raw_obs_kind_name(ikind)
-   call error_handler(E_MSG,'get_val',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_MSG,'vert_interp',string1,source,revision,revdate,text2=string2)
    return
 else
    write(string1,*)'DART state using kind ',ikind
    write(string2,*)get_raw_obs_kind_name(ikind)
    write(string3,*)trim(progvar(ivar)%varname)
-   call error_handler(E_MSG,'get_val',string1,source,revision,revdate,&
+   call error_handler(E_MSG,'vert_interp',string1,source,revision,revdate,&
                                 text2=string2, text3=string3)
 endif
 
-! FIXME ... convert ZG to m when we stick it in the dart state vector?
-!               would remove all the divide by 100's
 ! I think we can use the 'get_height() routine for a lot of this if we
 ! want to use the ensemble mean height.
 
-! FIXME ... originally ... if (ikind == KIND_ELECTRON_DENSITY) then
 if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
 
    zgrid_bottom = x(get_index(ivarZG, lon_index, lat_index,     1)) / 100.0_r8  ![m] = /100 [cm]
@@ -2721,7 +2725,7 @@ if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
 
       zgrid = x(get_index(ivarZG, lon_index, lat_index, k)) / 100.0_r8 ![m] = /100 [cm]
 
-      if (height   <= zgrid) then
+      if (height <= zgrid) then
          lev_top    = k
          lev_bottom = lev_top - 1
          delta_z    = zgrid - x(get_index(ivarZG,lon_index,lat_index,lev_bottom)) / 100.0_r8
@@ -2754,7 +2758,12 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
    if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
 
    ! Figure out what level is above/below, and by how much
-   h_loop_midpoint:do k = 2, nlev-1
+   h_loop_midpoint: do k = 2, nlev-1
+
+     lev_bottom = k-1     
+     lev_top    = k
+
+     write(*,*)'TJH ivarZG is ',ivarZG
 
      zgrid_lower = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
              (x(get_index(ivarZG, lon_index, lat_index, k-1 )) + &
@@ -2765,12 +2774,12 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
               x(get_index(ivarZG, lon_index, lat_index, k+1)))
 
      if (height  <= zgrid_upper) then
-        lev_top=k
-        lev_bottom = k-1     
-        ! FIXME ... make sure delta_z is not zero
-        ! FIXME ... set lev_top & lev_bottom
-        delta_z   = zgrid_upper - zgrid_lower
-        frac_lev  = (zgrid_upper - height)/delta_z
+        if (zgrid_upper == zgrid_lower) then
+           frac_lev = 0.0_r8  ! Then the fraction doesnt matter ...
+        else
+           delta_z  = zgrid_upper - zgrid_lower
+           frac_lev = (zgrid_upper - height)/delta_z
+        endif
         exit h_loop_midpoint
      endif
 
@@ -2779,13 +2788,13 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
 else
    write(string1,*)trim(progvar(ivar)%varname), &
        ' has an unknown vertical coordinate system ',trim(progvar(ivar)%verticalvar)
-   call error_handler(E_MSG,'get_val', string1, source, revision, revdate )
+   call error_handler(E_MSG,'vert_interp', string1, source, revision, revdate )
 endif
 
 ! Check to make sure we didn't fall through the h_loop ... unlikely (impossible?)
 if ( (frac_lev == MISSING_R8) .or. (lev_top == 0) .or. (lev_bottom == 0) ) then
    write(string1,*)'Should not be here ... fell through loop.'
-   call error_handler(E_MSG,'get_val', string1, source, revision, revdate )
+   call error_handler(E_MSG,'vert_interp', string1, source, revision, revdate )
    return
 endif
 
@@ -2807,7 +2816,7 @@ else
    val        =     frac_lev *     val_bottom  + (1.0 - frac_lev) *     val_top
 endif
 
-end subroutine get_val
+end subroutine vert_interp
 
 
 !-------------------------------------------------------------------------------
@@ -3039,12 +3048,19 @@ if ( progvar(ivar)%rank == 0 ) then  ! handle scalars
 
    if ( limit ) then
       if (progvar(ivar)%rangeRestricted > 2) then
-         if (data_0d < progvar(ivar)%minvalue) data_0d = progvar(ivar)%minvalue
-         if (data_0d > progvar(ivar)%maxvalue) data_0d = progvar(ivar)%maxvalue
+         if ((data_0d /= MISSING_R8) .and. &
+             (data_0d < progvar(ivar)%minvalue)) data_0d = progvar(ivar)%minvalue
+         if ((data_0d /= MISSING_R8) .and. &
+             (data_0d > progvar(ivar)%maxvalue)) data_0d = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 1) then
-         if (data_0d > progvar(ivar)%maxvalue) data_0d = progvar(ivar)%maxvalue
+         if ((data_0d /= MISSING_R8) .and. &
+             (data_0d > progvar(ivar)%maxvalue)) data_0d = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 0) then
-         if (data_0d < progvar(ivar)%minvalue) data_0d = progvar(ivar)%minvalue
+         if ((data_0d /= MISSING_R8) .and. &
+             (data_0d < progvar(ivar)%minvalue)) data_0d = progvar(ivar)%minvalue
+      endif
+      if ( progvar(ivar)%has_missing_value ) then
+         if (data_0d == MISSING_R8) data_0d = progvar(ivar)%missingR8
       endif
    endif
 
@@ -3071,12 +3087,19 @@ elseif ( numdims == 1 ) then
 
    if ( limit ) then
       if (progvar(ivar)%rangeRestricted > 2) then
-         where (data_1d_array < progvar(ivar)%minvalue) data_1d_array = progvar(ivar)%minvalue
-         where (data_1d_array > progvar(ivar)%maxvalue) data_1d_array = progvar(ivar)%maxvalue
+         where ((data_1d_array /= MISSING_R8) .and. &
+                (data_1d_array < progvar(ivar)%minvalue)) data_1d_array = progvar(ivar)%minvalue
+         where ((data_1d_array /= MISSING_R8) .and. &
+                (data_1d_array > progvar(ivar)%maxvalue)) data_1d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where (data_1d_array > progvar(ivar)%maxvalue) data_1d_array = progvar(ivar)%maxvalue
+         where ((data_1d_array /= MISSING_R8) .and. &
+                (data_1d_array > progvar(ivar)%maxvalue)) data_1d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 0) then
-         where (data_1d_array < progvar(ivar)%minvalue) data_1d_array = progvar(ivar)%minvalue
+         where ((data_1d_array /= MISSING_R8) .and. & 
+                (data_1d_array < progvar(ivar)%minvalue)) data_1d_array = progvar(ivar)%minvalue
+      endif
+      if ( progvar(ivar)%has_missing_value ) then
+         where (data_1d_array == MISSING_R8) data_1d_array = progvar(ivar)%missingR8
       endif
    endif
 
@@ -3106,12 +3129,19 @@ elseif ( numdims == 2 ) then
 
    if ( limit ) then
       if (progvar(ivar)%rangeRestricted > 2) then
-         where (data_2d_array < progvar(ivar)%minvalue) data_2d_array = progvar(ivar)%minvalue
-         where (data_2d_array > progvar(ivar)%maxvalue) data_2d_array = progvar(ivar)%maxvalue
+         where ((data_2d_array /= MISSING_R8) .and. &
+                (data_2d_array < progvar(ivar)%minvalue)) data_2d_array = progvar(ivar)%minvalue
+         where ((data_2d_array /= MISSING_R8) .and. &
+                (data_2d_array > progvar(ivar)%maxvalue)) data_2d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where (data_2d_array > progvar(ivar)%maxvalue) data_2d_array = progvar(ivar)%maxvalue
+         where ((data_2d_array /= MISSING_R8) .and. &
+                (data_2d_array > progvar(ivar)%maxvalue)) data_2d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 0) then
-         where (data_2d_array < progvar(ivar)%minvalue) data_2d_array = progvar(ivar)%minvalue
+         where ((data_2d_array /= MISSING_R8) .and. &
+                (data_2d_array < progvar(ivar)%minvalue)) data_2d_array = progvar(ivar)%minvalue
+      endif
+      if ( progvar(ivar)%has_missing_value ) then
+         where (data_2d_array == MISSING_R8) data_2d_array = progvar(ivar)%missingR8
       endif
    endif
 
@@ -3143,13 +3173,21 @@ elseif ( numdims == 3 ) then
 
    if ( limit ) then
       if (progvar(ivar)%rangeRestricted > 2) then
-         where (data_3d_array < progvar(ivar)%minvalue) data_3d_array = progvar(ivar)%minvalue
-         where (data_3d_array > progvar(ivar)%maxvalue) data_3d_array = progvar(ivar)%maxvalue
+         where ((data_3d_array /= MISSING_R8) .and. &
+                (data_3d_array < progvar(ivar)%minvalue)) data_3d_array = progvar(ivar)%minvalue
+         where ((data_3d_array /= MISSING_R8) .and. &
+                (data_3d_array > progvar(ivar)%maxvalue)) data_3d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where (data_3d_array > progvar(ivar)%maxvalue) data_3d_array = progvar(ivar)%maxvalue
+         where ((data_3d_array /= MISSING_R8) .and. &
+                (data_3d_array > progvar(ivar)%maxvalue)) data_3d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 0) then
-         where (data_3d_array < progvar(ivar)%minvalue) data_3d_array = progvar(ivar)%minvalue
+         where ((data_3d_array /= MISSING_R8) .and. &
+                (data_3d_array < progvar(ivar)%minvalue)) data_3d_array = progvar(ivar)%minvalue
       endif
+      if ( progvar(ivar)%has_missing_value ) then
+         where (data_3d_array == MISSING_R8) data_3d_array = progvar(ivar)%missingR8
+      endif
+
    endif
 
    call nc_check(nf90_put_var(ncid, VarID, data_3d_array, &
@@ -3182,13 +3220,22 @@ elseif ( numdims == 4 ) then
 
    if ( limit ) then
       if (progvar(ivar)%rangeRestricted > 2) then
-         where (data_4d_array < progvar(ivar)%minvalue) data_4d_array = progvar(ivar)%minvalue
-         where (data_4d_array > progvar(ivar)%maxvalue) data_4d_array = progvar(ivar)%maxvalue
+         where ((data_4d_array /= MISSING_R8) .and. &
+                (data_4d_array < progvar(ivar)%minvalue)) data_4d_array = progvar(ivar)%minvalue
+         where ((data_4d_array /= MISSING_R8) .and. &
+                (data_4d_array > progvar(ivar)%maxvalue)) data_4d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where (data_4d_array > progvar(ivar)%maxvalue) data_4d_array = progvar(ivar)%maxvalue
+         where ((data_4d_array /= MISSING_R8) .and. &
+                (data_4d_array > progvar(ivar)%maxvalue)) data_4d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 0) then
-         where (data_4d_array < progvar(ivar)%minvalue) data_4d_array = progvar(ivar)%minvalue
+         where ((data_4d_array /= MISSING_R8) .and. &
+                (data_4d_array < progvar(ivar)%minvalue)) data_4d_array = progvar(ivar)%minvalue
       endif
+
+      if ( progvar(ivar)%has_missing_value ) then
+         where (data_4d_array == MISSING_R8) data_4d_array = progvar(ivar)%missingR8
+      endif
+
    endif
 
    call nc_check(nf90_put_var(ncid, VarID, data_4d_array, &
@@ -3223,13 +3270,22 @@ elseif ( numdims == 5 ) then
 
    if ( limit ) then
       if (progvar(ivar)%rangeRestricted > 2) then
-         where (data_5d_array < progvar(ivar)%minvalue) data_5d_array = progvar(ivar)%minvalue
-         where (data_5d_array > progvar(ivar)%maxvalue) data_5d_array = progvar(ivar)%maxvalue
+         where ((data_5d_array /= MISSING_R8) .and. &
+                (data_5d_array < progvar(ivar)%minvalue)) data_5d_array = progvar(ivar)%minvalue
+         where ((data_5d_array /= MISSING_R8) .and. &
+                (data_5d_array > progvar(ivar)%maxvalue)) data_5d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where (data_5d_array > progvar(ivar)%maxvalue) data_5d_array = progvar(ivar)%maxvalue
+         where ((data_5d_array /= MISSING_R8) .and. &
+                (data_5d_array > progvar(ivar)%maxvalue)) data_5d_array = progvar(ivar)%maxvalue
       elseif ( progvar(ivar)%rangeRestricted > 0) then
-         where (data_5d_array < progvar(ivar)%minvalue) data_5d_array = progvar(ivar)%minvalue
+         where ((data_5d_array /= MISSING_R8) .and. &
+                (data_5d_array < progvar(ivar)%minvalue)) data_5d_array = progvar(ivar)%minvalue
       endif
+
+      if ( progvar(ivar)%has_missing_value ) then
+         where (data_5d_array == MISSING_R8) data_5d_array = progvar(ivar)%missingR8
+      endif
+
    endif
 
    call nc_check(nf90_put_var(ncid, VarID, data_5d_array, &
@@ -3665,6 +3721,98 @@ endif
 
 end subroutine SetVariableLimits
 
+
+
+subroutine apply_attributes_1D(ivar, ncid, VarID, temp1D)
+! The missing value attributes have been determined by verify_variables()
+
+integer,  intent(in)    :: ivar
+integer,  intent(in)    :: ncid
+integer,  intent(in)    :: VarID
+real(r8), intent(inout) :: temp1D(:)
+
+integer  :: nfrc
+real(r8) :: missr8
+real(r4) :: missr4
+
+if (progvar(ivar)%xtype == NF90_FLOAT) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr4)
+   if (nfrc == NF90_NOERR) where (temp1D == missr4) temp1D = MISSING_R8
+elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr8)
+   if (nfrc == NF90_NOERR) where (temp1D == missr8) temp1D = MISSING_R8
+endif
+
+end subroutine apply_attributes_1D
+
+
+subroutine apply_attributes_2D(ivar, ncid, VarID, temp2D)
+! The missing value attributes have been determined by verify_variables()
+
+integer,  intent(in)    :: ivar
+integer,  intent(in)    :: ncid
+integer,  intent(in)    :: VarID
+real(r8), intent(inout) :: temp2D(:,:)
+
+integer  :: nfrc
+real(r8) :: missr8
+real(r4) :: missr4
+
+if (progvar(ivar)%xtype == NF90_FLOAT) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr4)
+   if (nfrc == NF90_NOERR) where (temp2D == missr4) temp2D = MISSING_R8
+elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr8)
+   if (nfrc == NF90_NOERR) where (temp2D == missr8) temp2D = MISSING_R8
+endif
+
+end subroutine apply_attributes_2D
+
+ 
+subroutine apply_attributes_3D(ivar, ncid, VarID, temp3D)
+! The missing value attributes have been determined by verify_variables()
+
+integer,  intent(in)    :: ivar
+integer,  intent(in)    :: ncid
+integer,  intent(in)    :: VarID
+real(r8), intent(inout) :: temp3D(:,:,:)
+
+integer  :: nfrc
+real(r8) :: missr8
+real(r4) :: missr4
+
+if (progvar(ivar)%xtype == NF90_FLOAT) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr4)
+   if (nfrc == NF90_NOERR) where (temp3D == missr4) temp3D = MISSING_R8
+elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr8)
+   if (nfrc == NF90_NOERR) where (temp3D == missr8) temp3D = MISSING_R8
+endif
+
+end subroutine apply_attributes_3D
+
+
+subroutine apply_attributes_4D(ivar, ncid, VarID, temp4D)
+! The missing value attributes have been determined by verify_variables()
+
+integer,  intent(in)    :: ivar
+integer,  intent(in)    :: ncid
+integer,  intent(in)    :: VarID
+real(r8), intent(inout) :: temp4D(:,:,:,:)
+
+integer  :: nfrc
+real(r8) :: missr8
+real(r4) :: missr4
+
+if (progvar(ivar)%xtype == NF90_FLOAT) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr4)
+   if (nfrc == NF90_NOERR) where (temp4D == missr4) temp4D = MISSING_R8
+elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+   nfrc = nf90_get_att(ncid, VarID, 'missing_value', missr8)
+   if (nfrc == NF90_NOERR) where (temp4D == missr8) temp4D = MISSING_R8
+endif
+
+end subroutine apply_attributes_4D
 
 
 !===============================================================================
