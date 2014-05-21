@@ -228,8 +228,8 @@ call get_close_obs(gc_type, loc, base_type, my_locs, my_kinds, &
          num_close, close_indices, close_distances)
 
 do x_ind = 1,num_close
-   write(*,*)'close # ',x_ind,' has distance ',close_distances(x_ind),&
-             'from element ',close_indices(x_ind)
+   write(*,*)'close #',x_ind, '(element', close_indices(x_ind), &
+             ') has distance',close_distances(x_ind),'"radians"'
 enddo
 
 deallocate(my_locs, my_kinds, close_indices, close_distances)
@@ -361,9 +361,7 @@ do i = 1,get_model_size()
 
 enddo
 
-if ( .not. matched ) then
-   write(*,*)'Nothing matched the vertical.'
-endif
+if ( .not. matched ) write(*,*)'Nothing matched the vertical exactly.'
 
 deallocate( thisdist )
 

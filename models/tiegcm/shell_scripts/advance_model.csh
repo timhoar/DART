@@ -42,6 +42,18 @@ cd       $temp_dir
 
 cp ../input.nml .
 
+# Ensure that the input.nml has the required value for
+# dart_to_model_nml:advance_time_present for this context.
+
+echo '1'                      >! ex_commands
+echo '/dart_to_model_nml'     >> ex_commands
+echo '/advance_time_present'  >> ex_commands
+echo ':s/\.false\./\.true\./' >> ex_commands
+echo ':wq'                    >> ex_commands
+
+( ex input.nml < ex_commands ) >& /dev/null
+\rm -f ex_commands
+
 # Loop through each state
 set state_copy = 1
 set ensemble_member_line = 1
@@ -56,18 +68,18 @@ while($state_copy <= $num_states)
 
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by model.
-   # We are going to take a TIEGCM netCDF restart file and simply overwrite the
-   # appropriate variables. The DART output file also has the 'advance_to'
-   # time - which must be communicated to the model ... through the tiegcm namelist
+   # Overwrite the appropriate variables of a TIEGCM netCDF restart file.
+   # The DART output file (namelist_update) has the 'advance_to' time 
+   # which must be communicated to the model ... through the tiegcm namelist
    #----------------------------------------------------------------------
 
-   # The EXPECTED input DART 'initial conditions' file name is 'temp_ic'
+   # The EXPECTED input DART 'output' file name is 'dart_restart'
 
    set tiesecond   = `printf "tiegcm_s.nc.%04d"         $ensemble_member`
    set tierestart  = `printf "tiegcm_restart_p.nc.%04d" $ensemble_member`
    set tieinp      = `printf "tiegcm.nml.%04d"          $ensemble_member`
 
-   cp -p   ../$input_file temp_ic             || exit 2
+   cp -p   ../$input_file dart_restart        || exit 2
    cp -p   ../$tiesecond  tiegcm_s.nc         || exit 2
    cp -p   ../$tierestart tiegcm_restart_p.nc || exit 2
    cp -p   ../$tieinp     tiegcm.nml          || exit 2
@@ -75,11 +87,9 @@ while($state_copy <= $num_states)
 #  echo "ensemble member $ensemble_member : before dart_to_model"
 #  ncdump -v mtime tiegcm_restart.nc
 
-   ../dart_to_model || exit 2         # dart_to_model generate namelist_update
+   ../dart_to_model || exit 2  # dart_to_model generates namelist_update
 
    # update tiegcm namelist variables   
-
-   cp -p tiegcm.nml tiegcm.nml.original
 
    set start_year   = " START_YEAR = "`  head -n 1 namelist_update | tail -n 1`
    set start_day    = " START_DAY = "`   head -n 2 namelist_update | tail -n 1`
@@ -92,32 +102,29 @@ while($state_copy <= $num_states)
    set sechist      = " SECHIST = "`     head -n 5 namelist_update | tail -n 1`
    set save         = " SAVE = "`        head -n 5 namelist_update | tail -n 1`
    set secsave      = " SECSAVE = "`     head -n 5 namelist_update | tail -n 1`
-   set f107value    = `                  head -n 6 namelist_update | tail -n 1`
-   set f107         = " F107 = ""$f107value"
+   set f107         = " F107 ="`         head -n 6 namelist_update | tail -n 1`
 
+# FIXME TOMOKO - can I remove the SAVE and SECSAVE ...
 # According to Alex, these are deprecated from most versions of tiegcm
-#  -e 's/'"`grep 'SAVE'         tiegcm.nml.original | head -n 1`"'/'"$save"'/' \
-#  -e 's/'"`grep 'SECSAVE'      tiegcm.nml.original`"'/'"$secsave"'/' \
+#  -e 's/'"`grep 'SAVE'         ../tiegcm.nml | head -n 1`"'/'"$save"'/' \
+#  -e 's/'"`grep 'SECSAVE'      ../tiegcm.nml`"'/'"$secsave"'/' \
+
+   # There is a danger that you match multiple things ... F107 and F107A,
+   # for example ... so try to grep whitespace too ...
+   # FIXME TOMOKO ... do we want F107 and F107A to be identical
 
    sed \
-   -e 's/'"`grep 'START_YEAR'   tiegcm.nml.original`"'/'"$start_year"'/' \
-   -e 's/'"`grep 'START_DAY'    tiegcm.nml.original`"'/'"$start_day"'/' \
-   -e 's/'"`grep 'SOURCE_START' tiegcm.nml.original`"'/'"$source_start"'/' \
-   -e 's/'"`grep 'START'        tiegcm.nml.original | head -n 4 | tail -n 1`"'/'"$start"'/' \
-   -e 's/'"`grep 'STOP'         tiegcm.nml.original | head -n 1`"'/'"$stop"'/' \
-   -e 's/'"`grep 'HIST'         tiegcm.nml.original | head -n 1`"'/'"$hist"'/' \
-   -e 's/'"`grep 'SECSTART'     tiegcm.nml.original`"'/'"$secstart"'/' \
-   -e 's/'"`grep 'SECSTOP'      tiegcm.nml.original`"'/'"$secstop"'/' \
-   -e 's/'"`grep 'SECHIST'      tiegcm.nml.original`"'/'"$sechist"'/' \
-   tiegcm.nml.original >! tiegcm.nml.update
-
-   if ( $f107value != "NA" ) then
-      # one more thing to change
-      sed -e 's/'"`grep 'F107'  tiegcm.nml.update | head -n 1`"'/'"$f107"'/' \
-      tiegcm.nml.update >! tiegcm.nml
-   else
-      mv tiegcm.nml.update tiegcm.nml  
-   endif
+   -e 's/'"`grep ' START_YEAR '   ../tiegcm.nml`"'/'"$start_year"'/' \
+   -e 's/'"`grep ' START_DAY '    ../tiegcm.nml`"'/'"$start_day"'/' \
+   -e 's/'"`grep ' SOURCE_START ' ../tiegcm.nml`"'/'"$source_start"'/' \
+   -e 's/'"`grep ' START '        ../tiegcm.nml | head -n 4 | tail -n 1`"'/'"$start"'/' \
+   -e 's/'"`grep ' STOP '         ../tiegcm.nml | head -n 1`"'/'"$stop"'/' \
+   -e 's/'"`grep ' HIST '         ../tiegcm.nml | head -n 1`"'/'"$hist"'/' \
+   -e 's/'"`grep ' SECSTART '     ../tiegcm.nml`"'/'"$secstart"'/' \
+   -e 's/'"`grep ' SECSTOP '      ../tiegcm.nml`"'/'"$secstop"'/' \
+   -e 's/'"`grep ' SECHIST '      ../tiegcm.nml`"'/'"$sechist"'/' \
+   -e 's/'"`grep ' F107 '         ../tiegcm.nml | head -n 1`"'/'"$f107"'/' \
+   ../tiegcm.nml >! tiegcm.nml
 
    #----------------------------------------------------------------------
    # Block 3: Run the model
@@ -145,7 +152,7 @@ while($state_copy <= $num_states)
    #
    # model_to_dart expects the tiegcm input file     to be 'tiegcm_restart_p.nc'
    # model_to_dart expects the tiegcm secondary file to be 'tiegcm_s.nc'
-   # model_to_dart writes out the DART file          to be 'temp_ud'
+   # model_to_dart writes out a file with the default name 'dart_ics'
    #
    # The updated information needs to be moved into CENTRALDIR in
    # preparation for the next cycle.
@@ -153,7 +160,7 @@ while($state_copy <= $num_states)
 
    ../model_to_dart || exit 4
 
-   mv temp_ud             ../$output_file || exit 4
+   mv dart_ics            ../$output_file || exit 4
    mv tiegcm_s.nc         ../$tiesecond   || exit 4
    mv tiegcm_restart_p.nc ../$tierestart  || exit 4
    mv tiegcm.nml          ../$tieinp      || exit 4

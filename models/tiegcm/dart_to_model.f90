@@ -105,12 +105,13 @@ endif
 
 file_name = get_restart_file_name()
 call update_TIEGCM_restart(x_state, trim(file_name), model_time)
-deallocate(x_state)
 
 if ( advance_time_present ) then
    ! update TIEGCM namelist variables used in advance_model.csh
    call write_tiegcm_time_control(trim(file_namelist_out), model_time, adv_to_time)
 endif
+
+deallocate(x_state)
 
 write(     *     ,*)''
 write(logfileunit,*)''
@@ -135,21 +136,23 @@ integer :: utsec, year, month, day, sec, model_year
 
 real(r8) :: f10_7
 
-! Write updated TIEGCM namelist variables
+! Write updated TIEGCM namelist variables to a text file.
+! It is up to advance_model.csh to update the TIEGCM namelist.
+
 file_unit = get_unit()
 open(unit = file_unit, file = trim(filename))
 
 call get_date(model_time, model_year, month, day, model_hour, model_minute, sec)
 jan1  = set_date(model_year,1,1)
-tbase = model_time - jan1    ! total time since the start of the year
+tbase = model_time - jan1               ! total time since the start of the year
 call get_time(tbase, utsec, model_doy)
-model_doy = model_doy + 1        ! add jan1 back in
+model_doy = model_doy + 1               ! add jan1 back in
 
 call get_date(adv_to_time, year, month, day, adv_to_hour, adv_to_minute, sec)
 jan1  = set_date(year,1,1)
-tbase = adv_to_time - jan1    ! total time since the start of the year
+tbase = adv_to_time - jan1              ! total time since the start of the year
 call get_time(tbase, utsec, adv_to_doy)
-adv_to_doy = adv_to_doy + 1      ! add jan1 back in
+adv_to_doy = adv_to_doy + 1             ! add jan1 back in
 
 ! Calculate number of hours to advance tiegcm
 target_time = adv_to_time - model_time
@@ -194,7 +197,7 @@ if (io /= 0 )then
 endif
 
 !F107
-f10_7 = get_f107_value()
+f10_7 = get_f107_value(x_state)
 
 write(file_unit, *, iostat = io ) f10_7 
 if (io /= 0 )then

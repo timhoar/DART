@@ -13,7 +13,7 @@
    restart_out_file_name = "perfect_restart",
    obs_seq_in_file_name  = "obs_seq.in",
    obs_seq_out_file_name = "obs_seq.out",
-   adv_ens_command       = "../shell_scripts/advance_model.csh",
+   adv_ens_command       = "./advance_model.csh",
    output_timestamps     = .false.,
    trace_execution       = .false.,
    output_forward_op_errors = .false.,
@@ -23,7 +23,7 @@
 
 &filter_nml
    async                    = 2,
-   adv_ens_command          = "../shell_scripts/advance_model.csh",
+   adv_ens_command          = "./advance_model.csh",
    ens_size                 = 90,
    start_from_restart       = .true.,
    output_restart           = .true.,
@@ -99,14 +99,8 @@
 # 3: minimum value - as a character string - if none, use 'NA'
 # 4: maximum value - as a character string - if none, use 'NA'
 # 5: what file contains the variable - anything from 'restart' also gets UPDATED BY DART.
-
-&model_nml
-   debug                      = 3,
-   output_state_vector        = .false.,
-   tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
-   tiegcm_secondary_file_name = 'tiegcm_s.nc',
-   tiegcm_namelist_file_name  = 'tiegcm.nml',
-   estimate_f10_7             = .true.,
+#
+# This is an example of how to restrict the range of each variable 
    variables      = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',
                     'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',
                     'TN_NM', 'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',
@@ -120,8 +114,30 @@
                     'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
                     'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',
                     'ZG',    'KIND_GEOPOTENTIAL_HEIGHT',       'NA',      'NA',      'secondary',
-   /
                     'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',
+
+&model_nml
+   debug                      = 1,
+   output_state_vector        = .false.,
+   tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
+   tiegcm_secondary_file_name = 'tiegcm_s.nc',
+   tiegcm_namelist_file_name  = 'tiegcm.nml',
+   variables      = 'NE',    'KIND_ELECTRON_DENSITY',          'NA',      'NA',      'restart',
+                    'TN',    'KIND_TEMPERATURE',               'NA',      'NA',      'restart',
+                    'TN_NM', 'KIND_TEMPERATURE',               'NA',      'NA',      'restart',
+                    'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','NA',      'NA',      'restart',
+                    'O1_NM', 'KIND_ATOMIC_OXYGEN_MIXING_RATIO','NA',      'NA',      'restart',
+                    'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', 'NA',      'NA',      'restart',
+                    'O2_NM', 'KIND_MOLEC_OXYGEN_MIXING_RATIO', 'NA',      'NA',      'restart',
+                    'UN',    'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'UN_NM', 'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'VN',    'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
+                    'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',
+                    'ZG',    'KIND_GEOPOTENTIAL_HEIGHT',       'NA',      'NA',      'secondary',
+                    'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',
+   /
+
 
 &model_to_dart_nml
    file_out      = 'dart_ics'
@@ -154,7 +170,7 @@
    /
 
 &assim_model_nml
-   write_binary_restart_files = .false.,
+   write_binary_restart_files = .true.,
    netCDF_large_file_support  = .false.
    /
 
@@ -288,6 +304,6 @@
    advance_time_present = .false.,
    verbose              = .true.,
    x_ind                = 36288,
-   loc_of_interest      = 240.0, 12.49, 100000.0,
+   loc_of_interest      = 240.0, 12.49, 200000.0,
    /
 
