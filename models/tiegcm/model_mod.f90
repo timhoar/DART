@@ -179,7 +179,7 @@ real(r8), allocatable  :: ens_mean(:)
 ! FOR NOW OBS LOCATIONS ARE EXPECTED GIVEN IN HEIGHT [m],
 ! AND SO VERTICAL LOCALIZATION COORDINATE IS *always* HEIGHT
 ! (note that gravity adjusted geopotential height (ZG)
-!  read in from "tiegcm_s.nc")
+!  read in from "tiegcm_s.nc" *WARNING* ZG is 'cm', DART is mks)
 
 real(r8), allocatable, dimension(:,:,:) :: ZG
 integer               :: ivarZG
@@ -401,7 +401,7 @@ real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
 
 integer  :: ivar
-integer  :: i, vstatus, which_vert
+integer  :: i, which_vert
 integer  :: lat_below, lat_above, lon_below, lon_above
 integer  :: zero_lon_index
 real(r8) :: lon_fract, lat_fract
@@ -518,8 +518,7 @@ endif
 ! actually perform the bilinear interpolation to get the value at the
 ! (arbitrary) desired location.
 
-!istatus = vstatus
-if(istatus /= 1) then
+if ( (istatus == 0) .or. (istatus == 2) ) then
    do i = 1, 2
       a(i) = lon_fract * val(2, i) + (1.0_r8 - lon_fract) * val(1, i)
    end do
@@ -1985,6 +1984,7 @@ end subroutine read_TIEGCM_definition
 
 subroutine read_TIEGCM_secondary(file_name)
 ! Read TIEGCM Geopotential (ZG) from a tiegcm secondary output file
+! Convert from cm to meters for location purposes.
 
 character(len=*), intent(in):: file_name
 
@@ -2017,12 +2017,20 @@ if (nf90_get_att(ncid, VarID, 'missing_value' , spvalR8) == NF90_NOERR) then
    where(ZG == spvalR8) ZG = MISSING_R8
 endif
 
-! FIXME ... check units and convert them to meters if need be.
-!if (nf90_get_att(ncid, VarID, 'units' , string1) == NF90_NOERR) then
-!   if(trim(string1) == 'cm') then
-!      where(ZG /= MISSING_R8) ZG = ZG/100.0_r8
-!   endif
-!endif
+! ... check units and convert them to meters if need be.
+if (nf90_get_att(ncid, VarID, 'units' , string1) == NF90_NOERR) then
+   if(trim(string1) == 'cm') then
+      call error_handler(E_MSG,'read_TIEGCM_secondary', &
+          'Converting ZG from cm to meters.')
+      where(ZG /= MISSING_R8) ZG = ZG/100.0_r8
+   elseif(trim(string1) == 'm') then
+      call error_handler(E_MSG,'read_TIEGCM_secondary', &
+          'ZG already in meters.')
+   else
+      call error_handler(E_ERR,'read_TIEGCM_secondary', &
+          'ZG has unknown units',source, revision, revdate,text2=trim(string1))
+   endif
+endif
 
 call nc_check(nf90_close(ncid),'read_TIEGCM_secondary', 'close')
 
@@ -2313,7 +2321,9 @@ FillLoop : do ivar = 1, ngood
       progvar(ivar)%long_name = varname
    endif
 
-   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
+   if ( trim(varname) == 'ZG' )  then
+      progvar(ivar)%units = 'meters'  ! converted as necessary in read_TIEGCM_secondary
+   elseif( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
       call nc_check( nf90_get_att(ncid, VarID, 'units' , progvar(ivar)%units), &
                   'verify_variables', 'get_att units '//trim(string2))
    else
@@ -2715,8 +2725,8 @@ endif
 
 if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
 
-   zgrid_bottom = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=1    )) / 100.0_r8  ![m] = /100 [cm]
-   zgrid_top    = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=nilev)) / 100.0_r8
+   zgrid_bottom = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=1    ))
+   zgrid_top    = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=nilev))
 
    ! cannot extrapolate below bottom or beyond top ... fail ...
    if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
@@ -2724,12 +2734,12 @@ if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
    ! Figure out what level is above/below, and by how much
    h_loop_interface : do k = 2, nilev
 
-      zgrid = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=k)) / 100.0_r8 ![m] = /100 [cm]
+      zgrid = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=k))
 
       if (height <= zgrid) then
          lev_top    = k
          lev_bottom = lev_top - 1
-         delta_z    = zgrid - x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=lev_bottom)) / 100.0_r8
+         delta_z    = zgrid - x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=lev_bottom))
          frac_lev   = (zgrid - height)/delta_z
          exit h_loop_interface
       endif
@@ -2745,15 +2755,13 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
    !  lev value  -6.75, -6.25, -5.75, -5.25, ... 6.25, 6.75, 7.25 ;
    !  lev index    1      2      3      4    ...  27    28    29
 
-   !mid_level 1      [m] = /100 [cm]
-   zgrid_bottom = 0.50_r8 / 100.0_r8 * &
-                  (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=1)) + &
-                   x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=2)))
+   !mid_level 1
+   zgrid_bottom = (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=1)) + &
+                   x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=2))) / 2.0_r8
 
    !mid_level nlev-1
-   zgrid_top    = 0.50_r8 / 100.0_r8 * &
-                  (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nlev-1)) + &
-                   x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nlev)))
+   zgrid_top    = (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nlev-1)) + &
+                   x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nlev))) / 2.0_r8
 
    ! cannot extrapolate below bottom or beyond top ... fail ...
    if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
@@ -2764,14 +2772,13 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
      lev_bottom = k-1
      lev_top    = k
 
-     zgrid_lower = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
+     zgrid_lower = &
              (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=k-1 )) + &
-              x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=k   )))
+              x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=k   ))) / 2.0_r8
 
-     zgrid_upper = 0.50_r8 / 100.0_r8 * &               ! [m] = ZGtiegcm/100 [cm]
+     zgrid_upper = &
              (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=k  )) + &
-              x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=k+1)))
-
+              x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=k+1))) / 2.0_r8
 
      if (height  <= zgrid_upper) then
         if (zgrid_upper == zgrid_lower) then ! avoid divide by zero
@@ -2780,7 +2787,7 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
            delta_z  = zgrid_upper - zgrid_lower
            frac_lev = (zgrid_upper - height)/delta_z
         endif
-        ! write(*,*)'TJH DEBUG ivarZG is ',ivarZG, k, zgrid_lower, height, zgrid_upper
+        write(*,*)'TJH DEBUG ivarZG is ',ivarZG, k, zgrid_lower, height, zgrid_upper
         exit h_loop_midpoint
      endif
 
@@ -2848,7 +2855,6 @@ integer, intent(in) :: levindex
 real(r8)            :: get_height
 
 integer  ::  index1,  index2
-real(r8) :: height1, height2
 
 if (levindex > nlev) then
    write(string1,*)'requesting out-of-bounds level [',levindex,']'
@@ -2875,13 +2881,11 @@ elseif (trim(progvar(ivar)%verticalvar) == 'lev') then
 
    if (levindex == nlev) then
       index1     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=nlev)
-      get_height = ens_mean(index1) / 100.0_r8
+      get_height = ens_mean(index1)
    else
       index1     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex   )
       index2     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex+1 )
-      height1    = 0.5_r8 * ens_mean(index1) / 100.0_r8
-      height2    = 0.5_r8 * ens_mean(index2) / 100.0_r8
-      get_height = height1 + height2
+      get_height = (ens_mean(index1) + ens_mean(index2)) / 2.0_r8
    endif
 
 else
