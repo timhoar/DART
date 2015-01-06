@@ -2645,7 +2645,7 @@ ZGG_extended(:,:,1:nlev) = ZGG
 NEm_extended(:,:,1:nlev) = NE
 
 do j = nlev, nlev10
-   NEm_extended(:,:,j) = 2.0_r8 * NEm_extended(:,:,j-1) * exp(-1.0_r8)
+   NEm_extended(:,:,j) = NEm_extended(:,:,j-1) * exp(-0.5_r8)
    ZGG_extended(:,:,j) = ZGG_extended(:,:,j-1) + Hplasma(:,:) / 2.0_r8
 enddo
 
