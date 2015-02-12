@@ -106,7 +106,7 @@ logical            :: output_state_vector = .false.
 integer            :: debug = 0
 logical            :: estimate_f10_7 = .false.
 
-integer, parameter :: StateVarNmax = 80
+integer, parameter :: StateVarNmax = 30
 integer, parameter :: Ncolumns = 5
 character(len=NF90_MAX_NAME) :: variables(StateVarNmax * Ncolumns) = ' '
 character(len=NF90_MAX_NAME) :: auxiliary_variables(StateVarNmax)
@@ -188,6 +188,12 @@ logical               :: first_pert_call = .true.
 type(random_seq_type) :: random_seq
 character(len=512)    :: string1, string2, string3
 logical, save         :: module_initialized = .false.
+
+! Codes for restricting the range of a variable
+integer, parameter :: BOUNDED_NONE  = 0 ! ... unlimited range
+integer, parameter :: BOUNDED_BELOW = 1 ! ... minimum, but no maximum
+integer, parameter :: BOUNDED_ABOVE = 2 ! ... maximum, but no minimum
+integer, parameter :: BOUNDED_BOTH  = 3 ! ... minimum and maximum
 
 interface prog_var_to_vector
    module procedure var1d_to_vector
@@ -414,8 +420,10 @@ if ( .not. module_initialized ) call static_init_model
 ! Default for successful return
 istatus = 0
 
-! TIEGCM should not be able to use obs_def_upper_atm_mod:get_expected_gnd_gps_vtec()
-! This test makes sure that routine is not supported.
+! GITM uses a vtec routine in obs_def_upper_atm_mod:get_expected_gnd_gps_vtec()
+! TIEGCM has its own vtec routine, so we should use it. This next block ensures that.
+! The get_expected_gnd_gps_vtec() tries to interpolate KIND_GEOPOTENTIAL_HEIGHT
+! when it does, this will kill it. 
 
 if ( ikind == KIND_GEOPOTENTIAL_HEIGHT ) then
    write(string1,*)'KIND_GEOPOTENTIAL_HEIGHT currently unsupported'
@@ -1360,9 +1368,9 @@ ReadVariable: do ivar = 1,nfields
       cycle ReadVariable
    endif
 
+   ! ZG is already a module variable that is required.
    if (trim(progvar(ivar)%varname) == 'ZG') then
       call prog_var_to_vector(ivar, ZG, statevec)
-      deallocate(ZG)
       cycle ReadVariable
    endif
 
@@ -1635,12 +1643,17 @@ if ( .not. module_initialized ) call static_init_model
 
 if (estimate_f10_7) then
 
+   f10_7 = MISSING_R8
+
    VARLOOP : do ivar = 1,nfields
       if (progvar(ivar)%varname == 'f10_7') then
          get_f107_value = x(progvar(ivar)%index1)
          return
       endif
    enddo VARLOOP
+
+   if (f10_7 == MISSING_R8) call error_handler(E_ERR,'get_f107_value', &
+       'no f10_7 in DART state', source, revision, revdate)
 
 else
    get_f107_value = f10_7
@@ -1731,8 +1744,9 @@ real :: &
      &  tide3m3(2),      &! 2-day wave amplitude and phase
      &  f107,            &! 10.7 cm daily solar flux
      &  f107a,           &! 10.7 cm average (81-day) solar flux
-     &  colfac            ! collision factor
-
+     &  colfac,          &! collision factor
+     &  amie_ibkg         ! AMIE_IBKG (not sure...)
+!
 ! Input parameters that can be either constant or time-dependent:
 real :: &
      &  power,           &! hemispheric power (gw) (hpower on histories)
@@ -1786,7 +1800,10 @@ character(len=mxlen_filename) ::                                   &
      &  gswm_nm_di_ncfile, &! gswm non-migrating diurnal data file
      &  gswm_nm_sdi_ncfile,&! gswm non-migrating semi-diurnal data file
      &  saber_ncfile,      &! SABER data (T,Z)
-     &  tidi_ncfile         ! TIDI data (U,V)
+     &  tidi_ncfile,       &! TIDI data (U,V)
+     &  seeflux,           &! SEE measured solar flux spectrum
+     &  amienh,            &! Northern hemisphere AMIE input
+     &  amiesh              ! Southern hemisphere AMIE input
 !
 !     integer,parameter :: ngpivars = 4
 !     real :: gpi_vars(ngpivars) ! f107,f107a,power,ctpoten
@@ -1834,7 +1851,9 @@ namelist/tgcm_input/                                        &
      &  start_day,start_year,calendar_advance,see_ncfile,         &
      &  ctpoten_time,power_time,bximf_time,byimf_time,bzimf_time, &
      &  kp_time,al_time,swden_time,swvel_time,indices_interp,     &
-     &  imf_ncfile,saber_ncfile,tidi_ncfile,sech_nbyte
+     &  imf_ncfile,saber_ncfile,tidi_ncfile,sech_nbyte, amie_ibkg, &
+     &  seeflux, amienh, amiesh 
+
 
 !-------------------------------------------------------------------------------
 
@@ -1983,8 +2002,7 @@ end subroutine read_TIEGCM_definition
 
 
 subroutine read_TIEGCM_secondary(file_name)
-! Read TIEGCM Geopotential (ZG) from a tiegcm secondary output file
-! Convert from cm to meters for location purposes.
+! Read TIEGCM geometric height (ZG) from a tiegcm secondary output file
 
 character(len=*), intent(in):: file_name
 
@@ -2253,7 +2271,7 @@ FillLoop : do ivar = 1, ngood
    progvar(ivar)%xtype             = -1
    progvar(ivar)%missingR8         = MISSING_R8
    progvar(ivar)%missingR4         = MISSING_R4
-   progvar(ivar)%rangeRestricted   = -1
+   progvar(ivar)%rangeRestricted   = BOUNDED_NONE
    progvar(ivar)%minvalue          = MISSING_R8
    progvar(ivar)%maxvalue          = MISSING_R8
    progvar(ivar)%has_missing_value = .false.
@@ -2564,10 +2582,10 @@ integer,                  intent(in)  :: ncid
 integer,                  intent(in)  :: last_time
 real(r8), dimension(:,:), intent(out) :: vTEC
 
-real(r8), allocatable, dimension(:,:,:) :: NE, Z, TI, TE, OP
-real(r8), allocatable, dimension(:,:,:) :: NEm_extended, ZGG, ZGG_extended
+real(r8), allocatable, dimension(:,:,:) :: NE, TI, TE, OP
+real(r8), allocatable, dimension(:,:,:) :: NEm_extended, ZG_extended
 real(r8), allocatable, dimension(:,:)   :: GRAVITYtop, Tplasma, Hplasma
-real(r8), allocatable, dimension(:)     :: delta_ZGG, NE_middle
+real(r8), allocatable, dimension(:)     :: delta_ZG, NE_middle
 
 real(r8), PARAMETER :: k_constant = 1.381e-23_r8 ! m^2 * kg / s^2 / K
 real(r8), PARAMETER :: omass      = 2.678e-26_r8 ! mass of atomic oxgen kg
@@ -2576,11 +2594,10 @@ real(r8) :: earth_radiusm
 integer  :: VarID, nlev10, j, k
 
 allocate( NE(nlon,nlat,nilev), NEm_extended(nlon,nlat,nilev+10), &
-         ZGG(nlon,nlat,nilev), ZGG_extended(nlon,nlat,nilev+10), &
-           Z(nlon,nlat,nilev))
+          ZG_extended(nlon,nlat,nilev+10))
 allocate( TI(nlon,nlat,nlev), TE(nlon,nlat,nlev), OP(nlon,nlat,nlev) )
 allocate( GRAVITYtop(nlon,nlat), Tplasma(nlon,nlat), Hplasma(nlon,nlat) )
-allocate( delta_ZGG(nlev+9), NE_middle(nlev+9) )
+allocate( delta_ZG(nlev+9), NE_middle(nlev+9) )
 
 !... NE (interfaces)
 call nc_check(nf90_inq_varid(ncid, 'NE', VarID), 'create_vtec', 'inq_varid NE')
@@ -2589,12 +2606,7 @@ call nc_check(nf90_get_var(ncid, VarID, values=NE,     &
                    count = (/ nlon, nlat, nilev,         1 /)),&
                    'create_vtec', 'get_var NE')
 
-!... Z (interfaces)
-call nc_check(nf90_inq_varid(ncid, 'Z', VarID), 'create_vtec', 'inq_varid Z')
-call nc_check(nf90_get_var(ncid, VarID, values=Z,      &
-                   start = (/    1,    1,     1, last_time /),   &
-                   count = (/ nlon, nlat, nilev,         1 /)),&
-                   'create_vtec', 'get_var Z')
+!... ZG (interfaces) already read into the module and converted to metres
 
 !... TI (midpoints)
 call nc_check(nf90_inq_varid(ncid, 'TI', VarID), 'create_vtec', 'inq_varid TI')
@@ -2619,18 +2631,11 @@ call nc_check(nf90_get_var(ncid, VarID, values=OP,     &
 
 ! Construct vTEC given the parts
 
-Z             = Z * 1.0e-2_r8            ! Convert Z (geopotential height) in cm to m
 earth_radiusm = earth_radius * 1000.0_r8 ! Convert earth_radius in km to m
 NE            = NE * 1.0e+6_r8           ! Convert NE in #/cm^3 to #/m^3
 
-
-! TOMOKO FIXME ... if we have ZG already, do we need to calculate ZGG ...
-
-! Convert to geometric height from geopotential height
-ZGG  = (earth_radiusm * Z) / (earth_radiusm - Z)
-
 ! Gravity at the top layer
-GRAVITYtop(:,:) = gravity * (earth_radiusm / (earth_radiusm + ZGG(:,:,nilev))) ** 2
+GRAVITYtop(:,:) = gravity * (earth_radiusm / (earth_radiusm + ZG(:,:,nilev))) ** 2
 
 ! Plasma Temperature
 Tplasma(:,:) = (TI(:,:,nlev-1) + TE(:,:,nlev-1)) / 2.0_r8
@@ -2641,28 +2646,28 @@ Hplasma = (2.0_r8 * k_constant / omass ) * Tplasma / GRAVITYtop
 ! NE is extrapolated to 10 more layers
 nlev10  = nlev + 10
 
-ZGG_extended(:,:,1:nlev) = ZGG
+ ZG_extended(:,:,1:nlev) = ZG
 NEm_extended(:,:,1:nlev) = NE
 
 do j = nlev, nlev10
    NEm_extended(:,:,j) = NEm_extended(:,:,j-1) * exp(-0.5_r8)
-   ZGG_extended(:,:,j) = ZGG_extended(:,:,j-1) + Hplasma(:,:) / 2.0_r8
+    ZG_extended(:,:,j) =  ZG_extended(:,:,j-1) + Hplasma(:,:) / 2.0_r8
 enddo
 
 ! finally calculate vTEC - one gridcell at a time.
 
 do j = 1, nlat
 do k = 1, nlon
-   delta_ZGG(1:(nlev10-1)) = ZGG_extended(k,j,2:nlev10)-ZGG_extended(k,j,1:(nlev10-1))
-   NE_middle(1:(nlev10-1)) = NEm_extended(k,j,2:nlev10)+NEm_extended(k,j,1:(nlev10-1))/2.0_r8
-   vTEC(k,j) = sum(NE_middle * delta_ZGG) * 1.0e-16_r8 ! Convert to TECU (1.0e+16 #/m^2)
+    delta_ZG(1:(nlev10-1)) =  ZG_extended(k,j,2:nlev10) -  ZG_extended(k,j,1:(nlev10-1))
+   NE_middle(1:(nlev10-1)) = NEm_extended(k,j,2:nlev10) + NEm_extended(k,j,1:(nlev10-1)) / 2.0_r8
+   vTEC(k,j) = sum(NE_middle * delta_ZG) * 1.0e-16_r8 ! Convert to TECU (1.0e+16 #/m^2)
 enddo
 enddo
 
-deallocate( NE, NEm_extended, ZGG, ZGG_extended, Z)
+deallocate( NE, NEm_extended, ZG_extended)
 deallocate( TI, TE, OP )
 deallocate( GRAVITYtop, Tplasma, Hplasma )
-deallocate( delta_ZGG, NE_middle )
+deallocate( delta_ZG, NE_middle )
 
 end subroutine create_vtec
 
@@ -3038,31 +3043,22 @@ if ( progvar(ivar)%rank == 0 ) then  ! handle scalars
 
    data_0d = statevec(progvar(ivar)%index1)
 
-   if ( limit  .and. (progvar(ivar)%rangeRestricted > 0) ) then
-         if (data_0d < progvar(ivar)%minvalue) data_0d = progvar(ivar)%minvalue
-         if (data_0d > progvar(ivar)%maxvalue) data_0d = progvar(ivar)%maxvalue
-   endif
-
+   ! We only want to apply the limits when converting for TIEGCM
+   ! In general, we do not apply limits for DART diagnostics.
    if ( limit ) then
 
-      if (progvar(ivar)%rangeRestricted > 2) then
-         if ((data_0d /= MISSING_R8) .and. &
-             (data_0d < progvar(ivar)%minvalue)) &
-              data_0d = progvar(ivar)%minvalue
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          if ((data_0d /= MISSING_R8) .and. &
              (data_0d > progvar(ivar)%maxvalue)) &
               data_0d = progvar(ivar)%maxvalue
+      endif
 
-      elseif ( progvar(ivar)%rangeRestricted > 1) then
-         if ((data_0d /= MISSING_R8) .and. &
-             (data_0d > progvar(ivar)%maxvalue)) &
-              data_0d = progvar(ivar)%maxvalue
-
-      elseif ( progvar(ivar)%rangeRestricted > 0) then
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          if ((data_0d /= MISSING_R8) .and. &
              (data_0d < progvar(ivar)%minvalue)) &
               data_0d = progvar(ivar)%minvalue
-
       endif
 
       if ( progvar(ivar)%has_missing_value ) then
@@ -3096,20 +3092,15 @@ elseif ( numdims == 1 ) then
 
    if ( limit ) then
 
-      if (progvar(ivar)%rangeRestricted > 2) then
-         where ((data_1d_array /= MISSING_R8) .and. &
-                (data_1d_array < progvar(ivar)%minvalue)) &
-                 data_1d_array = progvar(ivar)%minvalue
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_1d_array /= MISSING_R8) .and. &
                 (data_1d_array > progvar(ivar)%maxvalue)) &
                  data_1d_array = progvar(ivar)%maxvalue
+      endif
 
-      elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where ((data_1d_array /= MISSING_R8) .and. &
-                (data_1d_array > progvar(ivar)%maxvalue)) &
-                 data_1d_array = progvar(ivar)%maxvalue
-
-      elseif ( progvar(ivar)%rangeRestricted > 0) then
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_1d_array /= MISSING_R8) .and. &
                 (data_1d_array < progvar(ivar)%minvalue)) &
                  data_1d_array = progvar(ivar)%minvalue
@@ -3149,20 +3140,15 @@ elseif ( numdims == 2 ) then
 
    if ( limit ) then
 
-      if (progvar(ivar)%rangeRestricted > 2) then
-         where ((data_2d_array /= MISSING_R8) .and. &
-                (data_2d_array < progvar(ivar)%minvalue)) &
-                 data_2d_array = progvar(ivar)%minvalue
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_2d_array /= MISSING_R8) .and. &
                 (data_2d_array > progvar(ivar)%maxvalue)) &
                  data_2d_array = progvar(ivar)%maxvalue
+      endif
 
-      elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where ((data_2d_array /= MISSING_R8) .and. &
-                (data_2d_array > progvar(ivar)%maxvalue)) &
-                 data_2d_array = progvar(ivar)%maxvalue
-
-      elseif ( progvar(ivar)%rangeRestricted > 0) then
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_2d_array /= MISSING_R8) .and. &
                 (data_2d_array < progvar(ivar)%minvalue)) &
                  data_2d_array = progvar(ivar)%minvalue
@@ -3203,20 +3189,15 @@ elseif ( numdims == 3 ) then
 
    if ( limit ) then
 
-      if (progvar(ivar)%rangeRestricted > 2) then
-         where ((data_3d_array /= MISSING_R8) .and. &
-                (data_3d_array < progvar(ivar)%minvalue)) &
-                 data_3d_array = progvar(ivar)%minvalue
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_3d_array /= MISSING_R8) .and. &
                 (data_3d_array > progvar(ivar)%maxvalue)) &
                  data_3d_array = progvar(ivar)%maxvalue
+      endif
 
-      elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where ((data_3d_array /= MISSING_R8) .and. &
-                (data_3d_array > progvar(ivar)%maxvalue)) &
-                 data_3d_array = progvar(ivar)%maxvalue
-
-      elseif ( progvar(ivar)%rangeRestricted > 0) then
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_3d_array /= MISSING_R8) .and. &
                 (data_3d_array < progvar(ivar)%minvalue)) &
                  data_3d_array = progvar(ivar)%minvalue
@@ -3260,20 +3241,15 @@ elseif ( numdims == 4 ) then
 
    if ( limit ) then
 
-      if (progvar(ivar)%rangeRestricted > 2) then
-         where ((data_4d_array /= MISSING_R8) .and. &
-                (data_4d_array < progvar(ivar)%minvalue)) &
-                 data_4d_array = progvar(ivar)%minvalue
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_4d_array /= MISSING_R8) .and. &
                 (data_4d_array > progvar(ivar)%maxvalue)) &
                  data_4d_array = progvar(ivar)%maxvalue
+      endif
 
-      elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where ((data_4d_array /= MISSING_R8) .and. &
-                (data_4d_array > progvar(ivar)%maxvalue)) &
-                 data_4d_array = progvar(ivar)%maxvalue
-
-      elseif ( progvar(ivar)%rangeRestricted > 0) then
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_4d_array /= MISSING_R8) .and. &
                 (data_4d_array < progvar(ivar)%minvalue)) &
                  data_4d_array = progvar(ivar)%minvalue
@@ -3349,20 +3325,15 @@ elseif ( numdims == 5 ) then
 
    if ( limit ) then
 
-      if (progvar(ivar)%rangeRestricted > 2) then
-         where ((data_5d_array /= MISSING_R8) .and. &
-                (data_5d_array < progvar(ivar)%minvalue)) &
-                 data_5d_array = progvar(ivar)%minvalue
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_5d_array /= MISSING_R8) .and. &
                 (data_5d_array > progvar(ivar)%maxvalue)) &
                  data_5d_array = progvar(ivar)%maxvalue
+      endif
 
-      elseif ( progvar(ivar)%rangeRestricted > 1) then
-         where ((data_5d_array /= MISSING_R8) .and. &
-                (data_5d_array > progvar(ivar)%maxvalue)) &
-                 data_5d_array = progvar(ivar)%maxvalue
-
-      elseif ( progvar(ivar)%rangeRestricted > 0) then
+      if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+          (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
          where ((data_5d_array /= MISSING_R8) .and. &
                 (data_5d_array < progvar(ivar)%minvalue)) &
                  data_5d_array = progvar(ivar)%minvalue
@@ -3777,36 +3748,36 @@ if (ios == 0) progvar(ivar)%minvalue = minvalue
 read(variable_table(ivar,4),*,iostat=ios) maxvalue
 if (ios == 0) progvar(ivar)%maxvalue = maxvalue
 
-! rangeRestricted == 0 ... unlimited range
-! rangeRestricted == 1 ... minimum, but no maximum
-! rangeRestricted == 2 ... maximum, but no minimum
-! rangeRestricted == 3 ... minimum and maximum
+! rangeRestricted == BOUNDED_NONE  == 0 ... unlimited range
+! rangeRestricted == BOUNDED_BELOW == 1 ... minimum, but no maximum
+! rangeRestricted == BOUNDED_ABOVE == 2 ... maximum, but no minimum
+! rangeRestricted == BOUNDED_BOTH  == 3 ... minimum and maximum
 
 if (   (progvar(ivar)%minvalue /= MISSING_R8) .and. &
        (progvar(ivar)%maxvalue /= MISSING_R8) ) then
-   progvar(ivar)%rangeRestricted = 3
+   progvar(ivar)%rangeRestricted = BOUNDED_BOTH
 
 elseif (progvar(ivar)%maxvalue /= MISSING_R8) then
-   progvar(ivar)%rangeRestricted = 2
+   progvar(ivar)%rangeRestricted = BOUNDED_ABOVE
 
 elseif (progvar(ivar)%minvalue /= MISSING_R8) then
-   progvar(ivar)%rangeRestricted = 1
+   progvar(ivar)%rangeRestricted = BOUNDED_BELOW
 
 else
-   progvar(ivar)%rangeRestricted = 0
+   progvar(ivar)%rangeRestricted = BOUNDED_NONE
 
 endif
 
 if (do_output() .and. debug > 99) then
-   if (progvar(ivar)%rangeRestricted == 0) then
+   if (progvar(ivar)%rangeRestricted == BOUNDED_NONE) then
       write(*,*)'TJH ',trim(progvar(ivar)%varname),' has no limits.'
-   elseif (progvar(ivar)%rangeRestricted == 1) then
+   elseif (progvar(ivar)%rangeRestricted == BOUNDED_BELOW) then
       write(*,*)'TJH ',trim(progvar(ivar)%varname),' has min ',progvar(ivar)%minvalue
-   elseif (progvar(ivar)%rangeRestricted == 2) then
+   elseif (progvar(ivar)%rangeRestricted == BOUNDED_ABOVE) then
       write(*,*)'TJH ',trim(progvar(ivar)%varname),' has max ',progvar(ivar)%maxvalue
-   elseif (progvar(ivar)%rangeRestricted == 3) then
+   elseif (progvar(ivar)%rangeRestricted == BOUNDED_BOTH) then
       write(*,*)'TJH ',trim(progvar(ivar)%varname),' has min ',progvar(ivar)%minvalue, &
-                                                   ' and max',progvar(ivar)%maxvalue
+                                                   ' and max ',progvar(ivar)%maxvalue
    else
       write(string1,*)'Unable to determine if ',trim(progvar(ivar)%varname), &
                       ' is range-restricted.'
@@ -3819,7 +3790,7 @@ endif
 
 ! Check to make sure min is less than max if both are specified.
 
-if ( progvar(ivar)%rangeRestricted == 3 ) then
+if ( progvar(ivar)%rangeRestricted == BOUNDED_BOTH ) then
    if (maxvalue < minvalue) then
       write(string1,*)'&model_nml state_variable input error for ',trim(progvar(ivar)%varname)
       write(string2,*)'minimum value (',minvalue,') must be less than '

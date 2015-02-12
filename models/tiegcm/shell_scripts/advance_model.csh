@@ -20,18 +20,18 @@
 # 2) the number of state copies belonging to that process, and 
 # 3) the name of the filter_control_file for that process
 
-echo "starting advance_model"
-
 set process = $1
 set num_states = $2
 set control_file = $3
+
+echo "Starting advance_model for process $process at "`date`
 
 #-------------------------------------------------------------------------
 # Block 1: populate a run-time directory with the bits needed to run tiegcm.
 #-------------------------------------------------------------------------
 
 # Get unique name for temporary working directory for this process's stuff
-set temp_dir = 'advance_temp'${process}
+set temp_dir = `printf "advance_temp%04d" $process`
 
 # Create a clean temporary directory and go there
 \rm -rf  $temp_dir
@@ -42,6 +42,15 @@ cd       $temp_dir
 
 cp ../input.nml .
 
+# The following is a list of the REQUIRED input.nml namelist settings
+#
+# &model_nml         tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
+#                    tiegcm_secondary_file_name = 'tiegcm_s.nc',
+#                    tiegcm_namelist_file_name  = 'tiegcm.nml'
+# &dart_to_model_nml file_in                    = 'dart_restart',
+#                    file_namelist_out          = 'namelist_update',
+# &model_to_dart     file_out                   = 'dart_ics'
+#
 # Ensure that the input.nml has the required value for
 # dart_to_model_nml:advance_time_present for this context.
 
@@ -66,6 +75,15 @@ while($state_copy <= $num_states)
    set input_file      = `head -n $input_file_line      ../$control_file | tail -n 1`
    set output_file     = `head -n $output_file_line     ../$control_file | tail -n 1`
 
+   # make sure we have a clean logfile for this entire advance
+   set logfile = `printf "log_advance.%04d.txt"     $ensemble_member`
+
+   echo "control_file is ../$control_file"             >! $logfile
+   echo "working on ensemble_member $ensemble_member"  >> $logfile
+   echo "input_file  is $input_file"                   >> $logfile
+   echo "output_file is $output_file"                  >> $logfile
+   echo "Starting dart_to_model at "`date`             >> $logfile
+
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by model.
    # Overwrite the appropriate variables of a TIEGCM netCDF restart file.
@@ -73,103 +91,116 @@ while($state_copy <= $num_states)
    # which must be communicated to the model ... through the tiegcm namelist
    #----------------------------------------------------------------------
 
-   # The EXPECTED input DART 'output' file name is 'dart_restart'
-
    set tiesecond   = `printf "tiegcm_s.nc.%04d"         $ensemble_member`
    set tierestart  = `printf "tiegcm_restart_p.nc.%04d" $ensemble_member`
    set tieinp      = `printf "tiegcm.nml.%04d"          $ensemble_member`
 
-   cp -p   ../$input_file dart_restart        || exit 2
-   cp -p   ../$tiesecond  tiegcm_s.nc         || exit 2
-   cp -p   ../$tierestart tiegcm_restart_p.nc || exit 2
-   cp -p   ../$tieinp     tiegcm.nml          || exit 2
+   cp -p ../$input_file dart_restart        || exit 2
+   cp -p ../$tiesecond  tiegcm_s.nc         || exit 2
+   cp -p ../$tierestart tiegcm_restart_p.nc || exit 2
+   cp -p ../$tieinp     tiegcm.nml          || exit 2
 
-#  echo "ensemble member $ensemble_member : before dart_to_model"
-#  ncdump -v mtime tiegcm_restart.nc
+   ../dart_to_model >>& $logfile || exit 2  # dart_to_model generates namelist_update
 
-   ../dart_to_model || exit 2  # dart_to_model generates namelist_update
-
-   # update tiegcm namelist variables   
-
-   set start_year   = " START_YEAR = "`  head -n 1 namelist_update | tail -n 1`
-   set start_day    = " START_DAY = "`   head -n 2 namelist_update | tail -n 1`
-   set source_start = " SOURCE_START = "`head -n 3 namelist_update | tail -n 1`
-   set start        = " START = "`       head -n 3 namelist_update | tail -n 1`
-   set secstart     = " SECSTART = "`    head -n 3 namelist_update | tail -n 1`
-   set stop         = " STOP = "`        head -n 4 namelist_update | tail -n 1`
-   set secstop      = " SECSTOP = "`     head -n 4 namelist_update | tail -n 1`
-   set hist         = " HIST = "`        head -n 5 namelist_update | tail -n 1`
-   set sechist      = " SECHIST = "`     head -n 5 namelist_update | tail -n 1`
-   set save         = " SAVE = "`        head -n 5 namelist_update | tail -n 1`
-   set secsave      = " SECSAVE = "`     head -n 5 namelist_update | tail -n 1`
-   set f107         = " F107 ="`         head -n 6 namelist_update | tail -n 1`
-
-# FIXME TOMOKO - can I remove the SAVE and SECSAVE ...
-# According to Alex, these are deprecated from most versions of tiegcm
-#  -e 's/'"`grep 'SAVE'         ../tiegcm.nml | head -n 1`"'/'"$save"'/' \
-#  -e 's/'"`grep 'SECSAVE'      ../tiegcm.nml`"'/'"$secsave"'/' \
-
+   # update tiegcm namelist variables by grabbing the values from namelist_update  
+   # and then overwriting whatever is in the tiegcm.nml
    # There is a danger that you match multiple things ... F107 and F107A,
-   # for example ... so try to grep whitespace too ...
-   # FIXME TOMOKO ... do we want F107 and F107A to be identical
+   # SOURCE_START and START, for example ... so try to grep whitespace too ...
 
-   sed \
-   -e 's/'"`grep ' START_YEAR '   ../tiegcm.nml`"'/'"$start_year"'/' \
-   -e 's/'"`grep ' START_DAY '    ../tiegcm.nml`"'/'"$start_day"'/' \
-   -e 's/'"`grep ' SOURCE_START ' ../tiegcm.nml`"'/'"$source_start"'/' \
-   -e 's/'"`grep ' START '        ../tiegcm.nml | head -n 4 | tail -n 1`"'/'"$start"'/' \
-   -e 's/'"`grep ' STOP '         ../tiegcm.nml | head -n 1`"'/'"$stop"'/' \
-   -e 's/'"`grep ' HIST '         ../tiegcm.nml | head -n 1`"'/'"$hist"'/' \
-   -e 's/'"`grep ' SECSTART '     ../tiegcm.nml`"'/'"$secstart"'/' \
-   -e 's/'"`grep ' SECSTOP '      ../tiegcm.nml`"'/'"$secstop"'/' \
-   -e 's/'"`grep ' SECHIST '      ../tiegcm.nml`"'/'"$sechist"'/' \
-   -e 's/'"`grep ' F107 '         ../tiegcm.nml | head -n 1`"'/'"$f107"'/' \
-   ../tiegcm.nml >! tiegcm.nml
+   set start_year   = `grep " START_YEAR "   namelist_update`
+   set start_day    = `grep " START_DAY "    namelist_update`
+   set source_start = `grep " SOURCE_START " namelist_update`
+   set start        = `grep " START "        namelist_update`
+   set secstart     = `grep " SECSTART "     namelist_update`
+   set stop         = `grep " STOP "         namelist_update`
+   set secstop      = `grep " SECSTOP "      namelist_update`
+   set hist         = `grep " HIST "         namelist_update`
+   set sechist      = `grep " SECHIST "      namelist_update`
+   set save         = `grep " SAVE "         namelist_update`
+   set secsave      = `grep " SECSAVE "      namelist_update`
+   set f107         = `grep " F107 "         namelist_update`
+
+   # FIXME TOMOKO ... do we want F107 and F107A to be identical
+   #
+   # FIXME SAVE and SECSAVE may not be needed ... they do not exist in 
+   # the tiegcm.nml anymore. Is this true for all versions in use ...
+   #
+   # the way to think about the following sed syntax is this:
+   # / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line 
+   
+   sed -e "/ START_YEAR /c\ ${start_year}" \
+       -e "/ START_DAY /c\ ${start_day}" \
+       -e "/ SOURCE_START /c\ ${source_start}" \
+       -e "/ START /c\ ${start}" \
+       -e "/ STOP /c\ ${stop}" \
+       -e "/ HIST /c\ ${hist}" \
+       -e "/ SECSTART /c\ ${secstart}" \
+       -e "/ SECSTOP /c\ ${secstop}" \
+       -e "/ SECHIST /c\ ${sechist}" \
+       -e "/ F107 /c\ ${f107}" \
+       -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
+       -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
+       -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
+       tiegcm.nml >! tiegcm.nml.updated
+
+   if ( -e tiegcm.nml.updated ) then
+      echo "tiegcm.nml updated with new start/stop time for ensemble member $ensemble_member"
+      mv tiegcm.nml tiegcm.nml.original
+      mv tiegcm.nml.updated tiegcm.nml
+   else
+      echo "ERROR tiegcm.nml did not update correctly for ensemble member $ensemble_member."
+      exit 1
+   endif
 
    #----------------------------------------------------------------------
    # Block 3: Run the model
    #----------------------------------------------------------------------
 
-#  echo "ensemble member $ensemble_member : before tiegcm"
-#  ncdump -v mtime tiegcm_restart.nc
+   echo "ensemble member $ensemble_member : before tiegcm" >> $logfile
+   ncdump -v mtime tiegcm_restart_p.nc                     >> $logfile
+   echo "Starting tiegcm at "`date`                        >> $logfile
 
 # mpi
 #  setenv TARGET_CPU_LIST "-1" 
-#  mpirun.lsf ../tiegcm < tiegcm.nml |& tee tiegcm_out_$ensemble_member
+#  mpirun.lsf ../tiegcm < tiegcm.nml >>& $logfile
 
 # without mpi
-   ../tiegcm < tiegcm.nml >& tiegcm_out_$ensemble_member || exit 3
 
-#  echo "ensemble member $ensemble_member : after tiegcm"
-#  ncdump -v mtime tiegcm_restart.nc
+   ../tiegcm < tiegcm.nml >>& $logfile
 
-   ls -lrt
+   set mystatus = $status
+
+   # FIXME ... is there some way to check for a successful model advance?
+   # some string in an output file, perhaps?
+   
+   echo "tiegcm status was $mystatus"
+   grep --line-number "NORMAL EXIT" $logfile
+
+   echo "ensemble member $ensemble_member : after tiegcm" >> $logfile
+   ncdump -v mtime tiegcm_restart_p.nc                    >> $logfile
 
    #----------------------------------------------------------------------
    # Block 4: Convert the model output to form needed by DART
    # AT this point, the model has updated the information in tiegcm_restart_p.nc
    # We need to get that information back into the DART state vector.
    #
-   # model_to_dart expects the tiegcm input file     to be 'tiegcm_restart_p.nc'
-   # model_to_dart expects the tiegcm secondary file to be 'tiegcm_s.nc'
-   # model_to_dart writes out a file with the default name 'dart_ics'
-   #
    # The updated information needs to be moved into CENTRALDIR in
    # preparation for the next cycle.
    #----------------------------------------------------------------------
 
-   ../model_to_dart || exit 4
+   echo "Starting model_to_dart at "`date`  >>  $logfile
+   ../model_to_dart                         >>& $logfile || exit 4
 
    mv dart_ics            ../$output_file || exit 4
    mv tiegcm_s.nc         ../$tiesecond   || exit 4
    mv tiegcm_restart_p.nc ../$tierestart  || exit 4
    mv tiegcm.nml          ../$tieinp      || exit 4
-   mv tiegcm_out_*        ../.            || exit 4
 
    @ state_copy++
    @ ensemble_member_line = $ensemble_member_line + 3
    @ input_file_line      = $input_file_line + 3
    @ output_file_line     = $output_file_line + 3
+   echo "Finished model_to_dart at "`date`  >> $logfile
 end
 
 # Change back to original directory 
@@ -180,7 +211,9 @@ cd ..
 #\rm -rf $temp_dir
 
 # Remove the filter_control file to signal completion
-\rm -rf $control_file
+\rm -f $control_file
+
+echo "Finished advance_model for process $process at "`date`
 
 exit 0
 

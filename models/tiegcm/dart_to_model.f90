@@ -50,8 +50,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! namelist parameters with default values.
 !-----------------------------------------------------------------------
 
-character(len=128) :: file_in              = 'dart_restart'
-character(len=128) :: file_namelist_out    = 'namelist_update'
+character(len=256) :: file_in              = 'dart_restart'
+character(len=256) :: file_namelist_out    = 'namelist_update'
 logical            :: advance_time_present = .false.
 
 namelist /dart_to_model_nml/ file_in, file_namelist_out, advance_time_present
@@ -60,7 +60,7 @@ namelist /dart_to_model_nml/ file_in, file_namelist_out, advance_time_present
 ! global storage
 !-----------------------------------------------------------------------
 
-character(len=128)     :: file_name
+character(len=256)     :: file_name
 type(time_type)        :: model_time, adv_to_time, jan1, tbase, target_time
 real(r8), allocatable  :: x_state(:)
 integer                :: iunit, io, file_unit, x_size
@@ -82,7 +82,7 @@ allocate(x_state(x_size))       ! allocate space for the (empty) state vector
 ! Read in the valid time for the model state
 ! Read in state vector from DART
 
-file_unit = open_restart_read(trim(file_in))
+file_unit = open_restart_read(file_in)
 
 if ( advance_time_present ) then
    call aread_state_restart(model_time, x_state, file_unit, adv_to_time)
@@ -104,11 +104,11 @@ endif
 ! write fields to the binary TIEGCM restart file
 
 file_name = get_restart_file_name()
-call update_TIEGCM_restart(x_state, trim(file_name), model_time)
+call update_TIEGCM_restart(x_state, file_name, model_time)
 
 if ( advance_time_present ) then
    ! update TIEGCM namelist variables used in advance_model.csh
-   call write_tiegcm_time_control(trim(file_namelist_out), model_time, adv_to_time)
+   call write_tiegcm_time_control(file_namelist_out, model_time, adv_to_time)
 endif
 
 deallocate(x_state)
@@ -161,49 +161,61 @@ target_doy    = day
 target_hour   = sec/3600
 target_minute = (sec - target_hour*3600)/60
 
-!START_YEAR
-write(file_unit, *, iostat = io )  model_year
-if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write model_year to '//trim(filename), &
-         source,revision,revdate)
-endif
+! Write the information to a text file so we can grep the desired strings and
+! then update the right parts of the tiegcm.nml - without having to write the
+! whole tiegcm.nml. 
+! NOTE: The free-format write implicitly puts a blank at the start of the 'line'.
+!       This is REQUIRED for the logic in advance_model.csh to correctly parse
+!       the namelist_update file.
 
-!START_DAY
-write(file_unit, *, iostat = io )  model_doy
-if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write model_day to '//trim(filename), &
-         source,revision,revdate)
-endif
+write(file_unit, *, iostat=io) 'START_YEAR = ',model_year
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write START_YEAR to '//trim(filename),source,revision,revdate)
 
-!SOURCE_START, START, SECSTART
-write(file_unit, *, iostat = io )  model_doy,',',model_hour,',',model_minute
-if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write (day,hour,minute) to '//trim(filename), &
-         source,revision,revdate)
-endif
+write(file_unit, *, iostat=io) 'START_DAY = ',model_doy
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write START_DAY to '//trim(filename),source,revision,revdate)
 
-!STOP, SECSTOP
-write(file_unit, *, iostat = io )  adv_to_doy,',',adv_to_hour,',',adv_to_minute
-if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write adv_to_time (day,hour,minute) to '//trim(filename), &
-         source,revision,revdate)
-endif
+write(file_unit, *, iostat=io) 'SOURCE_START = ',model_doy,',',model_hour,',',model_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write SOURCE_START to '//trim(filename), source,revision,revdate)
 
-!HIST, SAVE, SECHIST, SECSAVE
-write(file_unit, *, iostat = io )  target_doy,',',target_hour,',',target_minute
-if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write target_time (day,hour,minute) to '//trim(filename), &
-         source,revision,revdate)
-endif
+write(file_unit, *, iostat=io) 'START        = ',model_doy,',',model_hour,',',model_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write START to '//trim(filename), source,revision,revdate)
 
-!F107
+write(file_unit, *, iostat=io) 'SECSTART     = ',model_doy,',',model_hour,',',model_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write SECSTART to '//trim(filename), source,revision,revdate)
+
+write(file_unit, *, iostat=io) 'STOP    = ',adv_to_doy,',',adv_to_hour,',',adv_to_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write STOP to '//trim(filename), source,revision,revdate)
+
+write(file_unit, *, iostat=io) 'SECSTOP = ',adv_to_doy,',',adv_to_hour,',',adv_to_minute
+if (io /= 0 ) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write SECSTOP to '//trim(filename),source,revision,revdate)
+
+write(file_unit, *, iostat=io) 'HIST    = ',  target_doy,',',target_hour,',',target_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write HIST to '//trim(filename), source,revision,revdate)
+
+write(file_unit, *, iostat=io) 'SAVE    = ',  target_doy,',',target_hour,',',target_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write SAVE to '//trim(filename), source,revision,revdate)
+
+write(file_unit, *, iostat=io) 'SECHIST = ',  target_doy,',',target_hour,',',target_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write SECHIST to '//trim(filename), source,revision,revdate)
+
+write(file_unit, *, iostat=io) 'SECSAVE = ',  target_doy,',',target_hour,',',target_minute
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write SECSAVE to '//trim(filename), source,revision,revdate)
+
 f10_7 = get_f107_value(x_state)
-
-write(file_unit, *, iostat = io ) f10_7 
-if (io /= 0 )then
-   call error_handler(E_ERR,'dart_to_model:','cannot write f107 to '//trim(filename), &
-        source,revision,revdate)
-endif
+write(file_unit, *, iostat=io) 'F107 = ',f10_7 
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write F107 to '//trim(filename),source,revision,revdate)
 
 close(file_unit)
 

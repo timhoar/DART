@@ -29,14 +29,26 @@
 #
 # The central directory is where the scripts reside and where script and 
 # program I/O are expected to happen.
+#
+# PLEASE READ THE FOLLOWING: 
+#    Setting the number of tasks and choosing the right ptile requires work.
+# The number of tasks (-n) should be at least as big as the ensemble size for
+# a single-threaded tiegcm (i.e. async == 2) so that all ensemble members can 
+# run simultaneously. The setting of ptile specifies the number of tasks on each 
+# node, which usually depends on the model resolution and subsequent memory use 
+# of each ensemble member. Think of ptile as the number of ensemble members you 
+# can run on one node and not run out of the shared memory on that node.
+#    If you specify more tasks than ensemble members, there are tasks that have
+# nothing to do during the model advance. If the model advance step takes longer
+# than the MPI timeout on your machine, you may need to disable the MPI timeout.
 #-----------------------------------------------------------------------------
 #
-#BSUB -J filter
-#BSUB -o filter.%J.log
+#BSUB -J tiegcm_filter
+#BSUB -o tiegcm_filter.%J.log
 #BSUB -P NIMG0002
 #BSUB -q premium
-#BSUB -n 60
-#BSUB -R "span[ptile=15]"
+#BSUB -n 90
+#BSUB -R "span[ptile=16]"
 #BSUB -W 3:00
 #BSUB -N -u ${USER}@ucar.edu
 
@@ -54,6 +66,10 @@ if ($?LSB_HOSTS) then
    setenv MYQUEUE     $LSB_QUEUE
    setenv MYHOST      $LSB_SUB_HOST
 
+   # MP_DEBUG_NOTIMEOUT may alleviate MPI timeouts that may occur under
+   # certain task geometries. It is NOT a good idea to use it in general. 
+   # setenv MP_DEBUG_NOTIMEOUT yes
+
 else
 
    #-------------------------------------------------------------------
@@ -61,10 +77,10 @@ else
    #-------------------------------------------------------------------
 
    setenv ORIGINALDIR `pwd`
-   setenv JOBNAME     tiegcm
+   setenv JOBNAME     tiegcm_filter
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
-   setenv MYHOST      $host
+   setenv MYHOST      $HOST
 
 endif
 
@@ -84,12 +100,11 @@ echo
 # Make a unique, (empty, clean) temporary directory.
 #----------------------------------------------------------------------
 
-setenv TMPDIR /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
+setenv CENTRALDIR /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
 
-mkdir -p ${TMPDIR}
-cd ${TMPDIR}
+mkdir -p ${CENTRALDIR}
+cd ${CENTRALDIR}
 
-set CENTRALDIR = `pwd`
 set myname = $0          # this is the name of this script
 
 # some systems don't like the -v option to any of the following 
@@ -233,7 +248,7 @@ echo "${JOBNAME} ($JOBID) finished at "`date`
 # The files should be archived with the assimilation date in their name.
 #-----------------------------------------------------------------------------
 
-exit
+exit 0
 
 ${MOVE} tiegcm_s.nc*               ${experiment}/tiegcm
 ${MOVE} tiegcm_restart_p.nc*       ${experiment}/tiegcm
