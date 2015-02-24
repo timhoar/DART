@@ -33,7 +33,7 @@ use    utilities_mod, only : file_exist, open_file, close_file, logfileunit,    
                              error_handler, E_ERR, E_MSG, E_WARN, nmlfileunit,      &
                              do_output, find_namelist_in_file, check_namelist_read, &
                              do_nml_file, do_nml_term, nc_check, register_module,   &
-                             file_to_text, find_textfile_dims
+                             file_to_text, find_textfile_dims, to_upper
 
 use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,           &
                              KIND_V_WIND_COMPONENT,           &
@@ -107,15 +107,13 @@ logical            :: output_state_vector = .false.
 integer            :: debug = 0
 logical            :: estimate_f10_7 = .false.
 
-integer, parameter :: StateVarNmax = 30
-integer, parameter :: Ncolumns = 5
-character(len=NF90_MAX_NAME) :: variables(StateVarNmax * Ncolumns) = ' '
-character(len=NF90_MAX_NAME) :: auxiliary_variables(StateVarNmax)
+integer, parameter :: max_num_variables = 30
+integer, parameter :: max_num_columns = 6
+character(len=NF90_MAX_NAME) :: variables(max_num_variables * max_num_columns) = ' '
 
 namelist /model_nml/ output_state_vector, tiegcm_restart_file_name, &
                      tiegcm_secondary_file_name, tiegcm_namelist_file_name, &
-                     variables, auxiliary_variables, debug, &
-                     estimate_f10_7
+                     variables, debug, estimate_f10_7
 
 !-------------------------------------------------------------------------------
 ! Everything needed to describe a variable
@@ -141,12 +139,12 @@ type progvartype
    real(r8) :: missingR8
    real(r4) :: missingR4
    logical  :: has_missing_value
-   logical  :: state  ! is this a state variable (updateable)
+   logical  :: update  ! is this a state variable (updateable)
    character(len=NF90_MAX_NAME) :: origin
 end type progvartype
 
-type(progvartype), dimension(StateVarNmax) :: progvar
-integer :: nfields  ! number of state variables
+type(progvartype), dimension(max_num_variables) :: progvar
+integer :: nfields  ! number of tiegcm variables in DART state
 
 !-------------------------------------------------------------------------------
 ! define model parameters
@@ -159,7 +157,15 @@ integer                               :: time_step_seconds
 integer                               :: time_step_days
 type(time_type)                       :: time_step
 
-character(len=obstypelength) :: variable_table(StateVarNmax, Ncolumns)
+! Codes for interpreting the columns of the variable_table
+integer, parameter :: VT_VARNAMEINDX  = 1 ! ... variable name
+integer, parameter :: VT_KINDINDX     = 2 ! ... DART kind
+integer, parameter :: VT_MINVALINDX   = 3 ! ... minimum value if any
+integer, parameter :: VT_MAXVALINDX   = 4 ! ... maximum value if any
+integer, parameter :: VT_ORIGININDX   = 5 ! ... file of origin
+integer, parameter :: VT_STATEINDX    = 6 ! ... update (state) or not
+
+character(len=obstypelength) :: variable_table(max_num_variables, max_num_columns)
 
 ! include_vTEC = .true.  vTEC must be calculated from other vars
 ! include_vTEC = .false. just ignore vTEC altogether
@@ -227,10 +233,6 @@ subroutine static_init_model()
 
 integer :: iunit, io
 
-character(len=128) :: restart_file
-character(len=128) :: namelist_file
-character(len=128) :: secondary_file
-
 if (module_initialized) return ! only need to do this once
 
 ! Print module information to log file and stdout.
@@ -256,17 +258,14 @@ endif
 ! Read in TIEGCM namelist input file (just for definition)
 ! Read in TIEGCM grid definition etc from TIEGCM restart file
 ! Read in TIEGCM auxiliary variables from TIEGCM 'secondary' file
-restart_file   = adjustl(tiegcm_restart_file_name)
-namelist_file  = adjustl(tiegcm_namelist_file_name)
-secondary_file = adjustl(tiegcm_secondary_file_name)
 
-call read_TIEGCM_namelist(trim(namelist_file))
-call read_TIEGCM_definition(trim(restart_file))
-call read_TIEGCM_secondary(trim(secondary_file))
+call read_TIEGCM_namelist(tiegcm_namelist_file_name)
+call read_TIEGCM_definition(tiegcm_restart_file_name)
+call read_TIEGCM_secondary(tiegcm_secondary_file_name)
 
 ! error-check and convert namelist input to variable_table
 ! and the 'progvar' database in the scope of the module
-call verify_variables( variables, restart_file, secondary_file, nfields)
+call verify_variables(variables, nfields)
 
 ! Compute overall model size
 
@@ -1548,7 +1547,7 @@ UPDATE : do ivar = 1,nfields
    string2 = trim(filename)//' '//trim(varname)
 
    ! Skip the variables that are not supposed to be updated.
-   if ( .not. progvar(ivar)%state ) cycle UPDATE
+   if ( .not. progvar(ivar)%update ) cycle UPDATE
 
    ! Ensure netCDF variable is conformable with DART progvar quantity.
    ! At the same time, create the mystart(:) and mycount(:) arrays.
@@ -2059,7 +2058,7 @@ end subroutine read_TIEGCM_secondary
 !-------------------------------------------------------------------------------
 
 
-subroutine verify_variables( variables, filename1, filename2, ngood )
+subroutine verify_variables( variables, ngood )
 ! This routine checks the user input against the variables available in the
 ! input netcdf file to see if it is possible to construct the DART state vector
 ! specified by the input.nml:model_nml:variables  variable.
@@ -2070,12 +2069,9 @@ subroutine verify_variables( variables, filename1, filename2, ngood )
 ! included, then there are other variables that get included even if not
 ! explicitly mentioned in model_nml:variables
 
-character(len=*), dimension(:),   intent(in)  :: variables
-character(len=*),                 intent(in)  :: filename1
-character(len=*),                 intent(in)  :: filename2
-integer,                          intent(out) :: ngood
+character(len=*), intent(in)  :: variables(:)
+integer,          intent(out) :: ngood
 
-logical  :: state
 integer  :: i, nrows, ncols
 integer  :: ivar, index1, indexN, varsize
 integer  :: ncid, ncid1, ncid2, ncerr, VarID, dimlen
@@ -2086,19 +2082,14 @@ character(len=NF90_MAX_NAME) :: varname
 character(len=NF90_MAX_NAME) :: dartstr
 character(len=NF90_MAX_NAME) :: minvalstring
 character(len=NF90_MAX_NAME) :: maxvalstring
-character(len=obstypelength) :: dimname
 character(len=NF90_MAX_NAME) :: filename
-
-call nc_check(nf90_open(trim(filename1), NF90_NOWRITE, ncid1), &
-              'verify_variables','open '//trim(filename1))
-
-call nc_check(nf90_open(trim(filename2), NF90_NOWRITE, ncid2), &
-              'verify_variables','open '//trim(filename2))
+character(len=NF90_MAX_NAME) :: state_or_aux
+character(len=obstypelength) :: dimname
 
 nrows = size(variable_table,1)
 ncols = size(variable_table,2)
 
-! Convert the (input) 1D array "variables" into a table with four columns.
+! Convert the (input) 1D array "variables" into a table with six columns.
 ! The number of rows in the table correspond to the number of variables in the
 ! DART state vector.
 ! Column 1 is the netCDF variable name.
@@ -2106,29 +2097,35 @@ ncols = size(variable_table,2)
 ! Column 3 is the minimum value ("NA" if there is none) Not Applicable
 ! Column 4 is the maximum value ("NA" if there is none) Not Applicable
 ! Column 5 is the file of origin 'restart' or 'secondary' or 'calculate'
+! Column 6 is whether or not the variable should be updated in the restart file.
 
 ngood = 0
 MyLoop : do i = 1, nrows
 
-   varname      = trim(variables(5*i - 4))
-   dartstr      = trim(variables(5*i - 3))
-   minvalstring = trim(variables(5*i - 2))
-   maxvalstring = trim(variables(5*i - 1))
-   filename     = trim(variables(5*i    ))
+   varname      = trim(variables(ncols*i - 5))
+   dartstr      = trim(variables(ncols*i - 4))
+   minvalstring = trim(variables(ncols*i - 3))
+   maxvalstring = trim(variables(ncols*i - 2))
+   filename     = trim(variables(ncols*i - 1))
+   state_or_aux = trim(variables(ncols*i    ))
 
-   variable_table(i,1) = trim(varname)
-   variable_table(i,2) = trim(dartstr)
-   variable_table(i,3) = trim(minvalstring)
-   variable_table(i,4) = trim(maxvalstring)
-   variable_table(i,5) = trim(filename)
+   call to_upper(filename)
+   call to_upper(state_or_aux)
 
-   ! If the first two elements are empty, we have found the end of the list.
-   if ((variable_table(i,1) == ' ') .and. (variable_table(i,2) == ' ')) exit MyLoop
+   variable_table(i,VT_VARNAMEINDX) = trim(varname)
+   variable_table(i,VT_KINDINDX)    = trim(dartstr)
+   variable_table(i,VT_MINVALINDX)  = trim(minvalstring)
+   variable_table(i,VT_MAXVALINDX)  = trim(maxvalstring)
+   variable_table(i,VT_ORIGININDX)  = trim(filename)
+   variable_table(i,VT_STATEINDX)   = trim(state_or_aux)
+
+   ! If the first element is empty, we have found the end of the list.
+   if ((variable_table(i,1) == ' ') ) exit MyLoop
 
    ! Any other condition is an error.
    if ( any(variable_table(i,:) == ' ') ) then
       string1 = 'input.nml &model_nml:variables not fully specified.'
-      string2 = 'Must be 4 entries per variable, last known variable name is'
+      string2 = 'Must be 6 entries per variable, last known variable name is'
       string3 = trim(variable_table(i,1))
       call error_handler(E_ERR,'verify_variables',string1, &
           source,revision,revdate,text2=trim(string2),text3=trim(string3))
@@ -2137,31 +2134,7 @@ MyLoop : do i = 1, nrows
    ! Make sure variable exists in netCDF file, as long as it is not vTEC.
    ! vTEC gets constructed.
 
-   if (varname == 'VTEC') then
-      include_vTEC_in_state = .true.
-   else
-      ! Check to see which file contains the variable.
-      if (variable_table(i,5) == 'restart') then
-         ncid     = ncid1
-         filename = trim(filename1)
-      elseif (variable_table(i,5) == 'secondary') then
-         ncid     = ncid2
-         filename = trim(filename2)
-      else
-         write(string1,'(''unknown option ['',a,''] for variable '',a)') &
-                                trim(variable_table(i,5)), trim(varname)
-         call error_handler(E_ERR,'verify_variables',string1,source,revision,revdate)
-      endif
-
-      ncerr = NF90_inq_varid(ncid, trim(varname), VarID)
-      if (ncerr /= NF90_NOERR) then
-         write(string1,'(''No variable '',a,'' in '',a)') trim(varname), trim(filename)
-         string2 = 'If variable name is unexpected, check against input namelist.'
-         string3 = 'Make sure each variable has a DART kind, min, and max values.'
-         call error_handler(E_ERR, 'verify_variables', string1, &
-         source,revision,revdate, text2=trim(string2), text3=trim(string3))
-      endif
-   endif
+   if (varname == 'VTEC') include_vTEC_in_state = .true.
 
    ! Make sure DART kind is valid
 
@@ -2174,27 +2147,21 @@ MyLoop : do i = 1, nrows
 
 enddo MyLoop
 
-if (ngood == (nrows-1)) then
-   string1 = 'WARNING: There is a possibility you need to increase ''StateVarNmax'''
-   write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG, 'verify_variables', string1, &
-                      source, revision, revdate, text2=trim(string2))
-endif
-
 ! Do we need to augment the state vector with the parameter to estimate?
 if ( estimate_f10_7 ) then
 
    string1 = 'Estimating f10_7 is not supported.'
    string2 = 'This feature is under development. Use knowing it will fail.'
-   call error_handler(E_ERR, 'verify_variables', string1, &
+   call error_handler(E_MSG, 'verify_variables', string1, &
                       source, revision, revdate, text2=string2)
 
    ngood = ngood + 1
-   variable_table(ngood,1) = 'f10_7'
-   variable_table(ngood,2) = 'KIND_1D_PARAMETER'
-   variable_table(ngood,3) = 'NA'
-   variable_table(ngood,4) = 'NA'
-   variable_table(ngood,5) = 'calculate'
+   variable_table(ngood,VT_VARNAMEINDX) = 'f10_7'
+   variable_table(ngood,VT_KINDINDX)    = 'KIND_1D_PARAMETER'
+   variable_table(ngood,VT_MINVALINDX)  = 'NA'
+   variable_table(ngood,VT_MAXVALINDX)  = 'NA'
+   variable_table(ngood,VT_ORIGININDX)  = 'CALCULATE'
+   variable_table(ngood,VT_STATEINDX)   = 'NO_COPY_BACK'
 endif
 
 if (include_vTEC_in_state) then
@@ -2216,18 +2183,20 @@ endif
 ! Record the contents of the DART state vector
 if (do_output() .and. (debug > 99)) then
    do i = 1,ngood
-      write(*,'(''variable'',i4,'' is '',a12,1x,a32,1x,a20,1x,a20,1x,a)') i, &
+      write(*,'(''variable'',i4,'' is '',a12,1x,a32,4(1x,a20))') i, &
              trim(variable_table(i,1)), &
              trim(variable_table(i,2)), &
              trim(variable_table(i,3)), &
              trim(variable_table(i,4)), &
-             trim(variable_table(i,5))
-      write(logfileunit,'(''variable'',i4,'' is '',a12,1x,a32,1x,a20,1x,a20,1x,a)') i, &
+             trim(variable_table(i,5)), &
+             trim(variable_table(i,6))
+      write(logfileunit,'(''variable'',i4,'' is '',a12,1x,a32,4(1x,a20))') i, &
              trim(variable_table(i,1)), &
              trim(variable_table(i,2)), &
              trim(variable_table(i,3)), &
              trim(variable_table(i,4)), &
-             trim(variable_table(i,5))
+             trim(variable_table(i,5)), &
+             trim(variable_table(i,6))
    enddo
 endif
 
@@ -2237,26 +2206,35 @@ endif
 ! DART state vector.
 !-------------------------------------------------------------------------------
 
+call nc_check(nf90_open(trim(tiegcm_restart_file_name), NF90_NOWRITE, ncid1), &
+              'verify_variables','open '//trim(tiegcm_restart_file_name))
+
+call nc_check(nf90_open(trim(tiegcm_secondary_file_name), NF90_NOWRITE, ncid2), &
+              'verify_variables','open '//trim(tiegcm_secondary_file_name))
+
 index1  = 1;
 indexN  = 0;
 FillLoop : do ivar = 1, ngood
 
+   varname = trim(variable_table(ivar,VT_VARNAMEINDX))
+
    ! Check to see which file contains the variable.
-   if (variable_table(ivar,5) == 'restart') then
+   if     (variable_table(ivar,VT_ORIGININDX) == 'RESTART') then
       ncid     = ncid1
-      filename = trim(filename1)
-      state    = .true.
-   elseif (variable_table(ivar,5) == 'secondary') then
+      filename = tiegcm_restart_file_name
+   elseif (variable_table(ivar,VT_ORIGININDX) == 'SECONDARY') then
       ncid     = ncid2
-      filename = trim(filename2)
-      state    = .false.
-   else
+      filename = tiegcm_secondary_file_name
+   elseif (variable_table(ivar,VT_ORIGININDX) == 'CALCULATE') then
       ncid     = -1
       filename = 'calculate'
-      state    = .false.
+   else
+      write(string1,'(''unknown option ['',a,''] for variable '',a)') &
+                             trim(variable_table(ivar,VT_ORIGININDX)), trim(varname)
+      string2 = 'valid options are "RESTART", "SECONDARY", or "CALCULATE"'
+      call error_handler(E_ERR,'verify_variables',string1,source,revision,revdate,text2=string2)
    endif
 
-   varname                         = trim(variable_table(ivar,1))
    progvar(ivar)%varname           = varname
    progvar(ivar)%long_name         = 'blank'
    progvar(ivar)%units             = 'blank'
@@ -2267,7 +2245,7 @@ FillLoop : do ivar = 1, ngood
    progvar(ivar)%index1            = -1
    progvar(ivar)%indexN            = -1
    progvar(ivar)%verticalvar       = 'undefined'
-   progvar(ivar)%kind_string       = trim(variable_table(ivar,2))
+   progvar(ivar)%kind_string       = trim(variable_table(ivar,VT_KINDINDX))
    progvar(ivar)%dart_kind         = get_raw_obs_kind_index( progvar(ivar)%kind_string )
    progvar(ivar)%xtype             = -1
    progvar(ivar)%missingR8         = MISSING_R8
@@ -2276,8 +2254,11 @@ FillLoop : do ivar = 1, ngood
    progvar(ivar)%minvalue          = MISSING_R8
    progvar(ivar)%maxvalue          = MISSING_R8
    progvar(ivar)%has_missing_value = .false.
-   progvar(ivar)%state             = state
+   progvar(ivar)%update            = .false.
    progvar(ivar)%origin            = trim(filename)
+
+   if ((variable_table(ivar,VT_STATEINDX)  == 'UPDATE') .and. &
+       (variable_table(ivar,VT_ORIGININDX) == 'RESTART')) progvar(ivar)%update = .true.
 
    ! Convert the information in columns 3 and 4 into the appropriate variables
    call SetVariableLimits(ivar)
@@ -2316,6 +2297,13 @@ FillLoop : do ivar = 1, ngood
       cycle FillLoop
    endif
 
+   if (ncid < 0 ) then
+      write(string1,'(a,'' is supposed to be calculated.'')') trim(varname)
+      string2 = 'Not supported at this time.'
+      call error_handler(E_ERR, 'verify_variables', string1, &
+      source,revision,revdate, text2=trim(string2))
+   endif
+
    if (trim(varname) == 'ZG') ivarZG = ivar
 
    ! Now that the "special" cases are handled, just read the information
@@ -2323,8 +2311,14 @@ FillLoop : do ivar = 1, ngood
 
    string2 = trim(filename)//' '//trim(varname)
 
-   call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), &
-            'verify_variables', 'inq_varid '//trim(string2))
+   ncerr = NF90_inq_varid(ncid, trim(varname), VarID)
+   if (ncerr /= NF90_NOERR) then
+      write(string1,'(''No variable '',a,'' in '',a)') trim(varname), trim(filename)
+      string2 = 'If variable name is unexpected, check against input namelist.'
+      string3 = 'Make sure each variable has a DART kind, min, and max values.'
+      call error_handler(E_ERR, 'verify_variables', string1, &
+      source,revision,revdate, text2=trim(string2), text3=trim(string3))
+   endif
 
    call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, &
                  ndims=progvar(ivar)%rank, xtype=progvar(ivar)%xtype), &
@@ -2390,10 +2384,10 @@ FillLoop : do ivar = 1, ngood
 
    enddo DimensionLoop
 
-   progvar(ivar)%varsize     = varsize
-   progvar(ivar)%index1      = index1
-   progvar(ivar)%indexN      = index1 + varsize - 1
-   index1                    = index1 + varsize      ! sets up for next variable
+   progvar(ivar)%varsize = varsize
+   progvar(ivar)%index1  = index1
+   progvar(ivar)%indexN  = index1 + varsize - 1
+   index1                = index1 + varsize      ! sets up for next variable
 
 enddo FillLoop
 
@@ -2419,7 +2413,7 @@ if (do_output() .and. (debug > 1)) then
    write(logfileunit,*)'missingR8         ',progvar(ivar)%missingR8
    write(logfileunit,*)'missingR4         ',progvar(ivar)%missingR4
    write(logfileunit,*)'has_missing_value ',progvar(ivar)%has_missing_value
-   write(logfileunit,*)'state             ',progvar(ivar)%state
+   write(logfileunit,*)'update            ',progvar(ivar)%update
    write(logfileunit,*)'origin            ',trim(progvar(ivar)%origin)
 
    write(    *      ,*)
@@ -2442,13 +2436,15 @@ if (do_output() .and. (debug > 1)) then
    write(    *      ,*)'missingR8         ',progvar(ivar)%missingR8
    write(    *      ,*)'missingR4         ',progvar(ivar)%missingR4
    write(    *      ,*)'has_missing_value ',progvar(ivar)%has_missing_value
-   write(    *      ,*)'state             ',progvar(ivar)%state
+   write(    *      ,*)'update            ',progvar(ivar)%update
    write(    *      ,*)'origin            ',trim(progvar(ivar)%origin)
 endif
 enddo ReportLoop
 
-call nc_check(nf90_close(ncid1),'verify_variables','close '//trim(filename1))
-call nc_check(nf90_close(ncid2),'verify_variables','close '//trim(filename2))
+call nc_check(nf90_close(ncid1), 'verify_variables', &
+        'close '//trim(tiegcm_restart_file_name))
+call nc_check(nf90_close(ncid2), 'verify_variables', &
+        'close '//trim(tiegcm_secondary_file_name))
 
 end subroutine verify_variables
 
@@ -3743,10 +3739,10 @@ maxvalue = MISSING_R8
 progvar(ivar)%minvalue = MISSING_R8
 progvar(ivar)%maxvalue = MISSING_R8
 
-read(variable_table(ivar,3),*,iostat=ios) minvalue
+read(variable_table(ivar,VT_MINVALINDX),*,iostat=ios) minvalue
 if (ios == 0) progvar(ivar)%minvalue = minvalue
 
-read(variable_table(ivar,4),*,iostat=ios) maxvalue
+read(variable_table(ivar,VT_MAXVALINDX),*,iostat=ios) maxvalue
 if (ios == 0) progvar(ivar)%maxvalue = maxvalue
 
 ! rangeRestricted == BOUNDED_NONE  == 0 ... unlimited range

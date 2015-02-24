@@ -65,7 +65,7 @@
    inf_sd_lower_bound          = 0.0,                     0.0
    /
 
-! ! inf_flavor is 0:none, 1:obs space, 2: varying state space, 3: fixed state_space
+# inf_flavor is 0:none, 1:obs space, 2: varying state space, 3: fixed state_space
 
 &smoother_nml
    num_lags              = 0
@@ -93,28 +93,33 @@
    print_every_nth_obs             = 0
    /
 
-# Each variable must have 4 entries.
+# Each variable must have 6 entries.
 # 1: variable name
 # 2: DART KIND
 # 3: minimum value - as a character string - if none, use 'NA'
 # 4: maximum value - as a character string - if none, use 'NA'
 # 5: what file contains the variable - anything from 'restart' also gets UPDATED BY DART.
+# 6: does the variable get updated in the restart file or not ...
+#    only variables from restart files may be updated.
+#    'UPDATE' =>        update the variable in the restart file
+#    'NO_COPY_BACK' => do not update the variable in the restart file
+#    all these variables will be updated INTERNALLY IN DART.
 #
 # This is an example of how to restrict the range of each variable
-   variables      = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',
-                    'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',
-                    'TN_NM', 'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',
-                    'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888', 'restart',
-                    'O1_NM', 'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888', 'restart',
-                    'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888', 'restart',
-                    'O2_NM', 'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888', 'restart',
-                    'UN',    'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',
-                    'UN_NM', 'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',
-                    'VN',    'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
-                    'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',
-                    'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',
-                    'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',
-                    'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'
+#  variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',   'UPDATE',
+#              'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',   'UPDATE',
+#              'TN_NM', 'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',   'NO_COPY_BACK',
+#              'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888', 'restart',   'UPDATE',
+#              'O1_NM', 'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.98888', 'restart',   'NO_COPY_BACK',
+#              'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888', 'restart',   'UPDATE',
+#              'O2_NM', 'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.98888', 'restart',   'NO_COPY_BACK',
+#              'UN',    'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',   'UPDATE',
+#              'UN_NM', 'KIND_U_WIND_COMPONENT',          'NA',      'NA',      'restart',   'NO_COPY_BACK',
+#              'VN',    'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',   'UPDATE',
+#              'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',   'NO_COPY_BACK',
+#              'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',   'UPDATE',
+#              'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary', 'NO_COPY_BACK',
+#              'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'  'NO_COPY_BACK' 
 
 &model_nml
    debug                      = 1
@@ -123,14 +128,14 @@
    tiegcm_secondary_file_name = 'tiegcm_s.nc'
    tiegcm_namelist_file_name  = 'tiegcm.nml'
    estimate_f10_7             = .false.
-   variables      = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',
-                    'OP',    'KIND_DENSITY_ION_OP',            '1000.0',  'NA',      'restart',
-                    'OP_NM', 'KIND_DENSITY_ION_OP',            '1000.0',  'NA',      'restart',
-		    'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0',       '0.99999', 'secondary',
-                    'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0',       '0.99999', 'secondary',
-                    'TN',    'KIND_TEMPERATURE',               '0',       'NA',      'secondary',
-                    'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',
-                    'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'
+   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE',
+               'OP',    'KIND_DENSITY_ION_OP',            '1000.0',  'NA',      'restart',    'UPDATE',
+               'OP_NM', 'KIND_DENSITY_ION_OP',            '1000.0',  'NA',      'restart',    'NO_COPY_BACK',
+	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0',       '0.99999', 'secondary',  'NO_COPY_BACK',
+               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0',       '0.99999', 'secondary',  'NO_COPY_BACK',
+               'TN',    'KIND_TEMPERATURE',               '0',       'NA',      'secondary',  'NO_COPY_BACK',
+               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
+               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'   'NO_COPY_BACK' 
    /
 
 
@@ -165,7 +170,7 @@
    /
 
 &assim_model_nml
-   write_binary_restart_files = .true.
+   write_binary_restart_files = .false.
    netCDF_large_file_support  = .false.
    /
 
