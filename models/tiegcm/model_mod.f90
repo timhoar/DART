@@ -44,6 +44,7 @@ use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,           &
                              KIND_MOLEC_OXYGEN_MIXING_RATIO,  &! neutral composition obs
                              KIND_1D_PARAMETER,               &
                              KIND_GEOPOTENTIAL_HEIGHT,        &
+                             KIND_GEOMETRIC_HEIGHT,           &
                              KIND_DENSITY_ION_OP,             &! Atomic oxygen ion obs
                              KIND_VERTICAL_TEC,               &! total electron content
                              get_raw_obs_kind_index, get_raw_obs_kind_name
@@ -1223,7 +1224,7 @@ call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
 
 do k = 1,num_close
    t_ind  = close_ind(k)
-   if (obs_kind(t_ind) == KIND_GEOPOTENTIAL_HEIGHT) then
+   if (obs_kind(t_ind) == KIND_GEOMETRIC_HEIGHT) then
       if (do_output() .and. debug > 99) then ! TJH ... checked and is OK
          write(     *     ,*)'get_close_obs ZG distance is ', &
                      dist(k),' changing to ',10.0_r8 * PI
@@ -2659,7 +2660,7 @@ enddo
 do j = 1, nlat
 do k = 1, nlon
     delta_ZG(1:(nlev10-1)) =  ZG_extended(k,j,2:nlev10) -  ZG_extended(k,j,1:(nlev10-1))
-   NE_middle(1:(nlev10-1)) = NEm_extended(k,j,2:nlev10) + NEm_extended(k,j,1:(nlev10-1)) / 2.0_r8
+   NE_middle(1:(nlev10-1)) = (NEm_extended(k,j,2:nlev10) + NEm_extended(k,j,1:(nlev10-1))) / 2.0_r8
    vTEC(k,j) = sum(NE_middle * delta_ZG) * 1.0e-16_r8 ! Convert to TECU (1.0e+16 #/m^2)
 enddo
 enddo
