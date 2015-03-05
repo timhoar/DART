@@ -130,7 +130,7 @@ call getvar_real_2d(ncid, 'ON2_UNCERTAINTY'          , ON2_uncertainty, org_miss
 call getvar_int_2d(ncid, 'DATA_QUALITY_DISK'        , ON2_quality )
 
 where (ON2_uncertainty == org_missing) ON2_uncertainty = MISSING_R8
-write(*,*)'count of missing ',count(ON2_uncertainty < 0.0)
+if (do_output()) write(*,*)'count of missing ON2_uncertainty values',count(ON2_uncertainty < 0.0)
 
 call nc_check(nf90_close(ncid) , &
         'convert_f16_edr_dsk', 'closing file '//trim(input_netcdf_file))
@@ -223,7 +223,7 @@ along_day: do i_along = 1, n_pix_along_day
    enddo across_day
 enddo along_day
 
-if (do_output() .and. (debug > 0)) then   
+if (do_output()) then   
    write(*,*)'There were ',nused,' observations converted out of ', &
              n_pix_along_day*n_pix_across_day,' possible.'
 endif
