@@ -118,6 +118,8 @@
 #              'VN',    'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',   'UPDATE',
 #              'VN_NM', 'KIND_V_WIND_COMPONENT',          'NA',      'NA',      'restart',   'NO_COPY_BACK',
 #              'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',   'UPDATE',
+#              'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',   'NO_COPY_BACK',
+#              'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',   'NO_COPY_BACK',
 #              'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary', 'NO_COPY_BACK',
 #              'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'  'NO_COPY_BACK' 
 
@@ -130,12 +132,14 @@
    estimate_f10_7             = .false.
    variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE',
                'OP',    'KIND_DENSITY_ION_OP',            '1000.0',  'NA',      'restart',    'UPDATE',
+               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'NO_COPY_BACK',
+               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'NO_COPY_BACK',
                'OP_NM', 'KIND_DENSITY_ION_OP',            '1000.0',  'NA',      'restart',    'NO_COPY_BACK',
 	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0',       '0.99999', 'secondary',  'NO_COPY_BACK',
                'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0',       '0.99999', 'secondary',  'NO_COPY_BACK',
                'TN',    'KIND_TEMPERATURE',               '0',       'NA',      'secondary',  'NO_COPY_BACK',
                'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
-               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'   'NO_COPY_BACK' 
+               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK' 
    /
 
 
@@ -165,13 +169,13 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'MIDAS_TEC'
-   evaluate_these_obs_types   = 'CHAMP_DENSITY','GPS_PROFILE'
+   assimilate_these_obs_types = 'CHAMP_DENSITY'
+   evaluate_these_obs_types   = 'GPS_PROFILE'
    /
 
 &assim_model_nml
-   write_binary_restart_files = .false.
-   netCDF_large_file_support  = .false.
+   write_binary_restart_files = .true.
+   netCDF_large_file_support  = .true.
    /
 
 &location_nml

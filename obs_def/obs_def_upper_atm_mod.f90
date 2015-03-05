@@ -4,56 +4,58 @@
 !
 ! $Id$
 
-! This module supports the observation types from the AIRS instruments.
-! http://winds.jpl.nasa.gov/missions/quikscat/index.cfm
-
+! Fortran has a limit of 32 characters for variable names. Hence,
+! each column can be at most 32 characters wide.
+! xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 ! BEGIN DART PREPROCESS KIND LIST
-! SAT_TEMPERATURE,           KIND_TEMPERATURE,           COMMON_CODE
-! SAT_TEMPERATURE_ELECTRON,  KIND_TEMPERATURE_ELECTRON,  COMMON_CODE
-! SAT_TEMPERATURE_ION,       KIND_TEMPERATURE_ION,       COMMON_CODE
-! SAT_DENSITY_NEUTRAL_O3P,   KIND_DENSITY_NEUTRAL_O3P,   COMMON_CODE
-! SAT_DENSITY_NEUTRAL_O2,    KIND_DENSITY_NEUTRAL_O2,    COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N2,    KIND_DENSITY_NEUTRAL_N2,    COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N4S,   KIND_DENSITY_NEUTRAL_N4S,   COMMON_CODE
-! SAT_DENSITY_NEUTRAL_NO,    KIND_DENSITY_NEUTRAL_NO,    COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N2D,   KIND_DENSITY_NEUTRAL_N2D,   COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N2P,   KIND_DENSITY_NEUTRAL_N2P,   COMMON_CODE
-! SAT_DENSITY_NEUTRAL_H,     KIND_DENSITY_NEUTRAL_H,     COMMON_CODE
-! SAT_DENSITY_NEUTRAL_HE,    KIND_DENSITY_NEUTRAL_HE,    COMMON_CODE
-! SAT_DENSITY_NEUTRAL_CO2,   KIND_DENSITY_NEUTRAL_CO2,   COMMON_CODE
-! SAT_DENSITY_NEUTRAL_O1D,   KIND_DENSITY_NEUTRAL_O1D,   COMMON_CODE
-! SAT_DENSITY_ION_O4SP,      KIND_DENSITY_ION_O4SP,      COMMON_CODE
-! SAT_DENSITY_ION_O2P,       KIND_DENSITY_ION_O2P,       COMMON_CODE
-! SAT_DENSITY_ION_N2P,       KIND_DENSITY_ION_N2P,       COMMON_CODE
-! SAT_DENSITY_ION_NP,        KIND_DENSITY_ION_NP,        COMMON_CODE
-! SAT_DENSITY_ION_NOP,       KIND_DENSITY_ION_NOP,       COMMON_CODE
-! SAT_DENSITY_ION_O2DP,      KIND_DENSITY_ION_O2DP,      COMMON_CODE
-! SAT_DENSITY_ION_O2PP,      KIND_DENSITY_ION_O2PP,      COMMON_CODE
-! SAT_DENSITY_ION_HP,        KIND_DENSITY_ION_HP,        COMMON_CODE
-! SAT_DENSITY_ION_HEP,       KIND_DENSITY_ION_HEP,       COMMON_CODE
-! SAT_DENSITY_ION_E,         KIND_DENSITY_ION_E,         COMMON_CODE
-! SAT_VELOCITY_U,            KIND_VELOCITY_U,            COMMON_CODE
-! SAT_VELOCITY_V,            KIND_VELOCITY_V,            COMMON_CODE
-! SAT_VELOCITY_W,            KIND_VELOCITY_W,            COMMON_CODE
-! SAT_VELOCITY_U_ION,        KIND_VELOCITY_U_ION,        COMMON_CODE
-! SAT_VELOCITY_V_ION,        KIND_VELOCITY_V_ION,        COMMON_CODE
-! SAT_VELOCITY_W_ION,        KIND_VELOCITY_W_ION,        COMMON_CODE
-! SAT_VELOCITY_VERTICAL_O3P, KIND_VELOCITY_VERTICAL_O3P, COMMON_CODE
-! SAT_VELOCITY_VERTICAL_O2,  KIND_VELOCITY_VERTICAL_O2,  COMMON_CODE
-! SAT_VELOCITY_VERTICAL_N2,  KIND_VELOCITY_VERTICAL_N2,  COMMON_CODE
-! SAT_VELOCITY_VERTICAL_N4S, KIND_VELOCITY_VERTICAL_N4S, COMMON_CODE
-! SAT_VELOCITY_VERTICAL_NO,  KIND_VELOCITY_VERTICAL_NO,  COMMON_CODE
-! SAT_F107,                  KIND_1D_PARAMETER,          COMMON_CODE
-! SAT_RHO,                   KIND_DENSITY,               COMMON_CODE
-! GPS_PROFILE,               KIND_ELECTRON_DENSITY,      COMMON_CODE
-! GND_GPS_VTEC,              KIND_GND_GPS_VTEC
-! CHAMP_DENSITY,             KIND_DENSITY
-! MIDAS_TEC,                 KIND_VERTICAL_TEC,          COMMON_CODE
+! SAT_TEMPERATURE,                 KIND_TEMPERATURE,                COMMON_CODE
+! SAT_TEMPERATURE_ELECTRON,        KIND_TEMPERATURE_ELECTRON,       COMMON_CODE
+! SAT_TEMPERATURE_ION,             KIND_TEMPERATURE_ION,            COMMON_CODE
+! SAT_DENSITY_NEUTRAL_O3P,         KIND_DENSITY_NEUTRAL_O3P,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_O2,          KIND_DENSITY_NEUTRAL_O2,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N2,          KIND_DENSITY_NEUTRAL_N2,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N4S,         KIND_DENSITY_NEUTRAL_N4S,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_NO,          KIND_DENSITY_NEUTRAL_NO,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N2D,         KIND_DENSITY_NEUTRAL_N2D,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N2P,         KIND_DENSITY_NEUTRAL_N2P,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_H,           KIND_DENSITY_NEUTRAL_H,          COMMON_CODE
+! SAT_DENSITY_NEUTRAL_HE,          KIND_DENSITY_NEUTRAL_HE,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_CO2,         KIND_DENSITY_NEUTRAL_CO2,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_O1D,         KIND_DENSITY_NEUTRAL_O1D,        COMMON_CODE
+! SAT_DENSITY_ION_O4SP,            KIND_DENSITY_ION_O4SP,           COMMON_CODE
+! SAT_DENSITY_ION_O2P,             KIND_DENSITY_ION_O2P,            COMMON_CODE
+! SAT_DENSITY_ION_N2P,             KIND_DENSITY_ION_N2P,            COMMON_CODE
+! SAT_DENSITY_ION_NP,              KIND_DENSITY_ION_NP,             COMMON_CODE
+! SAT_DENSITY_ION_NOP,             KIND_DENSITY_ION_NOP,            COMMON_CODE
+! SAT_DENSITY_ION_O2DP,            KIND_DENSITY_ION_O2DP,           COMMON_CODE
+! SAT_DENSITY_ION_O2PP,            KIND_DENSITY_ION_O2PP,           COMMON_CODE
+! SAT_DENSITY_ION_HP,              KIND_DENSITY_ION_HP,             COMMON_CODE
+! SAT_DENSITY_ION_HEP,             KIND_DENSITY_ION_HEP,            COMMON_CODE
+! SAT_DENSITY_ION_E,               KIND_DENSITY_ION_E,              COMMON_CODE
+! SAT_VELOCITY_U,                  KIND_VELOCITY_U,                 COMMON_CODE
+! SAT_VELOCITY_V,                  KIND_VELOCITY_V,                 COMMON_CODE
+! SAT_VELOCITY_W,                  KIND_VELOCITY_W,                 COMMON_CODE
+! SAT_VELOCITY_U_ION,              KIND_VELOCITY_U_ION,             COMMON_CODE
+! SAT_VELOCITY_V_ION,              KIND_VELOCITY_V_ION,             COMMON_CODE
+! SAT_VELOCITY_W_ION,              KIND_VELOCITY_W_ION,             COMMON_CODE
+! SAT_VELOCITY_VERTICAL_O3P,       KIND_VELOCITY_VERTICAL_O3P,      COMMON_CODE
+! SAT_VELOCITY_VERTICAL_O2,        KIND_VELOCITY_VERTICAL_O2,       COMMON_CODE
+! SAT_VELOCITY_VERTICAL_N2,        KIND_VELOCITY_VERTICAL_N2,       COMMON_CODE
+! SAT_VELOCITY_VERTICAL_N4S,       KIND_VELOCITY_VERTICAL_N4S,      COMMON_CODE
+! SAT_VELOCITY_VERTICAL_NO,        KIND_VELOCITY_VERTICAL_NO,       COMMON_CODE
+! SAT_F107,                        KIND_1D_PARAMETER,               COMMON_CODE
+! SAT_RHO,                         KIND_DENSITY,                    COMMON_CODE
+! GPS_PROFILE,                     KIND_ELECTRON_DENSITY,           COMMON_CODE
+! SSUSI_O_N2_RATIO,                KIND_O_N2_COLUMN_DENSITY_RATIO,  COMMON_CODE
+! GND_GPS_VTEC,                    KIND_GND_GPS_VTEC
+! GPS_VTEC_EXTRAP,                 KIND_GND_GPS_VTEC
+! CHAMP_DENSITY,                   KIND_DENSITY
 ! END DART PREPROCESS KIND LIST
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !  use obs_def_upper_atm_mod, only : get_expected_upper_atm_density
 !  use obs_def_upper_atm_mod, only : get_expected_gnd_gps_vtec
+!  use obs_def_upper_atm_mod, only : get_expected_gps_vtec_extrap
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
@@ -61,6 +63,8 @@
 !      call get_expected_upper_atm_density(state, location, obs_val, istatus)
 ! case(GND_GPS_VTEC)
 !      call get_expected_gnd_gps_vtec(state, location, obs_val, istatus)
+! case(GPS_VTEC_EXTRAP)
+!      call get_expected_gps_vtec_extrap(state, location, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -102,7 +106,8 @@ use     obs_kind_mod, only : KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
 implicit none
 private
 public :: get_expected_upper_atm_density, &
-          get_expected_gnd_gps_vtec
+          get_expected_gnd_gps_vtec, &
+          get_expected_gps_vtec_extrap
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -240,6 +245,33 @@ deallocate(ALT, IDensityS_ie)
 istatus = 0
 
 end subroutine get_expected_gnd_gps_vtec
+
+
+
+subroutine get_expected_gps_vtec_extrap(state_vector, location, obs_val, istatus)
+!-----------------------------------------------------------------------------
+! Given DART state vector and a location, 
+! compute ground GPS vertical total electron content including an estimate of
+! the contribution from above the model (the 'extra'olated part)
+! The istatus variable should be returned as 0 unless there is a problem
+
+real(r8),            intent(in) :: state_vector(:)
+type(location_type), intent(in) :: location
+real(r8),           intent(out) :: obs_val
+integer,            intent(out) :: istatus
+
+if ( .not. module_initialized ) call initialize_module
+
+istatus = 1
+obs_val = MISSING_R8
+
+call error_handler(E_ERR, 'get_expected_gps_vtec_extrap', 'routine not written', &
+           source, revision, revdate, &
+           text2='routine in obs_def/obs_def_upper_atm_mod.f90')
+
+! FIXME this should replace the tiegcm/model_mod:create_vtec() routine
+
+end subroutine get_expected_gps_vtec_extrap
 
 
 
