@@ -8,8 +8,6 @@
 #
 # DART $Id$
 
-rm input_file.nc 
-
 set fname = input_file.nc
 
 # The ON2_UNCERTAINTY variable in the netcdf files have IEEE NaN values,
