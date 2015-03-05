@@ -2579,7 +2579,7 @@ integer,                  intent(in)  :: ncid
 integer,                  intent(in)  :: last_time
 real(r8), dimension(:,:), intent(out) :: vTEC
 
-real(r8), allocatable, dimension(:,:,:) :: NE, TI, TE, OP
+real(r8), allocatable, dimension(:,:,:) :: NE, TI, TE
 real(r8), allocatable, dimension(:,:,:) :: NEm_extended, ZG_extended
 real(r8), allocatable, dimension(:,:)   :: GRAVITYtop, Tplasma, Hplasma
 real(r8), allocatable, dimension(:)     :: delta_ZG, NE_middle
@@ -2592,7 +2592,7 @@ integer  :: VarID, nlev10, j, k
 
 allocate( NE(nlon,nlat,nilev), NEm_extended(nlon,nlat,nilev+10), &
           ZG_extended(nlon,nlat,nilev+10))
-allocate( TI(nlon,nlat,nlev), TE(nlon,nlat,nlev), OP(nlon,nlat,nlev) )
+allocate( TI(nlon,nlat,nlev), TE(nlon,nlat,nlev) )
 allocate( GRAVITYtop(nlon,nlat), Tplasma(nlon,nlat), Hplasma(nlon,nlat) )
 allocate( delta_ZG(nlev+9), NE_middle(nlev+9) )
 
@@ -2618,13 +2618,6 @@ call nc_check(nf90_get_var(ncid, VarID, values=TE,     &
                    start = (/    1,    1,    1, last_time /),   &
                    count = (/ nlon, nlat, nlev,         1 /)), &
                    'create_vtec', 'get_var TE')
-
-!... OP (midpoints)
-call nc_check(nf90_inq_varid(ncid, 'OP', VarID), 'create_vtec', 'inq_varid OP')
-call nc_check(nf90_get_var(ncid, VarID, values=OP,     &
-                   start = (/    1,    1,    1, last_time /),   &
-                   count = (/ nlon, nlat, nlev,         1 /)), &
-                   'create_vtec', 'get_var OP')
 
 ! Construct vTEC given the parts
 
@@ -2662,7 +2655,7 @@ enddo
 enddo
 
 deallocate( NE, NEm_extended, ZG_extended)
-deallocate( TI, TE, OP )
+deallocate( TI, TE )
 deallocate( GRAVITYtop, Tplasma, Hplasma )
 deallocate( delta_ZG, NE_middle )
 
