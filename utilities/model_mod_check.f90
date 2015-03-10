@@ -103,9 +103,6 @@ call find_namelist_in_file("input.nml", "model_mod_check_nml", iunit)
 read(iunit, nml = model_mod_check_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_mod_check_nml")
 
-write(*,'(''Converting DART file '',A,'' to restart file '',A)') &
-     trim(input_file), trim(output_file)
-
 ! This harvests all kinds of initialization information
 call static_init_model()
 
