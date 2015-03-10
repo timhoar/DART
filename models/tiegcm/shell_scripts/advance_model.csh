@@ -38,10 +38,6 @@ set temp_dir = `printf "advance_temp%04d" $process`
 mkdir -p $temp_dir
 cd       $temp_dir
 
-# Get the data files needed to run tiegcm. One directory up is 'CENTRALDIR'
-
-cp ../input.nml .
-
 # The following is a list of the REQUIRED input.nml namelist settings
 #
 # &model_nml         tiegcm_restart_file_name   = 'tiegcm_restart_p.nc',
@@ -54,14 +50,19 @@ cp ../input.nml .
 # Ensure that the input.nml has the required value for
 # dart_to_model_nml:advance_time_present for this context.
 
-echo '1'                      >! ex_commands
-echo '/dart_to_model_nml'     >> ex_commands
-echo '/advance_time_present'  >> ex_commands
-echo ':s/\.false\./\.true\./' >> ex_commands
-echo ':wq'                    >> ex_commands
+sed -e "/advance_time_present /c\ advance_time_present = .TRUE." \
+       ../input.nml >! input.nml || exit 1
 
-( ex input.nml < ex_commands ) >& /dev/null
-\rm -f ex_commands
+# Check to see if you are running async==4 ... an mpirun.lsf situation
+set MYSTRING = `grep -A 42 filter_nml input.nml | grep async`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
+set ASYNC = $MYSTRING[2]
+
+if ($ASYNC == 4) then
+   set RUN_CMD = mpirun.lsf
+else
+   set RUN_CMD = ''
+endif
 
 # Loop through each state
 set state_copy = 1
@@ -116,14 +117,9 @@ while($state_copy <= $num_states)
    set secstop      = `grep " SECSTOP "      namelist_update`
    set hist         = `grep " HIST "         namelist_update`
    set sechist      = `grep " SECHIST "      namelist_update`
-   set save         = `grep " SAVE "         namelist_update`
-   set secsave      = `grep " SECSAVE "      namelist_update`
    set f107         = `grep " F107 "         namelist_update`
 
    # FIXME TOMOKO ... do we want F107 and F107A to be identical
-   #
-   # FIXME SAVE and SECSAVE may not be needed ... they do not exist in 
-   # the tiegcm.nml anymore. Is this true for all versions in use ...
    #
    # the way to think about the following sed syntax is this:
    # / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line 
@@ -138,9 +134,6 @@ while($state_copy <= $num_states)
        -e "/ SECSTOP /c\ ${secstop}" \
        -e "/ SECHIST /c\ ${sechist}" \
        -e "/ F107 /c\ ${f107}" \
-       -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
-       -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
-       -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
        tiegcm.nml >! tiegcm.nml.updated
 
    if ( -e tiegcm.nml.updated ) then
@@ -160,13 +153,7 @@ while($state_copy <= $num_states)
    ncdump -v mtime tiegcm_restart_p.nc                     >> $logfile
    echo "Starting tiegcm at "`date`                        >> $logfile
 
-# mpi
-#  setenv TARGET_CPU_LIST "-1" 
-#  mpirun.lsf ../tiegcm < tiegcm.nml >>& $logfile
-
-# without mpi
-
-   ../tiegcm < tiegcm.nml >>& $logfile
+   ${RUN_CMD} ../tiegcm < tiegcm.nml >>& $logfile
 
    set mystatus = $status
 

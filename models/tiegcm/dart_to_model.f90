@@ -213,7 +213,7 @@ if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
    'cannot write SECSAVE to '//trim(filename), source,revision,revdate)
 
 f10_7 = get_f107_value(x_state)
-write(file_unit, *, iostat=io) 'F107 = ',f10_7 
+write(file_unit, '('' F107 = '',f14.5)', iostat=io) f10_7 
 if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
    'cannot write F107 to '//trim(filename),source,revision,revdate)
 

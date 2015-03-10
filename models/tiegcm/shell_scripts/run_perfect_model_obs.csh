@@ -25,18 +25,18 @@
 # Once the 'table is set', all that remains is to start/submit the 
 # 'runme_filter' script. That script will spawn 'filter' as a 
 # parallel job on the appropriate nodes; each of these tasks will 
-# call a separate model_advance.csh when necessary.
+# call a separate advance_model.csh when necessary.
 #
 # The central directory is where the scripts reside and where script and 
 # program I/O are expected to happen.
 #-----------------------------------------------------------------------------
 #
-#BSUB -J perfect
-#BSUB -o perfect.%J.log
+#BSUB -J tiegcm_perfect
+#BSUB -o tiegcm_perfect.%J.log
 #BSUB -P P3507xxxx
-#BSUB -q economy
+#BSUB -q regular
 #BSUB -n 1
-#BSUB -W 0:30
+#BSUB -W 1:00
 #BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
@@ -60,10 +60,10 @@ else
    #-------------------------------------------------------------------
 
    setenv ORIGINALDIR `pwd`
-   setenv JOBNAME     tiegcm
+   setenv JOBNAME     tiegcm_perfect
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
-   setenv MYHOST      $host
+   setenv MYHOST      $HOST
 
 endif
 
@@ -83,12 +83,11 @@ echo
 # Make a unique, (empty, clean) temporary directory.
 #----------------------------------------------------------------------
 
-setenv TMPDIR /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
+setenv CENTRALDIR /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
 
-mkdir -p ${TMPDIR}
-cd ${TMPDIR}
+mkdir -p ${CENTRALDIR}
+cd ${CENTRALDIR}
 
-set CENTRALDIR = `pwd`
 set myname = $0          # this is the name of this script
 
 # some systems don't like the -v option to any of the following 
@@ -116,53 +115,60 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 
 #-----------------------------------------------------------------------------
 # Set variables containing various directory names where we will GET things
+# DARTDIR      The location of the DART tiegcm model directory
+# TIEGCMDIR    The location of the TIEGCM executable
+# EXPERIMENT   The location of the initial ensemble of TIEGCM files
 #-----------------------------------------------------------------------------
 
-set    DARTDIR = /glade/u/home/tmatsuo/DART/models/tiegcm
-set  TIEGCMDIR = /glade/u/home/tmatsuo/DART/models/tiegcm/tiegcm_files
-set EXPERIMENT = /glade/scratch/tmatsuo/2002_03_28_tiegcm
+set    DARTDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm
+set  TIEGCMDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm/src
+set EXPERIMENT = /glade/p/work/${USER}/initial_ensemble
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
-#-----------------------------------------------------------------------------
-
-# executables
-
- ${COPY} ${DARTDIR}/work/perfect_model_obs          .
- ${COPY} ${DARTDIR}/work/dart_to_model              .
- ${COPY} ${DARTDIR}/work/model_to_dart              .
-
-# shell scripts
- ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .
-
-# data files
- ${COPY} ${DARTDIR}/work/obs_seq.in                 .
- ${COPY} ${DARTDIR}/work/input.nml                  .
-
-#-----------------------------------------------------------------------------
 # Get the tiegcm executable, control files, and data files.
+# The tiegcm initial conditions are in the next block.
 #-----------------------------------------------------------------------------
 
- ${COPY} ${TIEGCMDIR}/tiegcm-nompi                  tiegcm
+${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 1
+${COPY} ${DARTDIR}/work/dart_to_model              . || exit 1
+${COPY} ${DARTDIR}/work/model_to_dart              . || exit 1
+${COPY} ${DARTDIR}/work/input.nml                  . || exit 1
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 1
+${COPY} ${DARTDIR}/work/obs_seq.in                 . || exit 1
 
- ${COPY} ${TIEGCMDIR}/tiegcm_restart_p.nc           .
- ${COPY} ${TIEGCMDIR}/tiegcm_s.nc                   .
- ${COPY} ${TIEGCMDIR}/tiegcm.nml                    tiegcm.nml.original
+${COPY} ${TIEGCMDIR}/tiegcm-nompi             tiegcm || exit 1
+
+${COPY} ${TIEGCMDIR}/tiegcm_restart_p.nc           . || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm_s.nc                   . || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm.nml  tiegcm.nml.original || exit 1
 
 #-----------------------------------------------------------------------------
 # Remove all the comments that follow (;) symbol from tiegcm.nml namelist file
+# That is a non-standard syntax for fortran namelists.
 #-----------------------------------------------------------------------------
 
-grep -v "^;" tiegcm.nml.original >! tiegcm.nml
+grep -v "^;" tiegcm.nml.original >! tiegcm.nml  || exit 1
 
 #-----------------------------------------------------------------------------
-# Check that everything moved OK, and the table is set.
 # Convert a TIEGCM file 'tiegcm_restart.nc' to a DART ics file 'perfect_ics'
-# 'model_to_dart' has a hardwired output filename of 'temp_ud' ...
+# 
+# REQUIREMENTS: for input.nml
+# model_nml            : tiegcm_restart_file_name   = 'tiegcm_restart_p.nc'
+# model_nml            : tiegcm_secondary_file_name = 'tiegcm_s.nc'
+# model_nml            : tiegcm_namelist_file_name  = 'tiegcm.nml'
+# model_to_dart_nml    : file_out                   = 'dart_ics'
 #-----------------------------------------------------------------------------
+# perfect_model_obs_nml: async                      = 2
+# perfect_model_obs_nml: adv_ens_command            = 'advance_model.csh'
+# perfect_model_obs_nml: start_from_restart         = .TRUE.
+# perfect_model_obs_nml: restart_in_file_name       = 'perfect_ics'
+#-----------------------------------------------------------------------------
+# dart_to_model_nml    : file_in                    = 'dart_restart'
+# dart_to_model_nml    : file_namelist_out          = 'namelist_update'
 
-./model_to_dart || exit 1
-mv temp_ud perfect_ics
+./model_to_dart              || exit 2
+${MOVE} dart_ics perfect_ics || exit 2
 
 #-----------------------------------------------------------------------------
 # Run perfect_model_obs ... harvest the observations to populate obs_seq.out
@@ -170,44 +176,37 @@ mv temp_ud perfect_ics
 # with the ensemble member ID tacked on - must provide both.
 #-----------------------------------------------------------------------------
 
-ln -sf tiegcm_restart_p.nc tiegcm_restart_p.nc.0001
-ln -sf tiegcm_s.nc         tiegcm_s.nc.0001
-ln -sf tiegcm.nml          tiegcm.nml.0001
+ln -sf tiegcm_restart_p.nc tiegcm_restart_p.nc.0001 || exit 3
+ln -sf tiegcm_s.nc         tiegcm_s.nc.0001         || exit 3
+ln -sf tiegcm.nml          tiegcm.nml.0001          || exit 3
 
-./perfect_model_obs || exit 2
+./perfect_model_obs || exit 3
+
+#-----------------------------------------------------------------------------
+# At this point, all the restart,diagnostic files are in the run/CENTRALDIR.
+# You may want to move them to someplace more 'permanent'.
+#
+# TJH: At this point, the output files have pretty 'generic' names.
+# The files could be archived with the assimilation date in their name.
+#-----------------------------------------------------------------------------
+
+# ${MOVE} tiegcm_s.nc.0001           ${EXPERIMENT}/perfect/tiegcm_s.nc
+# ${MOVE} tiegcm_restart_p.nc.0001   ${EXPERIMENT}/perfect/tiegcm_restart_p.nc
+# ${MOVE} tiegcm.nml                 ${EXPERIMENT}/perfect
+# ${MOVE} obs_seq.out                ${EXPERIMENT}/perfect
+# ${MOVE} True_State.nc              ${EXPERIMENT}/perfect
+
+# ${MOVE} tiegcm_out_1               ${EXPERIMENT}/perfect/tiegcm_out
+# ${MOVE} dart_log.out               ${EXPERIMENT}/perfect
+# ${MOVE} dart_log.nml               ${EXPERIMENT}/perfect
+# Good style dictates that you save the scripts so you can see what worked.
+
+# ${COPY} input.nml                  ${EXPERIMENT}/DART
+# ${COPY} *.csh                      ${EXPERIMENT}/DART
+# ${COPY} $myname                    ${EXPERIMENT}/DART
 
 echo "${JOBNAME} ($JOBID) finished at "`date`
-
-#-----------------------------------------------------------------------------
-# Move the output to storage after filter completes.
-# At this point, all the restart,diagnostic files are in the CENTRALDIR
-# and need to be moved to the 'experiment permanent' directory.
-# We have had problems with some, but not all, files being moved
-# correctly, so we are adding bulletproofing to check to ensure the filesystem
-# has completed writing the files, etc. Sometimes we get here before
-# all the files have finished being written.
-#-----------------------------------------------------------------------------
-
-echo "Listing contents of CENTRALDIR before archiving"
-ls -l
-
-exit
-
-${MOVE} tiegcm_s.nc.0001           ${EXPERIMENT}/perfect/tiegcm_s.nc
-${MOVE} tiegcm_restart_p.nc.0001   ${EXPERIMENT}/perfect/tiegcm_restart_p.nc
-${MOVE} tiegcm.nml                 ${EXPERIMENT}/perfect
-${MOVE} obs_seq.out                ${EXPERIMENT}/perfect
-${MOVE} True_State.nc              ${EXPERIMENT}/perfect
-${MOVE} perfect_restart            ${EXPERIMENT}/perfect
-
-${MOVE} tiegcm_out_1               ${EXPERIMENT}/perfect/tiegcm_out
-${MOVE} dart_log.out               ${EXPERIMENT}/perfect
-${MOVE} dart_log.nml               ${EXPERIMENT}/perfect
-# Good style dictates that you save the scripts so you can see what worked.
-${COPY} input.nml                  ${experiment}/DART
-${COPY} *.csh                      ${experiment}/DART
-${COPY} $myname                    ${experiment}/DART
-
+echo "These are the files in the run directory at completion:"
 ls -lrt
 
 exit 0

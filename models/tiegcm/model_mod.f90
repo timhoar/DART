@@ -90,8 +90,6 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = '$Revision$'
 character(len=128), parameter :: revdate  = '$Date$'
 
-character(len=256), parameter :: modsource = source  ! stupid read_namelist routine
-
 !-------------------------------------------------------------------------------
 ! namelist with default values
 ! output_state_vector = .true.  results in a "state-vector"   netCDF file
@@ -573,8 +571,8 @@ integer, optional,   intent(out) :: var_kind
 integer  :: remainder
 integer  :: relindx, absindx
 integer  :: lon_index, lat_index, lev_index
-integer  :: ivar
-real(r8) :: height
+integer  :: ivar, seconds, days
+real(r8) :: height, longitude
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -582,15 +580,13 @@ ivar   = Find_Variable_by_index(index_in,'get_state_meta_data')
 relindx = index_in - progvar(ivar)%index1 + 1
 
 if     (progvar(ivar)%rank == 0) then  ! scalars ... no location
-   ! FIXME ... actually ... f10_7 is most accurately located at local noon at
-   ! equator. convert state_time to a longitude
+   ! f10_7 is most accurately located at local noon at equator.
+   ! 360.0 degrees in 86400 seconds, 43200 secs == 12:00 UTC == longitude 0.0
 
-   location = set_location(0.0_r8, 0.0_r8,  400000.0_r8, VERTISHEIGHT)
-
-   if (do_output() .and. (debug > 8)) then
-      write(*,*)'TJH gsmd scalar: ivar, index_in, relindx ', &
-                                  ivar, index_in, relindx
-   endif
+   call get_time(state_time, seconds, days)
+   longitude = 360.0_r8 * real(seconds,r8) / 86400.0_r8 - 180.0_r8
+   if (longitude < 0.0_r8) longitude = longitude + 360.0_r8
+   location = set_location(longitude, 0.0_r8,  400000.0_r8, VERTISUNDEF)
 
 elseif (progvar(ivar)%rank == 1) then  ! time?
    write(string1,*)trim(progvar(ivar)%varname),'has unsupported shape (1D)'
@@ -599,7 +595,7 @@ elseif (progvar(ivar)%rank == 1) then  ! time?
    call error_handler(E_ERR,'get_state_meta_data', string1, &
               source, revision, revdate, text2=trim(string2))
 
-elseif (progvar(ivar)%rank == 2) then  ! something, and time?
+elseif (progvar(ivar)%rank == 2) then  ! something, and time? lat & lon but no time?
    write(string1,*)trim(progvar(ivar)%varname), &
                    'has unsupported shape (2D) ... unknown location'
    write(string2,*)'dimension 1 = ('//trim(progvar(ivar)%dimnames(1))//')'
@@ -1224,7 +1220,7 @@ call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
 do k = 1,num_close
    t_ind  = close_ind(k)
    if (obs_kind(t_ind) == KIND_GEOMETRIC_HEIGHT) then
-      if (do_output() .and. debug > 99) then ! TJH ... checked and is OK
+      if (do_output() .and. debug > 99) then
          write(     *     ,*)'get_close_obs ZG distance is ', &
                      dist(k),' changing to ',10.0_r8 * PI
          write(logfileunit,*)'get_close_obs ZG distance is ', &
@@ -1234,22 +1230,30 @@ do k = 1,num_close
    endif
 enddo
 
-! This was part of an experimental setup -
-! do not update some state variables when estimating a parameter.
-! verify_state_variables() will DIE if estimate_f10_7 is .true.
 
 if (estimate_f10_7) then
    do k = 1, num_close
 
       t_ind  = close_ind(k)
 
-      ! set distance to a very large value so that it won't get updated
+      ! This was part of an experimental setup - if the distance is LARGE,
+      ! the state variables will not be updated. By increasing the distance,
+      ! the values in the DART vector will remain unchanged. If you allow
+      ! the DART vector to be updated, the posterior observation operators
+      ! will be impacted - which is usually the desire. You can then avoid
+      ! impacting the tiegcm forecast through the input.nml 'NO_COPY_BACK' feature.
+
       if (    (obs_kind(t_ind) == KIND_MOLEC_OXYGEN_MIXING_RATIO) &
          .or. (obs_kind(t_ind) == KIND_U_WIND_COMPONENT) &
          .or. (obs_kind(t_ind) == KIND_V_WIND_COMPONENT) &
          .or. (obs_kind(t_ind) == KIND_TEMPERATURE) ) then
-         dist(k) = 10.0_r8 * PI
+      !  dist(k) = 10.0_r8 * PI
+
       elseif  (obs_kind(t_ind) == KIND_1D_PARAMETER) then
+         ! f10_7 is given a location of latitude 0.0 and the longitude
+         ! of local noon. By decreasing the distance from the observation
+         ! to the dynamic f10_7 location we are allowing more observations
+         ! to aid in the parameter estimation. 0.25 is heuristic. 
          dist(k) = dist(k)*0.25_r8
       endif
 
@@ -1371,6 +1375,10 @@ ReadVariable: do ivar = 1,nfields
    ! ZG is already a module variable that is required.
    if (trim(progvar(ivar)%varname) == 'ZG') then
       call prog_var_to_vector(ivar, ZG, statevec)
+      ! deallocate(ZG)
+      ! FIXME After the create_vtec() rewrite, ZG should be deallocated.
+      ! It can be accessed directly from the DART state
+      ! maybe should also be removed from the read_tiegcm_seconday() routine
       cycle ReadVariable
    endif
 
@@ -1643,8 +1651,6 @@ if ( .not. module_initialized ) call static_init_model
 
 if (estimate_f10_7) then
 
-   f10_7 = MISSING_R8
-
    VARLOOP : do ivar = 1,nfields
       if (progvar(ivar)%varname == 'f10_7') then
          get_f107_value = x(progvar(ivar)%index1)
@@ -1652,8 +1658,8 @@ if (estimate_f10_7) then
       endif
    enddo VARLOOP
 
-   if (f10_7 == MISSING_R8) call error_handler(E_ERR,'get_f107_value', &
-       'no f10_7 in DART state', source, revision, revdate)
+   call error_handler(E_ERR,'get_f107_value', 'no f10_7 in DART state', &
+        source, revision, revdate)
 
 else
    get_f107_value = f10_7
@@ -1742,8 +1748,8 @@ real :: &
      &  tide(10),        &! semidiurnal tide amplitudes and phases
      &  tide2(2),        &! diurnal tide amplitude and phase
      &  tide3m3(2),      &! 2-day wave amplitude and phase
-     &  f107,            &! 10.7 cm daily solar flux
-     &  f107a,           &! 10.7 cm average (81-day) solar flux
+     &  f107 = MISSING_R4,            &! 10.7 cm daily solar flux
+     &  f107a = MISSING_R4,           &! 10.7 cm average (81-day) solar flux
      &  colfac,          &! collision factor
      &  amie_ibkg         ! AMIE_IBKG (not sure...)
 !
@@ -1859,7 +1865,7 @@ namelist/tgcm_input/                                        &
 
 if( .not. file_exist(file_name)) then
    write(string1,*) trim(file_name),' not available.'
-   call error_handler(E_ERR,'read_TIEGCM_namelist',string1,modsource,revision,revdate)
+   call error_handler(E_ERR,'read_TIEGCM_namelist',string1,source,revision,revdate)
 endif
 
 if (do_output()) write(*,*) 'read_TIEGCM_namelist: reading restart:', file_name
@@ -1881,6 +1887,11 @@ else
 endif
 
 f10_7 = f107  ! save this in module storage
+
+if (do_output() .and. debug > 0 ) then
+   write(string1,*) 'f107 from tiegcm.nml is ',f107
+   call error_handler(E_MSG,'read_TIEGCM_namelist:',string1)
+endif
 
 end subroutine read_TIEGCM_namelist
 
@@ -2038,11 +2049,11 @@ endif
 ! ... check units and convert them to meters if need be.
 if (nf90_get_att(ncid, VarID, 'units' , string1) == NF90_NOERR) then
    if(trim(string1) == 'cm') then
-      call error_handler(E_MSG,'read_TIEGCM_secondary', &
+      call error_handler(E_MSG,'read_TIEGCM_secondary:', &
           'Converting ZG from cm to meters.')
       where(ZG /= MISSING_R8) ZG = ZG/100.0_r8
    elseif(trim(string1) == 'm') then
-      call error_handler(E_MSG,'read_TIEGCM_secondary', &
+      call error_handler(E_MSG,'read_TIEGCM_secondary:', &
           'ZG already in meters.')
    else
       call error_handler(E_ERR,'read_TIEGCM_secondary', &
@@ -2151,9 +2162,10 @@ enddo MyLoop
 if ( estimate_f10_7 ) then
 
    string1 = 'Estimating f10_7 is not supported.'
-   string2 = 'This feature is under development. Use knowing it will fail.'
-   call error_handler(E_MSG, 'verify_variables', string1, &
-                      source, revision, revdate, text2=string2)
+   string2 = 'This feature is under development.'
+   string3 = 'If you want to experiment with this, change E_ERR to E_MSG in "verify_variables".'
+   call error_handler(E_ERR, 'verify_variables:', string1, &
+                      source, revision, revdate, text2=string2, text3=string3)
 
    ngood = ngood + 1
    variable_table(ngood,VT_VARNAMEINDX) = 'f10_7'
@@ -2161,7 +2173,8 @@ if ( estimate_f10_7 ) then
    variable_table(ngood,VT_MINVALINDX)  = 'NA'
    variable_table(ngood,VT_MAXVALINDX)  = 'NA'
    variable_table(ngood,VT_ORIGININDX)  = 'CALCULATE'
-   variable_table(ngood,VT_STATEINDX)   = 'NO_COPY_BACK'
+   variable_table(ngood,VT_STATEINDX)   = 'UPDATE'
+
 endif
 
 if (include_vTEC_in_state) then
@@ -2206,10 +2219,10 @@ endif
 ! DART state vector.
 !-------------------------------------------------------------------------------
 
-call nc_check(nf90_open(trim(tiegcm_restart_file_name), NF90_NOWRITE, ncid1), &
+call nc_check(nf90_open(tiegcm_restart_file_name, NF90_NOWRITE, ncid1), &
               'verify_variables','open '//trim(tiegcm_restart_file_name))
 
-call nc_check(nf90_open(trim(tiegcm_secondary_file_name), NF90_NOWRITE, ncid2), &
+call nc_check(nf90_open(tiegcm_secondary_file_name, NF90_NOWRITE, ncid2), &
               'verify_variables','open '//trim(tiegcm_secondary_file_name))
 
 index1  = 1;
@@ -2714,7 +2727,7 @@ enddo VARLOOP
 if (ivar < 0 ) then
    write(string1,*)'DART state does not have anything with kind ',ikind
    write(string2,*)get_raw_obs_kind_name(ikind)
-   call error_handler(E_MSG,'vert_interp',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_MSG,'vert_interp:',string1,source,revision,revdate,text2=string2)
    return
 endif
 
@@ -2791,13 +2804,13 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
 else
    write(string1,*)trim(progvar(ivar)%varname), &
        ' has an unknown vertical coordinate system ',trim(progvar(ivar)%verticalvar)
-   call error_handler(E_MSG,'vert_interp', string1, source, revision, revdate )
+   call error_handler(E_MSG,'vert_interp:', string1, source, revision, revdate )
 endif
 
 ! Check to make sure we didn't fall through the h_loop ... unlikely (impossible?)
 if ( (frac_lev == MISSING_R8) .or. (lev_top == 0) .or. (lev_bottom == 0) ) then
    write(string1,*)'Should not be here ... fell through loop.'
-   call error_handler(E_MSG,'vert_interp', string1, source, revision, revdate )
+   call error_handler(E_MSG,'vert_interp:', string1, source, revision, revdate )
    return
 endif
 
@@ -3266,7 +3279,7 @@ elseif ( numdims == 4 ) then
          mycount(3) = mycount(3) - 1
          write(string1,*)'Only writing ',mycount(3),' levels for ',&
                          trim(progvar(ivar)%varname)
-         call error_handler(E_MSG, 'vector_to_prog_var', string1, &
+         call error_handler(E_MSG, 'vector_to_prog_var:', string1, &
                 source, revision, revdate)
       else
          write(string1,*)trim(progvar(ivar)%varname),'has unexpected shape.'

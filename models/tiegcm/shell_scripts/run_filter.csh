@@ -25,14 +25,14 @@
 # Once the 'table is set', all that remains is to start/submit the 
 # 'runme_filter' script. That script will spawn 'filter' as a 
 # parallel job on the appropriate nodes; each of these tasks will 
-# call a separate model_advance.csh when necessary.
+# call a separate advance_model.csh when necessary.
 #
 # The central directory is where the scripts reside and where script and 
 # program I/O are expected to happen.
 #
 # PLEASE READ THE FOLLOWING: 
 #    Setting the number of tasks and choosing the right ptile requires work.
-# The number of tasks (-n) should be at least as big as the ensemble size for
+# The number of tasks (-n) can be be as big as the ensemble size for
 # a single-threaded tiegcm (i.e. async == 2) so that all ensemble members can 
 # run simultaneously. The setting of ptile specifies the number of tasks on each 
 # node, which usually depends on the model resolution and subsequent memory use 
@@ -45,9 +45,9 @@
 #
 #BSUB -J tiegcm_filter
 #BSUB -o tiegcm_filter.%J.log
-#BSUB -P NIMG0002
-#BSUB -q premium
-#BSUB -n 90
+#BSUB -P NIMGxxxx
+#BSUB -q regular
+#BSUB -n 96
 #BSUB -R "span[ptile=16]"
 #BSUB -W 3:00
 #BSUB -N -u ${USER}@ucar.edu
@@ -65,6 +65,7 @@ if ($?LSB_HOSTS) then
    setenv JOBID       $LSB_JOBID
    setenv MYQUEUE     $LSB_QUEUE
    setenv MYHOST      $LSB_SUB_HOST
+   setenv MPI_RUN_CMD mpirun.lsf
 
    # MP_DEBUG_NOTIMEOUT may alleviate MPI timeouts that may occur under
    # certain task geometries. It is NOT a good idea to use it in general. 
@@ -81,6 +82,7 @@ else
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
    setenv MYHOST      $HOST
+   setenv MPI_RUN_CMD ''
 
 endif
 
@@ -132,11 +134,14 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 
 #-----------------------------------------------------------------------------
 # Set variables containing various directory names where we will GET things
+# DARTDIR      The location of the DART tiegcm model directory
+# TIEGCMDIR    The location of the TIEGCM executable
+# EXPERIMENT   The location of the initial ensemble of TIEGCM files
 #-----------------------------------------------------------------------------
 
-set    DARTDIR = /glade/u/home/thoar/work/DART/tiegcm/models/tiegcm
-set  TIEGCMDIR = /glade/u/home/chihting/dart/branch/models/tiegcm/tiegcm
-set EXPERIMENT = /glade/p/work/chihting/job2/filter1
+set    DARTDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm
+set  TIEGCMDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm/src
+set EXPERIMENT = /glade/p/work/${USER}/initial_ensemble
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
@@ -151,8 +156,7 @@ ${COPY} ${DARTDIR}/work/input.nml                  .   || exit -1
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .   || exit -1
 ${COPY} ${EXPERIMENT}/observation/obs_seq.out      .   || exit -1
 
-${COPY} ${TIEGCMDIR}/tiegcm-nompi             tiegcm   || exit -1
-#${COPY} ${TIEGCMDIR}/tiegcm                        .   || exit -1
+${COPY}  ${TIEGCMDIR}/tiegcm-nompi            tiegcm   || exit -1
 
 #-----------------------------------------------------------------------------
 # Put all of the DART initial conditions files and all of the TIEGCM files
@@ -193,7 +197,21 @@ while ( $i <= $NUM_ENS )
   ln -sf ${EXPERIMENT}/initial/$tierestart .                   || exit -2
   ln -sf ${EXPERIMENT}/initial/$tieinp     tiegcm.nml.original || exit -2
 
-  sed -e 's/;.*//' -e '/^$/ d' tiegcm.nml.original >! $tieinp  || exit -3
+  # Ensure that the tiegcm.nml for all the ensemble members is identical
+  # in all the ways that matter. This will result in a miniumum of changes
+  # in the advance_model.csh script. This script REQUIRES that there is a  
+  # SINGLE tiegcm_restart_p.nc. Just keep appending all the timesteps to
+  # the same file. If you need to subset the large file, use the NCO
+  # operators. for example    ncks -d time,20,30 tiegcm_restart_p.nc bob.nc 
+  # If you need more than 300 timesteps in the file, increase it here.
+  
+  sed -e 's/;.*//' -e '/^$/ d' \
+      -e "/ MXHIST_PRIM /c\ MXHIST_PRIM = 300" \
+      -e "/ MXHIST_SECH /c\ MXHIST_SECH = 300" \
+      -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
+      -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
+      -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
+      tiegcm.nml.original >! $tieinp  || exit -3
 
   # If an existing ensemble of filter_ics.#### exist, use it.
   # If not, generate one. Be aware - even if they exist, they may
@@ -235,38 +253,35 @@ ln -sf tiegcm_restart_p.nc.0001 tiegcm_restart_p.nc   || exit -6
 ln -sf tiegcm_s.nc.0001         tiegcm_s.nc           || exit -6
 ln -sf tiegcm.nml.0001          tiegcm.nml            || exit -6
 
-mpirun.lsf ./filter || exit -6
-
-echo "${JOBNAME} ($JOBID) finished at "`date`
+${MPI_RUN_CMD} ./filter || exit -6
 
 #-----------------------------------------------------------------------------
-# Move the output to storage after filter completes.
-# At this point, all the DART restart,diagnostic files are in the CENTRALDIR
-# and need to be moved to the 'experiment permanent' directory.
+# At this point, all the restart,diagnostic files are in the run/CENTRALDIR.
+# You may want to move them to someplace more 'permanent'.
 #
 # TJH: At this point, the output files have pretty 'generic' names.
-# The files should be archived with the assimilation date in their name.
+# The files could be archived with the assimilation date in their name.
 #-----------------------------------------------------------------------------
 
-exit 0
+# ${COPY} tiegcm.nml                 ${EXPERIMENT}/tiegcm
+# ${MOVE} tiegcm_s.nc*               ${EXPERIMENT}/tiegcm
+# ${MOVE} tiegcm_restart_p.nc*       ${EXPERIMENT}/tiegcm
+# ${MOVE} tiegcm_out_*               ${EXPERIMENT}/tiegcm
 
-${MOVE} tiegcm_s.nc*               ${experiment}/tiegcm
-${MOVE} tiegcm_restart_p.nc*       ${experiment}/tiegcm
-${MOVE} tiegcm_out_*               ${experiment}/tiegcm
-
-${MOVE} filter_restart*            ${experiment}/DART
-${MOVE} assim_model_state_ud[1-9]* ${experiment}/DART
-${MOVE} assim_model_state_ic[1-9]* ${experiment}/DART
-${MOVE} Posterior_Diag.nc          ${experiment}/DART
-${MOVE} Prior_Diag.nc              ${experiment}/DART
-${MOVE} obs_seq.final              ${experiment}/DART
-${MOVE} dart_log.out               ${experiment}/DART
+# ${MOVE} Posterior_Diag.nc          ${EXPERIMENT}/DART
+# ${MOVE} Prior_Diag.nc              ${EXPERIMENT}/DART
+# ${MOVE} obs_seq.final              ${EXPERIMENT}/DART
+# ${MOVE} dart_log.out               ${EXPERIMENT}/DART
 
 # Good style dictates that you save the scripts so you can see what worked.
 
-${COPY} input.nml                  ${experiment}/DART
-${COPY} *.csh                      ${experiment}/DART
-${COPY} $myname                    ${experiment}/DART
+# ${COPY} input.nml                  ${EXPERIMENT}/DART
+# ${COPY} *.csh                      ${EXPERIMENT}/DART
+# ${COPY} $myname                    ${EXPERIMENT}/DART
+
+echo "${JOBNAME} ($JOBID) finished at "`date`
+echo "These are the files in the run directory at completion:"
+ls -lrt
 
 exit 0
 
