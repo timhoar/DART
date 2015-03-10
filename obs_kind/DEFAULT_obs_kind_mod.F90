@@ -139,6 +139,12 @@ integer, parameter, public :: &
 integer, parameter, public :: &
     KIND_ALTIMETER_TENDENCY          = 48
 
+! kind for precip water; contrast with
+! total precip water (also in this file), 
+! which is the total column integrated value. 
+integer, parameter, public :: &
+    KIND_PRECIPITABLE_WATER          = 49
+
 ! kinds for the MITgcm, POP ocean model
 integer, parameter, public :: &
     KIND_SALINITY                    = 50, &
@@ -263,7 +269,14 @@ integer, parameter, public :: &
     KIND_STEM_NITROGEN               = 126, &
     KIND_LEAF_NITROGEN               = 127, &
     KIND_WATER_TABLE_DEPTH           = 128, &
-    KIND_FPAR                        = 129
+    KIND_FPAR                        = 129, &
+    KIND_TOTAL_WATER_STORAGE         = 130
+
+! more kinds for land snow cover (Ally Toure)
+integer, parameter, public :: &
+    KIND_BRIGHTNESS_TEMPERATURE      = 131, &
+    KIND_VEGETATION_TEMPERATURE      = 132, &
+    KIND_CANOPY_HEIGHT               = 133
 
 ! kinds for NOAH  (Tim Hoar)
 integer, parameter, public :: &
@@ -496,7 +509,7 @@ obs_kind_names(45) = obs_kind_type(KIND_3D_PARAMETER, 'KIND_3D_PARAMETER')
 obs_kind_names(46) = obs_kind_type(KIND_ATOMIC_OXYGEN_MIXING_RATIO, 'KIND_ATOMIC_OXYGEN_MIXING_RATIO')
 obs_kind_names(47) = obs_kind_type(KIND_MOLEC_OXYGEN_MIXING_RATIO, 'KIND_MOLEC_OXYGEN_MIXING_RATIO')
 obs_kind_names(48) = obs_kind_type(KIND_ALTIMETER_TENDENCY, 'KIND_ALTIMETER_TENDENCY')
-
+obs_kind_names(49) = obs_kind_type(KIND_PRECIPITABLE_WATER, 'KIND_PRECIPITABLE_WATER')
 obs_kind_names(50) = obs_kind_type(KIND_SALINITY, 'KIND_SALINITY')
 obs_kind_names(51) = obs_kind_type(KIND_U_CURRENT_COMPONENT, 'KIND_U_CURRENT_COMPONENT')
 obs_kind_names(52) = obs_kind_type(KIND_V_CURRENT_COMPONENT, 'KIND_V_CURRENT_COMPONENT')
@@ -575,6 +588,10 @@ obs_kind_names(126) = obs_kind_type(KIND_STEM_NITROGEN         ,'KIND_STEM_NITRO
 obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN         ,'KIND_LEAF_NITROGEN')
 obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH     ,'KIND_WATER_TABLE_DEPTH')
 obs_kind_names(129) = obs_kind_type(KIND_FPAR                  ,'KIND_FPAR')
+obs_kind_names(130) = obs_kind_type(KIND_TOTAL_WATER_STORAGE   ,'KIND_TOTAL_WATER_STORAGE')
+obs_kind_names(131) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
+obs_kind_names(132) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')
+obs_kind_names(133) = obs_kind_type(KIND_CANOPY_HEIGHT,        'KIND_CANOPY_HEIGHT')
 
 obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY, 'KIND_NEUTRON_INTENSITY')
 obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER, 'KIND_CANOPY_WATER')
@@ -633,7 +650,7 @@ do i = 1, max_obs_specific
    num_kind_evaluate = i
 end do
 
-if (do_output()) then
+if (do_output() .and. (num_kind_assimilate > 0 .or. num_kind_evaluate > 0)) then
    write(*, *) '------------------------------------------------------'
    write(*, *)
 

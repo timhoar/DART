@@ -595,7 +595,7 @@ CONTAINS
 Function InitNetCDF(fname, ibin)
 character(len=*), intent(in) :: fname
 integer,          intent(in) :: ibin
-integer :: InitNetCDF
+integer                      :: InitNetCDF
 
 integer :: ncid, i, indx1, nlines, linelen
 integer :: LineLenDimID, nlinesDimID, stringDimID
@@ -609,7 +609,7 @@ character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
 integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 
-character(len=129), allocatable, dimension(:) :: textblock
+character(len=256), allocatable, dimension(:) :: textblock
 
 real(digits12)  :: epoch_edges(2)
 integer         :: seconds, days
@@ -913,16 +913,15 @@ end Function InitNetCDF
 Subroutine WriteNetCDF(ncid, fname, ngood, obs_copies, qc_copies, &
                        locations, obs_times, obs_types, obs_keys ) 
 !============================================================================
-integer,                      intent(in) :: ncid
-character(len=*),             intent(in) :: fname
-integer,                      intent(in) :: ngood
-
-real(r8),     dimension(:,:), intent(in) :: obs_copies
-integer,      dimension(:,:), intent(in) :: qc_copies
-type(location_type), dimension(:), intent(in) :: locations
-real(digits12), dimension(:), intent(in) :: obs_times
-integer,        dimension(:), intent(in) :: obs_types
-integer,        dimension(:), intent(in) :: obs_keys
+integer,                             intent(in) :: ncid
+character(len=*),                    intent(in) :: fname
+integer,                             intent(in) :: ngood
+real(r8),            dimension(:,:), intent(in) :: obs_copies
+integer,             dimension(:,:), intent(in) :: qc_copies
+type(location_type), dimension(:),   intent(in) :: locations
+real(digits12),      dimension(:),   intent(in) :: obs_times
+integer,             dimension(:),   intent(in) :: obs_types
+integer,             dimension(:),   intent(in) :: obs_keys
 
 integer :: DimID, dimlen, obsindex, iobs
 integer, dimension(1) :: istart, icount, intval
