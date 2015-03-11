@@ -10,7 +10,7 @@
 &convert_f16_edr_dsk_nml
    input_netcdf_file = 'input_file.nc'
    output_obs_file   = 'obs_seq.out'
-   debug             = 1
+   debug             = 0
  /
 
 &location_nml

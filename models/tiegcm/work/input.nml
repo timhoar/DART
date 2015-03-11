@@ -169,7 +169,7 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'CHAMP_DENSITY'
+   assimilate_these_obs_types = 'CHAMP_DENSITY','SSUSI_O_N2_RATIO'
    evaluate_these_obs_types   = 'GPS_PROFILE'
    /
 
@@ -190,6 +190,7 @@
    /
 
 &preprocess_nml
+           overwrite_output = .true.
     input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90'
    output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90'
      input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90'

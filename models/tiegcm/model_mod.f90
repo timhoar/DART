@@ -27,7 +27,8 @@ use     location_mod, only : location_type, get_close_maxdist_init,             
                              set_location, get_location, query_location,            &
                              get_dist, vert_is_height, horiz_dist_only,             &
                              get_close_type, vert_is_undef, VERTISUNDEF,            &
-                             VERTISPRESSURE, VERTISHEIGHT, vert_is_pressure
+                             VERTISPRESSURE, VERTISHEIGHT, vert_is_pressure,        &
+                             vert_is_level
 
 use    utilities_mod, only : file_exist, open_file, close_file, logfileunit,        &
                              error_handler, E_ERR, E_MSG, E_WARN, nmlfileunit,      &
@@ -416,7 +417,8 @@ real(r8) :: val(2,2), a(2)
 if ( .not. module_initialized ) call static_init_model
 
 ! Default for successful return
-istatus = 0
+istatus = 1
+obs_val = MISSING_R8
 
 ! GITM uses a vtec routine in obs_def_upper_atm_mod:get_expected_gnd_gps_vtec()
 ! TIEGCM has its own vtec routine, so we should use it. This next block ensures that.
@@ -428,16 +430,13 @@ if ( ikind == KIND_GEOPOTENTIAL_HEIGHT ) then
    call error_handler(E_ERR,'model_interpolate',string1,source, revision, revdate)
 endif
 
-ivar = FindVar_by_kind(ikind)
-
 ! Get the position
-! FOR NOW OBS VERTICAL LOCATION IS ALWAYS HEIGHT
 
 lon_lat_lev = get_location(location)
 lon         = lon_lat_lev(1) ! degree
 lat         = lon_lat_lev(2) ! degree
 
-if(vert_is_height(location)) then
+if(vert_is_height(location) .or. vert_is_level(location) ) then
    height = lon_lat_lev(3)
 elseif ((vert_is_undef(location)) .or. (ikind == KIND_VERTICAL_TEC)) then
    height = MISSING_R8
@@ -445,6 +444,29 @@ else
    which_vert = nint(query_location(location))
    write(string1,*) 'vertical coordinate type:',which_vert,' cannot be handled'
    call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+endif
+
+! Check to make sure vertical level is possible.
+if (vert_is_level(location)) then
+   if ((int(height) < 1) .or. (int(height) > nilev)) return
+endif
+
+if ( ikind == KIND_PRESSURE) then
+   ! Some variables need plevs, some need pilevs
+   ! We only need the height (aka level)
+   ! the obs_def_upper_atm_mod.f90:get_expected_O_N2_ratio routines queries
+   ! for the pressure at the model levels - EXACTLY - so ...
+   if (vert_is_level(location)) then
+      obs_val = plevs(int(height))
+      istatus = 0
+      return
+   else
+      write(string1,*) 'Trying to interpolate KIND_PRESSURE'
+      write(string2,*) 'vertical coordinate type:',which_vert,' cannot be handled'
+      write(string3,*) 'only support locations exactly on grid levels.'
+      call error_handler(E_ERR,'model_interpolate',string1, &
+              source,revision,revdate,text2=string2,text3=string3)
+   endif
 endif
 
 ! Get lon and lat grid specs
@@ -488,10 +510,25 @@ else                        ! North of top lat
    lat_fract = 1.0_r8
 endif
 
-! Now, need to find the values for the four corners
-! time is always a singleton dimension
+ivar = FindVar_by_kind(ikind)
 
-if (progvar(ivar)%rank == 3) then ! (time, lat, lon)
+! Now, need to find the values for the four corners
+
+if (vert_is_level(location)) then
+
+   ! one use of model_interpolate is to allow other modules/routines
+   ! the ability to 'count' the model levels. To do this, we can create
+   ! locations with model levels and 'interpolate' them to
+   ! KIND_GEOMETRIC_HEIGHT then we can use the ivarZG
+
+   val(1,1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below, indx3=int(height)))
+   val(1,2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above, indx3=int(height)))
+   val(2,1) = x(get_index(ivar, indx1=lon_above, indx2=lat_below, indx3=int(height)))
+   val(2,2) = x(get_index(ivar, indx1=lon_above, indx2=lat_above, indx3=int(height)))
+   istatus = 0
+
+elseif (progvar(ivar)%rank == 3) then ! (time, lat, lon)
+   ! time is always a singleton dimension
 
    val(1,1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below, indx3=1))
    val(1,2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above, indx3=1))
@@ -529,6 +566,7 @@ if ( (istatus == 0) .or. (istatus == 2) ) then
       a(i) = lon_fract * val(2, i) + (1.0_r8 - lon_fract) * val(1, i)
    end do
    obs_val = lat_fract * a(2) + (1.0_r8 - lat_fract) * a(1)
+   istatus = 0
 else
    obs_val = MISSING_R8
 endif
@@ -3524,6 +3562,11 @@ end subroutine var4d_to_vector
 
 function FindVar_by_kind(ikind)
 ! Finds the first variable of the appropriate DART KIND
+!
+! FIXME There is some confusion about using the T-minus-1 variables
+! in this construct. Both TN and TN_NM have the same dart_kind,
+! so we use the first one ... but it is not guaranteed that TN
+! must preceed TN_NM, for example.
 
 integer, intent(in) :: ikind
 integer             :: FindVar_by_kind
