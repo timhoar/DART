@@ -317,7 +317,7 @@ real(r8) :: loc_array(3)
 real(r8) :: loc_lon, loc_lat, loc_value
 type(location_type) :: loc
 
-real(r8), parameter :: Max_N2_column_density = 1.0E22_r8
+real(r8), parameter :: Max_N2_column_density = 1.0E21_r8
 
 real(r8) :: voxel_number_density
 real(r8) :: mmrn2
@@ -358,8 +358,6 @@ loc_lon   = loc_array(1)
 loc_lat   = loc_array(2)
 
 nlevels   = determine_num_layers(location, state_vector)
-
-write(*,*)'FIXME get_expected_O_N2_ratio has ',nlevels,'levels.'
 
 ! Fill arrays to get the entire column.
 
