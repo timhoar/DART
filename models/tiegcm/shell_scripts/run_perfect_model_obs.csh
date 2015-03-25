@@ -98,16 +98,19 @@ switch ( ${OSTYPE} )
       setenv REMOVE 'rm -rf'
       setenv   COPY 'cp -p'
       setenv   MOVE 'mv -f'
+      setenv   LINK 'ln -s'
       breaksw
    case AIX:
       setenv REMOVE 'rm -rf'
       setenv   COPY 'cp -p'
       setenv   MOVE 'mv -f'
+      setenv   LINK 'ln -s'
       breaksw
    default:
       setenv REMOVE 'rm -rvf'
       setenv   COPY 'cp -v'
       setenv   MOVE 'mv -fv'
+      setenv   LINK 'ln -s'
       breaksw
 endsw
 
@@ -117,12 +120,14 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # Set variables containing various directory names where we will GET things
 # DARTDIR      The location of the DART tiegcm model directory
 # TIEGCMDIR    The location of the TIEGCM executable
-# EXPERIMENT   The location of the initial ensemble of TIEGCM files
+# ENSEMBLEDIR  The location of the initial ensemble of TIEGCM files
+# EXPERIMENT   The (safe) location for the results of this run.
 #-----------------------------------------------------------------------------
 
-set    DARTDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm
-set  TIEGCMDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm/src
-set EXPERIMENT = /glade/p/work/${USER}/initial_ensemble
+set     DARTDIR = /glade/u/home/${USER}/DART/tiegcm/models/tiegcm
+set   TIEGCMDIR = /glade/u/home/${USER}/tiegcm/src
+set ENSEMBLEDIR = /glade/p/work/alexc/startup_files/initial
+set  EXPERIMENT = /glade/p/work/${USER}/${JOBNAME}
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
@@ -130,28 +135,45 @@ set EXPERIMENT = /glade/p/work/${USER}/initial_ensemble
 # The tiegcm initial conditions are in the next block.
 #-----------------------------------------------------------------------------
 
-${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 1
-${COPY} ${DARTDIR}/work/dart_to_model              . || exit 1
-${COPY} ${DARTDIR}/work/model_to_dart              . || exit 1
-${COPY} ${DARTDIR}/work/input.nml                  . || exit 1
-${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 1
-${COPY} ${DARTDIR}/work/obs_seq.in                 . || exit 1
+${COPY} ${DARTDIR}/work/perfect_model_obs            . || exit 1
+${COPY} ${DARTDIR}/work/dart_to_model                . || exit 1
+${COPY} ${DARTDIR}/work/model_to_dart                . || exit 1
+${COPY} ${DARTDIR}/work/input.nml   input.nml.original || exit 1
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh   . || exit 1
+${COPY} ${DARTDIR}/work/obs_seq.in                   . || exit 1
 
 ${COPY} ${TIEGCMDIR}/tiegcm-nompi             tiegcm || exit 1
 
-${COPY} ${TIEGCMDIR}/tiegcm_restart_p.nc           . || exit 1
-${COPY} ${TIEGCMDIR}/tiegcm_s.nc                   . || exit 1
-${COPY} ${TIEGCMDIR}/tiegcm.nml  tiegcm.nml.original || exit 1
+${COPY} ${ENSEMBLEDIR}/tiegcm_restart_p.nc           . || exit 1
+${COPY} ${ENSEMBLEDIR}/tiegcm_s.nc                   . || exit 1
+${COPY} ${ENSEMBLEDIR}/tiegcm.nml  tiegcm.nml.original || exit 1
 
 #-----------------------------------------------------------------------------
 # Remove all the comments that follow (;) symbol from tiegcm.nml namelist file
 # That is a non-standard syntax for fortran namelists.
+#
+# Ensure that the tiegcm.nml for all the ensemble members is identical
+# in all the ways that matter. This will result in a miniumum of changes
+# in the advance_model.csh script. This script REQUIRES that there is a  
+# SINGLE tiegcm_restart_p.nc. Just keep appending all the timesteps to
+# the same file. If you need to subset the large file, use the NCO
+# operators. for example    ncks -d time,20,30 tiegcm_restart_p.nc bob.nc 
+# If you need more than 300 timesteps in the file, increase it here.
 #-----------------------------------------------------------------------------
 
-grep -v "^;" tiegcm.nml.original >! tiegcm.nml  || exit 1
+sed -e 's/;.*//' -e '/^$/ d' \
+    -e "/ MXHIST_PRIM /c\ MXHIST_PRIM = 300" \
+    -e "/ MXHIST_SECH /c\ MXHIST_SECH = 300" \
+    -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
+    -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
+    -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
+    tiegcm.nml.original >! tiegcm.nml  || exit 2
 
 #-----------------------------------------------------------------------------
-# Convert a TIEGCM file 'tiegcm_restart.nc' to a DART ics file 'perfect_ics'
+# Convert a TIEGCM file 'tiegcm_restart.nc' to a DART ics file 'dart_ics'
+# There are some requirements for this script and advance_model.csh.
+# The requirements for this script are enforced here, the requirements for
+# advance_model.csh are enforced there.
 # 
 # REQUIREMENTS: for input.nml
 # model_nml            : tiegcm_restart_file_name   = 'tiegcm_restart_p.nc'
@@ -162,13 +184,24 @@ grep -v "^;" tiegcm.nml.original >! tiegcm.nml  || exit 1
 # perfect_model_obs_nml: async                      = 2
 # perfect_model_obs_nml: adv_ens_command            = 'advance_model.csh'
 # perfect_model_obs_nml: start_from_restart         = .TRUE.
-# perfect_model_obs_nml: restart_in_file_name       = 'perfect_ics'
+# perfect_model_obs_nml: restart_in_file_name       = 'dart_ics'
 #-----------------------------------------------------------------------------
 # dart_to_model_nml    : file_in                    = 'dart_restart'
 # dart_to_model_nml    : file_namelist_out          = 'namelist_update'
 
-./model_to_dart              || exit 2
-${MOVE} dart_ics perfect_ics || exit 2
+sed -e "/ tiegcm_restart_file_name /c\ tiegcm_restart_file_name = 'tiegcm_restart_p.nc'" \
+    -e "/ tiegcm_secondary_file_name /c\ tiegcm_secondary_file_name = 'tiegcm_s.nc'" \
+    -e "/ tiegcm_namelist_file_name /c\ tiegcm_namelist_file_name = 'tiegcm.nml'" \
+    -e "/ file_out /c\ file_out = 'dart_ics'" \
+    -e "/ async /c\ async = 2" \
+    -e "/ adv_ens_command /c\ adv_ens_command = './advance_model.csh'" \
+    -e "/ start_from_restart /c\ start_from_restart = .TRUE." \
+    -e "/ restart_in_file_name /c\ restart_in_file_name = 'dart_ics'" \
+    -e "/ file_in /c\ file_in = 'dart_restart'" \
+    -e "/ file_namelist_out /c\ file_namelist_out = 'namelist_update'" \
+    input.nml.original >! input.nml  || exit -3
+
+./model_to_dart || exit 2
 
 #-----------------------------------------------------------------------------
 # Run perfect_model_obs ... harvest the observations to populate obs_seq.out
@@ -176,9 +209,12 @@ ${MOVE} dart_ics perfect_ics || exit 2
 # with the ensemble member ID tacked on - must provide both.
 #-----------------------------------------------------------------------------
 
-ln -sf tiegcm_restart_p.nc tiegcm_restart_p.nc.0001 || exit 3
-ln -sf tiegcm_s.nc         tiegcm_s.nc.0001         || exit 3
-ln -sf tiegcm.nml          tiegcm.nml.0001          || exit 3
+${REMOVE} tiegcm_restart_p.nc.0001 tiegcm_s.nc.0001 tiegcm.nml.0001 
+
+${LINK} tiegcm_restart_p.nc tiegcm_restart_p.nc.0001 || exit 3
+${LINK} tiegcm_s.nc         tiegcm_s.nc.0001         || exit 3
+${LINK} tiegcm.nml          tiegcm.nml.0001          || exit 3
+
 
 ./perfect_model_obs || exit 3
 

@@ -27,8 +27,7 @@ use     location_mod, only : location_type, get_close_maxdist_init,             
                              set_location, get_location, query_location,            &
                              get_dist, vert_is_height, horiz_dist_only,             &
                              get_close_type, vert_is_undef, VERTISUNDEF,            &
-                             VERTISPRESSURE, VERTISHEIGHT, vert_is_pressure,        &
-                             vert_is_level
+                             VERTISPRESSURE, VERTISHEIGHT, vert_is_level
 
 use    utilities_mod, only : file_exist, open_file, close_file, logfileunit,        &
                              error_handler, E_ERR, E_MSG, E_WARN, nmlfileunit,      &
@@ -40,13 +39,10 @@ use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,           &
                              KIND_V_WIND_COMPONENT,           &
                              KIND_TEMPERATURE,                &! neutral temperature obs
                              KIND_PRESSURE,                   &! neutral pressure obs
-                             KIND_ELECTRON_DENSITY,           &! Ne obs
-                             KIND_ATOMIC_OXYGEN_MIXING_RATIO, &! neutral composition obs
                              KIND_MOLEC_OXYGEN_MIXING_RATIO,  &! neutral composition obs
                              KIND_1D_PARAMETER,               &
                              KIND_GEOPOTENTIAL_HEIGHT,        &
                              KIND_GEOMETRIC_HEIGHT,           &
-                             KIND_DENSITY_ION_OP,             &! Atomic oxygen ion obs
                              KIND_VERTICAL_TEC,               &! total electron content
                              get_raw_obs_kind_index, get_raw_obs_kind_name
 
@@ -99,20 +95,23 @@ character(len=128), parameter :: revdate  = '$Date$'
 ! IMPORTANT: Change output file names in tiegcm.nml to match these names
 ! i.e.  OUTPUT='tiegcm_restart_p.nc'
 !       SECOUT='tiegcm_s.nc'
-character(len=128) :: tiegcm_restart_file_name   = 'tiegcm_restart_p.nc'
-character(len=128) :: tiegcm_secondary_file_name = 'tiegcm_s.nc'
-character(len=128) :: tiegcm_namelist_file_name  = 'tiegcm.nml'
+character(len=256) :: tiegcm_restart_file_name   = 'tiegcm_restart_p.nc'
+character(len=256) :: tiegcm_secondary_file_name = 'tiegcm_s.nc'
+character(len=256) :: tiegcm_namelist_file_name  = 'tiegcm.nml'
 logical            :: output_state_vector = .false.
 integer            :: debug = 0
 logical            :: estimate_f10_7 = .false.
+integer            :: assimilation_period_seconds = 3600
 
 integer, parameter :: max_num_variables = 30
 integer, parameter :: max_num_columns = 6
 character(len=NF90_MAX_NAME) :: variables(max_num_variables * max_num_columns) = ' '
+! FIXME ... variable_table can be read directly in the namelist, does not need
+! to be ingested as a 1D array 
 
 namelist /model_nml/ output_state_vector, tiegcm_restart_file_name, &
                      tiegcm_secondary_file_name, tiegcm_namelist_file_name, &
-                     variables, debug, estimate_f10_7
+                     variables, debug, estimate_f10_7, assimilation_period_seconds
 
 !-------------------------------------------------------------------------------
 ! Everything needed to describe a variable
@@ -231,6 +230,7 @@ subroutine static_init_model()
 ! Can be a NULL INTERFACE for the simplest models.
 
 integer :: iunit, io
+real(r8) :: total_steps
 
 if (module_initialized) return ! only need to do this once
 
@@ -270,7 +270,7 @@ call verify_variables(variables, nfields)
 
 model_size = progvar(nfields)%indexN
 
-if (do_output() .and. (debug > 10)) then
+if (do_output() .and. (debug > 0)) then
    write(*,*) 'nlon  = ', nlon
    write(*,*) 'nlat  = ', nlat
    write(*,*) 'nlev  = ', nlev
@@ -286,8 +286,42 @@ ens_mean = MISSING_R8
 ! Might as well use the Gregorian Calendar
 call set_calendar_type('Gregorian')
 
-! The time_step in terms of a time type must also be initialized.
-time_step = set_time(time_step_seconds, time_step_days)
+! Ensure assimilation_period is a multiple of the dynamical timestep
+! The time is communicated to TIEGCM through their "STOP" variable,
+! which is an array of length 3 corresponding to day-of-year, hour, minute
+! SO - there is some combination of 'STEP' and assimilation_period_seconds
+! that must be an integer number of minutes.
+
+time_step_seconds = time_step_seconds + time_step_days*86400
+
+if (assimilation_period_seconds < time_step_seconds) then
+   write(string1,*)'assimilation_period_seconds must be >= STEP'
+   write(string2,*)' input.nml: assimilation_period_seconds ',assimilation_period_seconds
+   write(string3,*)'tiegcm.nml: STEP ',time_step_seconds
+   call error_handler(E_ERR,'static_init_model',string1, &
+              source, revision, revdate, text2=string2,text3=string3)
+endif
+
+total_steps = real(assimilation_period_seconds,r8)/real(time_step_seconds,r8)
+
+if ( time_step_seconds*nint(total_steps) /= assimilation_period_seconds) then
+   write(string1,*)'assimilation_period_seconds must be an integer number of tiegcm "STEP"s'
+   write(string2,*)' input.nml: assimilation_period_seconds ',assimilation_period_seconds
+   write(string3,*)'tiegcm.nml: STEP ',time_step_seconds
+   call error_handler(E_ERR,'static_init_model',string1, &
+              source, revision, revdate, text2=string2,text3=string3)
+endif
+
+if ( mod(assimilation_period_seconds,60) /= 0 ) then
+   write(string1,*)'assimilation_period_seconds must be an integer number of tiegcm "STEP"s'
+   write(string2,*)'assimilation_period_seconds=',assimilation_period_seconds, &
+                   ' STEP=',time_step_seconds
+   write(string3,*)'AND must be an integer number of minutes because of tiegcm "STOP"'
+   call error_handler(E_ERR,'static_init_model',string1, &
+              source, revision, revdate, text2=string2,text3=string3)
+endif
+
+time_step = set_time(assimilation_period_seconds, 0)
 
 end subroutine static_init_model
 
@@ -410,13 +444,15 @@ integer  :: i, which_vert
 integer  :: lat_below, lat_above, lon_below, lon_above
 integer  :: zero_lon_index
 real(r8) :: lon_fract, lat_fract
-real(r8) :: lon, lat, height, lon_lat_lev(3)
+real(r8) :: lon, lat, lon_lat_lev(3)
 real(r8) :: bot_lon, top_lon, delta_lon, bot_lat, top_lat, delta_lat
 real(r8) :: val(2,2), a(2)
+real(r8) :: height
+integer  :: level
 
 if ( .not. module_initialized ) call static_init_model
 
-! Default for successful return
+! Default for failure return
 istatus = 1
 obs_val = MISSING_R8
 
@@ -436,10 +472,13 @@ lon_lat_lev = get_location(location)
 lon         = lon_lat_lev(1) ! degree
 lat         = lon_lat_lev(2) ! degree
 
-if(vert_is_height(location) .or. vert_is_level(location) ) then
+if(     vert_is_height(location) ) then
    height = lon_lat_lev(3)
-elseif ((vert_is_undef(location)) .or. (ikind == KIND_VERTICAL_TEC)) then
+elseif( vert_is_level(location) ) then
+   level  = int(lon_lat_lev(3))
+elseif( vert_is_undef(location) ) then
    height = MISSING_R8
+   level  = -1
 else
    which_vert = nint(query_location(location))
    write(string1,*) 'vertical coordinate type:',which_vert,' cannot be handled'
@@ -448,25 +487,24 @@ endif
 
 ! Check to make sure vertical level is possible.
 if (vert_is_level(location)) then
-   if ((int(height) < 1) .or. (int(height) > nilev)) return
+   if ((level < 1) .or. (level > nilev)) return
 endif
 
-if ( ikind == KIND_PRESSURE) then
+if ((ikind == KIND_PRESSURE) .and. (vert_is_level(location))) then
    ! Some variables need plevs, some need pilevs
    ! We only need the height (aka level)
    ! the obs_def_upper_atm_mod.f90:get_expected_O_N2_ratio routines queries
    ! for the pressure at the model levels - EXACTLY - so ...
-   if (vert_is_level(location)) then
-      obs_val = plevs(int(height))
+   ! FIXME ... at present ... the only time model_interpolate
+   ! gets called with KIND_PRESSURE is to calculate density, which
+   ! requires other variables that only live on the midpoints.
+   ! I cannot figure out how to generically decide when to
+   ! use plevs vs. pilevs 
+   if (level <= nlev) then
+      obs_val = plevs(level)
       istatus = 0
-      return
-   else
-      write(string1,*) 'Trying to interpolate KIND_PRESSURE'
-      write(string2,*) 'vertical coordinate type:',which_vert,' cannot be handled'
-      write(string3,*) 'only support locations exactly on grid levels.'
-      call error_handler(E_ERR,'model_interpolate',string1, &
-              source,revision,revdate,text2=string2,text3=string3)
    endif
+   return
 endif
 
 ! Get lon and lat grid specs
@@ -510,65 +548,106 @@ else                        ! North of top lat
    lat_fract = 1.0_r8
 endif
 
+! If PRESSURE; calculate the pressure from several variables.
+! vert_interp() interpolates the state column to
+! the same vertical height as the observation.
+! THEN, it is the same as the 2D case.
+
+! FIXME ... is it possible to try to get a pressure with which_vert == undefined
+! At present, vert_interp will simply fail because height is a negative number.
+if (ikind == KIND_PRESSURE) then
+
+   call vert_interp(x,lon_below,lat_below,height,ikind,'ilev',-1,val(1,1),istatus)
+   if (istatus == 0) &
+   call vert_interp(x,lon_below,lat_above,height,ikind,'ilev',-1,val(1,2),istatus)
+   if (istatus == 0) &
+   call vert_interp(x,lon_above,lat_below,height,ikind,'ilev',-1,val(2,1),istatus)
+   if (istatus == 0) &
+   call vert_interp(x,lon_above,lat_above,height,ikind,'ilev',-1,val(2,2),istatus)
+
+   ! Now that we have the four surrounding points and their relative weights,
+   ! actually perform the bilinear horizontal interpolation to get the value at the
+   ! (arbitrary) desired location.
+
+   if (istatus == 0) then
+      do i = 1, 2
+         a(i) = lon_fract * val(2, i) + (1.0_r8 - lon_fract) * val(1, i)
+      end do
+      obs_val = lat_fract * a(2) + (1.0_r8 - lat_fract) * a(1)
+   endif
+
+   return
+endif
+
+! If it is not pressure ...
+! FindVar_by_kind would fail with ikind == KIND_PRESSURE, so we have
+! to calculate the pressure separately before this part.
+
 ivar = FindVar_by_kind(ikind)
+if (ivar < 0) return ! as a failure
 
 ! Now, need to find the values for the four corners
 
-if (vert_is_level(location)) then
-
-   ! one use of model_interpolate is to allow other modules/routines
-   ! the ability to 'count' the model levels. To do this, we can create
-   ! locations with model levels and 'interpolate' them to
-   ! KIND_GEOMETRIC_HEIGHT then we can use the ivarZG
-
-   val(1,1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below, indx3=int(height)))
-   val(1,2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above, indx3=int(height)))
-   val(2,1) = x(get_index(ivar, indx1=lon_above, indx2=lat_below, indx3=int(height)))
-   val(2,2) = x(get_index(ivar, indx1=lon_above, indx2=lat_above, indx3=int(height)))
-   istatus = 0
-
-elseif (progvar(ivar)%rank == 3) then ! (time, lat, lon)
+if ((progvar(ivar)%rank == 3) .or. (vert_is_undef(location))) then ! (time, lat, lon)
    ! time is always a singleton dimension
 
    val(1,1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below, indx3=1))
    val(1,2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above, indx3=1))
    val(2,1) = x(get_index(ivar, indx1=lon_above, indx2=lat_below, indx3=1))
    val(2,2) = x(get_index(ivar, indx1=lon_above, indx2=lat_above, indx3=1))
+   istatus  = 0
 
-elseif (progvar(ivar)%rank == 4) then ! (time, ilev, lat, lon)
+elseif ((progvar(ivar)%rank == 4) .and. (vert_is_level(location))) then
 
-  ! vert_interp() must return/interpolate the surrounding state vector locations to
-  ! the same vertical height as the observation. THEN, it is the same as the 2D case.
+   ! one use of model_interpolate is to allow other modules/routines
+   ! the ability to 'count' the model levels. To do this, create observations
+   ! with locations on model levels and 'interpolate' for KIND_GEOMETRIC_HEIGHT.
+   ! When the interpolation fails, you've gone one level too far. 
+   ! The only geometric height variable we have is ZG, and its a 4D variable.
 
-                     call vert_interp(x,lon_below,lat_below,height,ikind,val(1,1),istatus)
-   if (istatus == 0) call vert_interp(x,lon_below,lat_above,height,ikind,val(1,2),istatus)
-   if (istatus == 0) call vert_interp(x,lon_above,lat_below,height,ikind,val(2,1),istatus)
-   if (istatus == 0) call vert_interp(x,lon_above,lat_above,height,ikind,val(2,2),istatus)
+   val(1,1) = x(get_index(ivar, indx1=lon_below, indx2=lat_below, indx3=level))
+   val(1,2) = x(get_index(ivar, indx1=lon_below, indx2=lat_above, indx3=level))
+   val(2,1) = x(get_index(ivar, indx1=lon_above, indx2=lat_below, indx3=level))
+   val(2,2) = x(get_index(ivar, indx1=lon_above, indx2=lat_above, indx3=level))
+   istatus = 0
+
+elseif ((progvar(ivar)%rank == 4) .and. (vert_is_height(location))) then
+
+   ! vert_interp() interpolates the state column to
+   ! the same vertical height as the observation.
+   ! THEN, it is the same as the 2D case.
+
+   call vert_interp(x, lon_below, lat_below, height, ikind, &
+             progvar(ivar)%verticalvar, ivar, val(1,1), istatus)
+   if (istatus == 0) &
+   call vert_interp(x, lon_below, lat_above, height, ikind, &
+             progvar(ivar)%verticalvar, ivar, val(1,2), istatus)
+   if (istatus == 0) &
+   call vert_interp(x, lon_above, lat_below, height, ikind, &
+             progvar(ivar)%verticalvar, ivar, val(2,1), istatus)
+   if (istatus == 0) &
+   call vert_interp(x, lon_above, lat_above, height, ikind, &
+             progvar(ivar)%verticalvar, ivar, val(2,2), istatus)
 
 else
 
    write(string1,*)trim(progvar(ivar)%varname),'has unsupported rank',progvar(ivar)%rank
-   call error_handler(E_ERR,'model_interpolate', string1, source, revision, revdate)
+   write(string2,*)trim(progvar(ivar)%varname),'or unsupported vertical system ',which_vert,&
+                   'for that rank.'
+   call error_handler(E_ERR,'model_interpolate', string1, &
+              source, revision, revdate, text2=string2)
 
 endif
-
-! istatus   meaning                  return expected obs?   assimilate?
-! 0         obs and model are fine;  yes                    yes
-! 1         fatal problem;           no                     no
-! 2         exclude valid obs        yes                    no
 
 ! Now that we have the four surrounding points and their relative weights,
 ! actually perform the bilinear interpolation to get the value at the
 ! (arbitrary) desired location.
 
-if ( (istatus == 0) .or. (istatus == 2) ) then
+if (istatus == 0) then
    do i = 1, 2
       a(i) = lon_fract * val(2, i) + (1.0_r8 - lon_fract) * val(1, i)
    end do
    obs_val = lat_fract * a(2) + (1.0_r8 - lat_fract) * a(1)
-   istatus = 0
-else
-   obs_val = MISSING_R8
 endif
 
 end subroutine model_interpolate
@@ -631,7 +710,7 @@ elseif (progvar(ivar)%rank == 1) then  ! time?
    write(string2,*)'dimension ('//trim(progvar(ivar)%dimnames(1))// &
                    ') ... unknown location'
    call error_handler(E_ERR,'get_state_meta_data', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 
 elseif (progvar(ivar)%rank == 2) then  ! something, and time? lat & lon but no time?
    write(string1,*)trim(progvar(ivar)%varname), &
@@ -639,7 +718,7 @@ elseif (progvar(ivar)%rank == 2) then  ! something, and time? lat & lon but no t
    write(string2,*)'dimension 1 = ('//trim(progvar(ivar)%dimnames(1))//')'
    write(string3,*)'dimension 2 = ('//trim(progvar(ivar)%dimnames(2))//')'
    call error_handler(E_ERR,'get_state_meta_data', string1, &
-              source, revision, revdate, text2=trim(string2), text3=trim(string3))
+              source, revision, revdate, text2=string2, text3=string3)
 
 elseif (progvar(ivar)%rank == 3) then  ! [Fortran ordering] = lon, lat, time
    ! The time dimension is always length 1, so it really doesn't matter.
@@ -647,17 +726,8 @@ elseif (progvar(ivar)%rank == 3) then  ! [Fortran ordering] = lon, lat, time
    lat_index = 1 + (relindx - 1) / nlon ! relies on integer arithmetic
    lon_index = relindx - (lat_index-1) * nlon
 
-   if (do_output() .and. (debug > 8)) then
-      absindx   = get_index(ivar, indx1=lon_index, indx2=lat_index)
-      if (absindx /= index_in) then
-         write(*,*)'TJH gsmd, index_in, relindx, loni, lati', &
-             index_in, relindx, lon_index, lat_index, lons(lon_index), lats(lat_index)
-         write(string1,*)'FAILURE ... original index /= get_index() value'
-         write(string2,*)'original index = ',index_in
-         write(string3,*)'get_index()    = ',absindx
-         call error_handler(E_ERR,'get_state_meta_data', string1, &
-                 source, revision, revdate, text2=trim(string2), text3=trim(string3))
-      endif
+   if (do_output() .and. (debug > 3)) then
+      absindx = get_index(ivar, indx1=lon_index, indx2=lat_index, knownindex=index_in)
    endif
 
    if (trim(progvar(ivar)%varname) == 'VTEC') then
@@ -675,18 +745,8 @@ elseif (progvar(ivar)%rank == 4) then  ! [Fortran ordering] = lon, lat, lev, tim
    lon_index = remainder - (lat_index-1) * nlon
    height    = get_height(ivar, lon_index, lat_index, lev_index)
 
-   if (do_output() .and. (debug > 8)) then
-      absindx   = get_index( ivar, indx1=lon_index, indx2=lat_index, indx3=lev_index)
-         write(*,*)'TJH gsmd, index_in, relindx, loni, lati, levi', &
-            index_in, relindx, lon_index, lat_index, lev_index, &
-            lons(lon_index), lats(lat_index), height
-      if (absindx /= index_in) then
-         write(string1,*)'FAILURE ... original index /= get_index() value'
-         write(string2,*)'original index = ',index_in
-         write(string2,*)'get_index()    = ',absindx
-         call error_handler(E_ERR,'get_state_meta_data', string1, &
-                 source, revision, revdate, text2=trim(string2), text3=trim(string3))
-      endif
+   if (do_output() .and. (debug > 3)) then
+      absindx = get_index( ivar, indx1=lon_index, indx2=lat_index, indx3=lev_index, knownindex=index_in)
    endif
 
    location  = set_location(lons(lon_index), lats(lat_index), height, VERTISHEIGHT)
@@ -695,7 +755,7 @@ else
    write(string1,*)'Problem with DART variable ',trim(progvar(ivar)%varname)
    write(string2,*)'has unsupported number (',progvar(ivar)%rank,') of dimensions.'
    call error_handler(E_ERR,'get_state_meta_data', string1, &
-                      source, revision, revdate, text2=trim(string2))
+                      source, revision, revdate, text2=string2)
 endif
 
 ! If the type is wanted, return it
@@ -772,6 +832,8 @@ character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
 integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=NF90_MAX_NAME) :: str1
+
+real(r8), allocatable :: temp_lon(:)
 
 integer :: i
 
@@ -999,12 +1061,16 @@ else
    !----------------------------------------------------------------------------
    ! Fill the variables
    !----------------------------------------------------------------------------
+   allocate(temp_lon(size(lons)))  ! Convert longitudes back to a monotonic array
+   temp_lon = lons                 ! instead of [180 ... 355,0 ... 175]
+   where(temp_lon >= 180.0_r8) temp_lon = temp_lon - 360.0_r8
 
-   call nc_check(nf90_put_var(ncid, lonVarID, lons),'nc_write_model_atts','put_var lons')
+   call nc_check(nf90_put_var(ncid, lonVarID, temp_lon),'nc_write_model_atts','put_var lons')
    call nc_check(nf90_put_var(ncid, latVarID, lats),'nc_write_model_atts','put_var lats')
    call nc_check(nf90_put_var(ncid, levVarID, levs),'nc_write_model_atts','put_var levs')
    call nc_check(nf90_put_var(ncid,ilevVarID,ilevs),'nc_write_model_atts','put_var ilevs')
 
+   deallocate(temp_lon)
    ! TJH/TOMOKO FIXME ... what about plevs, pilevs ...
 
 endif
@@ -1025,7 +1091,7 @@ endif
 !-------------------------------------------------------------------------------
 
 call nc_check(nf90_sync(ncid), 'nc_write_model_atts', 'sync')
-if (do_output()) write (*,*) 'nc_write_model_atts: netCDF file ', ncid, ' is synched '
+if (do_output() .and. (debug > 1)) write (*,*) 'nc_write_model_atts: netCDF file ', ncid, ' is synched '
 
 ierr = 0 ! If we got here, things went well.
 
@@ -1126,8 +1192,8 @@ else
             write(string1,*)trim(string2),' dim/dimlen ',i,dimlen, &
                                      ' not ',progvar(ivar)%dimlens(i)
             write(string2,*)' but it should be.'
-            call error_handler(E_ERR, 'nc_write_model_vars', trim(string1), &
-                            source, revision, revdate, text2=trim(string2))
+            call error_handler(E_ERR, 'nc_write_model_vars', string1, &
+                            source, revision, revdate, text2=string2)
          endif
 
          mycount(i) = dimlen
@@ -1139,10 +1205,11 @@ else
       where(dimIDs == TimeDimID) mystart = timeindex
       where(dimIDs == TimeDimID) mycount = 1
 
-      if (do_output() .and. (debug > 99)) then
-         write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',mystart(1:ncNdims)
-         write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',mycount(1:ncNdims)
-         write(*,'(1x,A20)')'nc_write_model_vars ',dimnames(1:progvar(ivar)%rank)
+      if (do_output() .and. (debug > 3)) then
+         write(string1,*)'nc_write_model_vars',trim(progvar(ivar)%varname),' file id ',ncid
+         write(string2,*)'nc_write_model_vars '//trim(varname)//' start is ',mystart(1:ncNdims)
+         write(string3,*)'nc_write_model_vars '//trim(varname)//' count is ',mycount(1:ncNdims)
+         call error_handler(E_MSG,'nc_write_model_vars',string1,text2=string2,text3=string3)
       endif
 
       ! Now that we have the hyperslab indices ... it is easy.
@@ -1158,12 +1225,12 @@ endif
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
 
-if (do_output() .and. (debug > 0)) &
+if (do_output() .and. (debug > 1)) &
    write (*,*) 'nc_write_model_vars: Finished filling variables '
 
 call nc_check(nf90_sync(ncid), 'nc_write_model_vars', 'sync')
 
-if (do_output() .and. (debug > 0)) &
+if (do_output() .and. (debug > 1)) &
    write (*,*) 'nc_write_model_vars: netCDF file is synched '
 
 ierr = 0 ! If we got here, things went well.
@@ -1198,7 +1265,7 @@ if ( .not. module_initialized ) call static_init_model
 interf_provided = .true.
 
 ! If first call initialize random sequence
-! CAUTION: my_task_id is NOT emsemble member number
+! CAUTION: my_task_id is NOT ensemble member number
 ! For example, my_task_id will be in [0,N-1]
 ! if a single instance of the model using N MPI tasks.
 
@@ -1212,6 +1279,7 @@ do i = 1, get_model_size()
    if(variable_type == KIND_1D_PARAMETER) then
       pert_state(i) = random_gaussian(random_seq,state(i),20.0_r8)
    else
+      ! FIXME ... is this really what you want to do - no variability in the states.
       pert_state(i) = state(i)
    endif
 end do
@@ -1258,7 +1326,7 @@ call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
 do k = 1,num_close
    t_ind  = close_ind(k)
    if (obs_kind(t_ind) == KIND_GEOMETRIC_HEIGHT) then
-      if (do_output() .and. debug > 99) then
+      if (do_output() .and. (debug > 99)) then
          write(     *     ,*)'get_close_obs ZG distance is ', &
                      dist(k),' changing to ',10.0_r8 * PI
          write(logfileunit,*)'get_close_obs ZG distance is ', &
@@ -1290,8 +1358,11 @@ if (estimate_f10_7) then
       elseif  (obs_kind(t_ind) == KIND_1D_PARAMETER) then
          ! f10_7 is given a location of latitude 0.0 and the longitude
          ! of local noon. By decreasing the distance from the observation
-         ! to the dynamic f10_7 location we are allowing more observations
-         ! to aid in the parameter estimation. 0.25 is heuristic. 
+         ! to the dynamic f10_7 location we are allowing the already close
+         ! observations to have a larger impact in the parameter estimation.
+         ! 0.25 is heuristic. The 'close' observations have already been 
+         ! determined by the cutoff. Changing the distance here does not
+         ! allow more observations to impact anything.
          dist(k) = dist(k)*0.25_r8
       endif
 
@@ -1348,7 +1419,7 @@ if( .not. file_exist(file_name)) then
    call error_handler(E_ERR,'read_TIEGCM_restart',string1,source,revision,revdate)
 endif
 
-if (do_output()) write(*,*)'read_TIEGCM_restart:reading restart:', file_name
+call error_handler(E_MSG,'read_TIEGCM_restart:','reading restart ['//trim(file_name)//']')
 
 ! Open the netCDF file and then read all the static information.
 
@@ -1378,8 +1449,8 @@ call nc_check( nf90_inq_dimid(ncid, 'lev', LevDimID), &
          'read_TIEGCM_restart', 'inq_dimid lev')
 call nc_check( nf90_inquire_dimension(ncid, LevDimID, len=dimlen), &
          'read_TIEGCM_restart', 'inquire_dimension lev')
-if (dimlen .ne. nlev) then
-  write(string1, *) trim(file_name), ' dim_lev = ',dimlen, ' DART expects ',nlev
+if (dimlen .ne. (nlev+1)) then
+  write(string1, *) trim(file_name), ' dim_lev = ',dimlen, ' DART expects ',nlev+1
   call error_handler(E_ERR,'read_TIEGCM_restart',string1,source,revision,revdate)
 endif
 
@@ -1437,8 +1508,8 @@ ReadVariable: do ivar = 1,nfields
    if (ncNdims /= progvar(ivar)%rank) then
       write(string1,*)trim(string2),'has ',ncNDims,'dimensions.'
       write(string3,*)'same thing in DART has ',progvar(ivar)%rank,' dimensions.'
-      call error_handler(E_ERR, 'read_TIEGCM_restart', trim(string1), &
-                      source, revision, revdate, text2=trim(string3))
+      call error_handler(E_ERR, 'read_TIEGCM_restart', string1, &
+                      source, revision, revdate, text2=string3)
    endif
 
    mystart(:) = 1
@@ -1450,13 +1521,15 @@ ReadVariable: do ivar = 1,nfields
                'read_TIEGCM_restart', trim(string1))
 
       ! Check the shape of the variable
+      if ( dimIDs(i) == LevDimID ) dimlen = dimlen - 1
+
       if ( dimIDs(i) == TimeDimID ) then
          dimlen = 1
       elseif ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(string2),' has dim/dimlen ',i,dimlen
          write(string3,*)' expected dimlen of ', progvar(ivar)%dimlens(i)
-         call error_handler(E_ERR, 'read_TIEGCM_restart', trim(string1), &
-                         source, revision, revdate, text2=trim(string3))
+         call error_handler(E_ERR, 'read_TIEGCM_restart', string1, &
+                         source, revision, revdate, text2=string3)
       endif
 
       mycount(i) = dimlen
@@ -1470,7 +1543,7 @@ ReadVariable: do ivar = 1,nfields
    where(dimIDs ==  LevDimID) mycount = nlev
    where(dimIDs == iLevDimID) mycount = nilev
 
-   if (do_output() .and. (debug > 1)) then
+   if (do_output() .and. (debug > 3)) then
       write(*,*)'read_TIEGCM_restart:',trim(string2)
       write(*,*)'read_TIEGCM_restart: start ',mystart(1:ncNdims)
       write(*,*)'read_TIEGCM_restart: count ',mycount(1:ncNdims)
@@ -1510,13 +1583,12 @@ ReadVariable: do ivar = 1,nfields
               start = mystart(1:ncNdims), count = mycount(1:ncNdims)), &
               'read_TIEGCM_restart', 'get_var '//trim(string2))
       call apply_attributes(ivar, ncid, VarID, temp4D)
-      call fill_top(ivar,temp4D,dimIDs,LevDimID,iLevDimID)
       call prog_var_to_vector(ivar, temp4D, statevec)
       deallocate(temp4D)
    else
       write(string1,*) trim(string2),' has unsupported number of dims (', &
                                      progvar(ivar)%rank,')'
-      call error_handler(E_ERR, 'read_TIEGCM_restart', trim(string1), &
+      call error_handler(E_ERR, 'read_TIEGCM_restart', string1, &
                          source, revision, revdate)
    endif
 
@@ -1544,7 +1616,7 @@ character(len=*),       intent(in) :: filename
 type(time_type),        intent(in) :: dart_time
 
 integer :: i, ivar
-integer :: ncid, VarID, TimeDimID
+integer :: ncid, VarID, TimeDimID, LevDimID
 integer :: dimlen, ncNdims
 integer :: timeindex
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
@@ -1560,16 +1632,15 @@ if( .not. file_exist(filename)) then
    call error_handler(E_ERR,'update_TIEGCM_restart',string1,source,revision,revdate)
 endif
 
-if (do_output()) then
-   write(     *     ,*)''
-   write(logfileunit,*)''
-   write(     *     ,*)'update_TIEGCM_restart:','opening '//trim(filename)
-   write(logfileunit,*)'update_TIEGCM_restart:','opening '//trim(filename)
-endif
+if (do_output()) &
+   call error_handler(E_MSG,'update_TIEGCM_restart','opening',text2=filename)
 
 call nc_check(nf90_open(trim(filename),NF90_WRITE,ncid),'update_TIEGCM_restart','open')
 
 call SanityCheck(trim(filename), ncid, TimeDimID=TimeDimID, ntimes=timeindex)
+
+call nc_check(nf90_inq_dimid(ncid, 'lev', LevDimID), &
+                   'update_TIEGCM_restart', 'inq_dimid lev'//trim(filename))
 
 file_time = get_state_time(trim(filename), ncid, timeindex)
 
@@ -1585,6 +1656,8 @@ endif
 if (do_output() .and. (debug > 0)) then
    call print_date(file_time,'update_TIEGCM_restart: date in restart file '//trim(filename))
    call print_time(file_time,'update_TIEGCM_restart: time in restart file '//trim(filename))
+   call print_date(file_time,'update_TIEGCM_restart: date in restart file '//trim(filename),logfileunit)
+   call print_time(file_time,'update_TIEGCM_restart: time in restart file '//trim(filename),logfileunit)
 endif
 
 UPDATE : do ivar = 1,nfields
@@ -1614,12 +1687,13 @@ UPDATE : do ivar = 1,nfields
 
       ! Dont care about the length of Time Dimension, setting to 1 later.
       if (dimIDs(i) == TimeDimID) cycle DimCheck
+      if (dimIDs(i) == LevDimID) dimlen = dimlen - 1
 
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(string2),' dim/dimlen ',i,dimlen
          write(string2,*)'expected it to be ',progvar(ivar)%dimlens(i)
          call error_handler(E_ERR, 'update_TIEGCM_restart', string1, &
-                      source, revision, revdate, text2=trim(string2))
+                      source, revision, revdate, text2=string2)
       endif
 
       mycount(i) = dimlen
@@ -1631,7 +1705,7 @@ UPDATE : do ivar = 1,nfields
          ' required to have "Time" as the last/unlimited dimension'
       write(string2,*)' last dimension is ',trim(dimnames(ncNdims))
       call error_handler(E_ERR, 'update_TIEGCM_restart', string1, &
-                   source, revision, revdate, text2=trim(string2))
+                   source, revision, revdate, text2=string2)
    endif
 
    where(dimIDs == TimeDimID) mystart = timeindex
@@ -1664,7 +1738,7 @@ end subroutine update_TIEGCM_restart
 
 
 function get_restart_file_name()
-character(len=128) :: get_restart_file_name
+character(len=256) :: get_restart_file_name
 
 if ( .not. module_initialized ) call static_init_model
 get_restart_file_name = adjustl(tiegcm_restart_file_name)
@@ -1722,11 +1796,14 @@ integer  :: istatus
 
 location = set_location(locarray(1), locarray(2), locarray(3), VERTISHEIGHT)
 
-! call vert_interp(x,lon_below,lat_below,height,ikind,val(1,1),istatus)
+call model_interpolate(x, location, KIND_PRESSURE, obs_val, istatus)
 
-call model_interpolate(x, location, KIND_TEMPERATURE, obs_val, istatus)
+write(*,*)'test_interpolate: PRESSURE value at ',locarray, &
+          ' is ',obs_val,' status is ',istatus,' (0 is good)'
 
-write(*,*)'test_interpolate: TEMPERATURE value at ',locarray, &
+call model_interpolate(x, location, KIND_VERTICAL_TEC, obs_val, istatus)
+
+write(*,*)'test_interpolate: VERTICAL_TEC value at ',locarray, &
           ' is ',obs_val,' status is ',istatus,' (0 is good)'
 
 end subroutine test_interpolate
@@ -1906,7 +1983,7 @@ if( .not. file_exist(file_name)) then
    call error_handler(E_ERR,'read_TIEGCM_namelist',string1,source,revision,revdate)
 endif
 
-if (do_output()) write(*,*) 'read_TIEGCM_namelist: reading restart:', file_name
+call error_handler(E_MSG,'read_TIEGCM_namelist:','reading namelist ['//trim(file_name)//']')
 
 ! Read the namelist entry tgcm_input from tiegcm.nml
 ! TJH It would be nice to read the namelist and skip all the ';' in column 1.
@@ -1924,10 +2001,16 @@ else
     time_step_seconds = step
 endif
 
+if (do_output() .and. (debug > 1)) then
+   write(string1,*) '..  tiegcm time_step_days    is ',time_step_days
+   write(string2,*) 'tiegcm time_step_seconds is ',time_step_seconds
+   call error_handler(E_MSG,'read_TIEGCM_namelist:',string1,text2=string2)
+endif
+
 f10_7 = f107  ! save this in module storage
 
-if (do_output() .and. debug > 0 ) then
-   write(string1,*) 'f107 from tiegcm.nml is ',f107
+if (do_output() .and. (debug > 1)) then
+   write(string1,*) '..  f107 from tiegcm.nml     is ',f107
    call error_handler(E_MSG,'read_TIEGCM_namelist:',string1)
 endif
 
@@ -1956,11 +2039,10 @@ if( .not. file_exist(file_name)) then
    call error_handler(E_ERR,'read_TIEGCM_definition',string1,source,revision,revdate)
 endif
 
-if (do_output()) write(*,*) 'read_TIEGCM_definition:reading restart:', file_name
+call error_handler(E_MSG,'read_TIEGCM_definition:','reading restart ['//trim(file_name)//']')
 
 call nc_check(nf90_open(file_name, NF90_NOWRITE, ncid), &
        'read_TIEGCM_definition','open '//trim(file_name))
-
 
 ! Make sure time is the unlimited dimension
 
@@ -1975,7 +2057,7 @@ if( TimeDimID /= DimID ) then
    call error_handler(E_ERR,'read_TIEGCM_definition',string1,source,revision,revdate)
 endif
 
-! longitude
+! longitude - TIEGCM uses values +/- 180, DART uses values [0,360]
 
 call nc_check(nf90_inq_dimid(ncid, 'lon', DimID), 'read_TIEGCM_definition', &
                   'inq_dimid lon')
@@ -1987,7 +2069,7 @@ call nc_check(nf90_inq_varid(ncid, 'lon', VarID), 'read_TIEGCM_definition', &
 call nc_check(nf90_get_var(ncid, VarID, values=lons), 'read_TIEGCM_definition', &
                   'get_var lon')
 
-where (lons < 0.0_r8) lons = lons + 360.0_r8 ! DART [0, 360] TIEGCM [-180, 180]
+where (lons < 0.0_r8) lons = lons + 360.0_r8
 
 ! latitiude
 
@@ -2014,7 +2096,7 @@ call nc_check(nf90_inq_dimid(ncid, 'lev', DimID), 'read_TIEGCM_definition', &
                   'inq_dimid lev')
 call nc_check(nf90_inquire_dimension(ncid, DimID, len=nlev), 'read_TIEGCM_definition', &
                   'inquire_dimension lev')
-
+nlev = nlev - 1 ! top level is not viable
 allocate(levs(nlev), plevs(nlev))
 
 call nc_check(nf90_inq_varid(ncid, 'lev', VarID), 'read_TIEGCM_definition', &
@@ -2038,10 +2120,12 @@ call nc_check(nf90_get_var(ncid, VarID, values=ilevs), 'read_TIEGCM_definition',
 
 pilevs = p0 * exp(-ilevs) * 100.0_r8 ! [Pa] = 100* [millibars] = 100* [hPa]
 
-if (nlev .ne. nilev) then
-  write(string1, *) ' nlev = ',nlev,' nilev = ',nilev, &
-                      'are different; DART assumes them to be the same'
-  call error_handler(E_ERR,'read_TIEGCM_definition',string1,source,revision,revdate)
+if ((nlev+1) .ne. nilev) then
+   write(string1,*) 'number of midpoints should be 1 less than number of interfaces.'
+   write(string2,*) 'number of midpoints  is nlev  = ',nlev
+   write(string3,*) 'number of interfaces is nilev = ',nilev
+   call error_handler(E_ERR,'read_TIEGCM_definition', string1, &
+              source, revision, revdate, text2=string2, text3=string3)
 endif
 
 end subroutine read_TIEGCM_definition
@@ -2065,7 +2149,8 @@ if( .not. file_exist(file_name)) then
   call error_handler(E_ERR,'read_TIEGCM_secondary',string1,source,revision,revdate)
 endif
 
-if (do_output()) write(*,*) 'read_TIEGCM_secondary:reading restart:', file_name
+call error_handler(E_MSG,'read_TIEGCM_secondary:', &
+           'reading secondary ['//trim(file_name)//']')
 
 call nc_check(nf90_open(file_name, NF90_NOWRITE, ncid), 'read_TIEGCM_secondary', 'open')
 
@@ -2095,7 +2180,7 @@ if (nf90_get_att(ncid, VarID, 'units' , string1) == NF90_NOERR) then
           'ZG already in meters.')
    else
       call error_handler(E_ERR,'read_TIEGCM_secondary', &
-          'ZG has unknown units',source, revision, revdate,text2=trim(string1))
+          'ZG has unknown units',source, revision, revdate,text2=string1)
    endif
 endif
 
@@ -2177,7 +2262,7 @@ MyLoop : do i = 1, nrows
       string2 = 'Must be 6 entries per variable, last known variable name is'
       string3 = trim(variable_table(i,1))
       call error_handler(E_ERR,'verify_variables',string1, &
-          source,revision,revdate,text2=trim(string2),text3=trim(string3))
+          source,revision,revdate,text2=string2,text3=string3)
    endif
 
    ! Make sure variable exists in netCDF file, as long as it is not vTEC.
@@ -2352,7 +2437,7 @@ FillLoop : do ivar = 1, ngood
       write(string1,'(a,'' is supposed to be calculated.'')') trim(varname)
       string2 = 'Not supported at this time.'
       call error_handler(E_ERR, 'verify_variables', string1, &
-      source,revision,revdate, text2=trim(string2))
+                 source,revision,revdate, text2=string2)
    endif
 
    if (trim(varname) == 'ZG') ivarZG = ivar
@@ -2368,7 +2453,7 @@ FillLoop : do ivar = 1, ngood
       string2 = 'If variable name is unexpected, check against input namelist.'
       string3 = 'Make sure each variable has a DART kind, min, and max values.'
       call error_handler(E_ERR, 'verify_variables', string1, &
-      source,revision,revdate, text2=trim(string2), text3=trim(string3))
+      source,revision,revdate, text2=string2, text3=string3)
    endif
 
    call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, &
@@ -2427,10 +2512,12 @@ FillLoop : do ivar = 1, ngood
       if (trim(dimname) ==  'lev') progvar(ivar)%verticalvar =  'lev'
       if (trim(dimname) == 'ilev') progvar(ivar)%verticalvar = 'ilev'
 
-      ! FIXME ... TN,UN,VN,O1,O2 actually have useless 'top' levels.
+      ! TN,UN,VN,O1,O2 actually have useless 'top' levels.
+      if (trim(dimname) ==  'lev') dimlen = dimlen - 1
 
       progvar(ivar)%dimlens( i) = dimlen
       progvar(ivar)%dimnames(i) = dimname
+
       varsize = varsize * dimlen
 
    enddo DimensionLoop
@@ -2443,7 +2530,7 @@ FillLoop : do ivar = 1, ngood
 enddo FillLoop
 
 ReportLoop : do ivar = 1, ngood
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(logfileunit,*)
    write(logfileunit,*)trim(progvar(ivar)%varname),' variable number ',ivar
    write(logfileunit,*)'long_name         ',trim(progvar(ivar)%long_name)
@@ -2503,68 +2590,6 @@ end subroutine verify_variables
 !-------------------------------------------------------------------------------
 
 
-subroutine fill_top(ivar,temp4D,dimIDs,LevDimID,iLevDimID)
-! Some variables need to have the top level replaced by the level underneath it.
-! At present, I do not know of a rule to identify which varibles.
-! It is _not_ as simple as the variables on 'lev' get theirs replaced while
-! the variables on 'ilev' do not.
-!
-! perhaps we need to check the top level of everyone for all missing values
-! and key on that ... TJH
-
-integer,                      intent(in)    :: ivar
-real(r8), dimension(:,:,:,:), intent(inout) :: temp4D
-integer, dimension(:),        intent(in)    :: dimIDs
-integer,                      intent(in)    :: LevDimID, iLevDimID
-
-integer :: i, nlevels, nlevelsm1
-integer :: levdim
-
-levdim = 0
-
-if ( trim(progvar(ivar)%verticalvar) == 'lev') then  ! on midpoints
-
-   DIMLoop : do i = 1,size(dimIDs)
-      if ((dimIDs(i) == LevDimID) .or. (dimIDs(i) == iLevDimID)) then
-         levdim = i
-         exit DIMLoop
-      endif
-   enddo DIMLoop
-
-   if (levdim == 0) then
-      write(string1,*)'cannot find level dimension for ['//trim(progvar(ivar)%varname)//']'
-      call error_handler(E_ERR,'fill_top',string1,source,revision,revdate)
-
-   elseif (levdim == 1) then
-      nlevels   = size(temp4D,levdim)
-      nlevelsm1 = nlevels - 1
-      temp4D(nlevels,:,:,:) = temp4D(nlevelsm1,:,:,:)
-
-   elseif (levdim == 2) then
-      nlevels   = size(temp4D,levdim)
-      nlevelsm1 = nlevels - 1
-      temp4D(:,nlevels,:,:) = temp4D(:,nlevelsm1,:,:)
-
-   elseif (levdim == 3) then
-      nlevels   = size(temp4D,levdim)
-      nlevelsm1 = nlevels - 1
-      temp4D(:,:,nlevels,:) = temp4D(:,:,nlevelsm1,:)
-
-   elseif (levdim == 4) then
-      nlevels   = size(temp4D,levdim)
-      nlevelsm1 = nlevels - 1
-      temp4D(:,:,:,nlevels) = temp4D(:,:,:,nlevelsm1)
-
-   endif
-
-endif
-
-end subroutine fill_top
-
-
-!-------------------------------------------------------------------------------
-
-
 subroutine define_var_dims(ivar, ncid, memberdimid, unlimiteddimid, ndims, dimids)
 ! I am trying to preserve the original shape of the variable as much as possible.
 !
@@ -2600,7 +2625,7 @@ dimids(ndims) = memberdimid
 ndims = ndims + 1               ! The last dimension is unlimited == time
 dimids(ndims) = unlimitedDimid
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. (debug > 99)) then
    write(logfileunit,*)
    write(logfileunit,*)'define_var_dims knowledge'
    write(logfileunit,*)trim(progvar(ivar)%varname),' has dimnames ', &
@@ -2687,8 +2712,8 @@ Hplasma = (2.0_r8 * k_constant / omass ) * Tplasma / GRAVITYtop
 ! NE is extrapolated to 10 more layers
 nlev10  = nlev + 10
 
- ZG_extended(:,:,1:nlev) = ZG
-NEm_extended(:,:,1:nlev) = NE
+ ZG_extended(:,:,1:nilev) = ZG
+NEm_extended(:,:,1:nilev) = NE
 
 do j = nlev, nlev10
    NEm_extended(:,:,j) = NEm_extended(:,:,j-1) * exp(-0.5_r8)
@@ -2716,18 +2741,20 @@ end subroutine create_vtec
 !-------------------------------------------------------------------------------
 
 
-subroutine vert_interp(x, lon_index, lat_index, height, ikind, val, istatus)
+subroutine vert_interp(x, lon_index, lat_index, height, ikind, vertstagger, ivar, val, istatus)
 ! returns the value at an arbitrary height on an existing horizontal grid location.
 ! istatus == 0 is a 'good' return code.
 
-real(r8), intent(in)  :: x(:)
-integer,  intent(in)  :: lon_index, lat_index
-real(r8), intent(in)  :: height
-integer,  intent(in)  :: ikind
-real(r8), intent(out) :: val
-integer,  intent(out) :: istatus
+real(r8),         intent(in)  :: x(:)
+integer,          intent(in)  :: lon_index
+integer,          intent(in)  :: lat_index
+real(r8),         intent(in)  :: height
+integer,          intent(in)  :: ikind
+character(len=*), intent(in)  :: vertstagger
+integer,          intent(in)  :: ivar
+real(r8),         intent(out) :: val
+integer,          intent(out) :: istatus
 
-integer  :: ivar
 integer  :: k, lev_top, lev_bottom
 real(r8) :: zgrid, delta_z, zgrid_top, zgrid_bottom
 real(r8) :: zgrid_upper, zgrid_lower
@@ -2741,35 +2768,7 @@ frac_lev   = MISSING_R8
 lev_top    = 0
 lev_bottom = 0
 
-! To find a layer height: what's the unit of height [m]
-! pressure level ln(p0/p) -- interface [-7.0 7.0] and midlevel [-6.75 7.25]
-! Ne and ZG are defined at interface
-! T, U, V, O, O2 & OP are defined at midlevel
-! T, U, V  at top midlevel pressure level are missing values in TIEGCM
-! but filled in DART with the values at nlev -1
-
-ivar = -1
-
-! FIXME There is some confusion about using the T-minus-1 variables
-! in this construct. Both TN and TN_NM have the same dart_kind,
-! so we use the first one ... but it is not guaranteed that TN
-! must preceed TN_NM, for example.
-
-VARLOOP : do k = 1,nfields
-   if (progvar(k)%dart_kind == ikind) then
-      ivar = k
-      exit VARLOOP
-   endif
-enddo VARLOOP
-
-if (ivar < 0 ) then
-   write(string1,*)'DART state does not have anything with kind ',ikind
-   write(string2,*)get_raw_obs_kind_name(ikind)
-   call error_handler(E_MSG,'vert_interp:',string1,source,revision,revdate,text2=string2)
-   return
-endif
-
-if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
+if ( vertstagger == 'ilev') then
 
    zgrid_bottom = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=1    ))
    zgrid_top    = x(get_index(ivarZG,indx1=lon_index,indx2=lat_index,indx3=nilev))
@@ -2792,28 +2791,28 @@ if ( trim(progvar(ivar)%verticalvar) == 'ilev') then
 
    enddo h_loop_interface
 
-elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
-   ! Variable is on levels, not ilevels.
+elseif ( vertstagger == 'lev') then
+   ! Variable is on level midpoints, not ilevels.
    ! Get height as the average of the ilevels.
 
    ! ilev index    1      2      3      4    ...  27    28    29
    ! ilev value  -7.00, -6.50, -6.00, -5.50, ... 6.00, 6.50, 7.00 ;
-   !  lev value  -6.75, -6.25, -5.75, -5.25, ... 6.25, 6.75, 7.25 ;
-   !  lev index    1      2      3      4    ...  27    28    29
+   !  lev value     -6.75, -6.25, -5.75, -5.25, ... 6.25, 6.75
+   !  lev index        1      2      3      4    ...  27    28
 
    !mid_level 1
    zgrid_bottom = (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=1)) + &
                    x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=2))) / 2.0_r8
 
-   !mid_level nlev-1
-   zgrid_top    = (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nlev-1)) + &
-                   x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nlev))) / 2.0_r8
+   !mid_level nlev
+   zgrid_top    = (x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nilev-1)) + &
+                   x(get_index(ivarZG, indx1=lon_index, indx2=lat_index, indx3=nilev))) / 2.0_r8
 
    ! cannot extrapolate below bottom or beyond top ... fail ...
    if ((zgrid_bottom > height) .or. (zgrid_top < height)) return
 
    ! Figure out what level is above/below, and by how much
-   h_loop_midpoint: do k = 2, nlev-1
+   h_loop_midpoint: do k = 2, nilev-1
 
      lev_bottom = k-1
      lev_top    = k
@@ -2833,15 +2832,13 @@ elseif ( trim(progvar(ivar)%verticalvar) == 'lev') then
            delta_z  = zgrid_upper - zgrid_lower
            frac_lev = (zgrid_upper - height)/delta_z
         endif
-        write(*,*)'TJH DEBUG ivarZG is ',ivarZG, k, zgrid_lower, height, zgrid_upper
         exit h_loop_midpoint
      endif
 
    enddo h_loop_midpoint
 
 else
-   write(string1,*)trim(progvar(ivar)%varname), &
-       ' has an unknown vertical coordinate system ',trim(progvar(ivar)%verticalvar)
+   write(string1,*)'Unknown vertical stagger ',trim(vertstagger)
    call error_handler(E_MSG,'vert_interp:', string1, source, revision, revdate )
 endif
 
@@ -2867,8 +2864,6 @@ else ! simple linear interpolation in height
    val        =     frac_lev *     val_bottom  + (1.0 - frac_lev) *     val_top
 endif
 
-! write(*,*)'TJH DEBUG vertical interp ',val_bottom,val,val_top
-
 end subroutine vert_interp
 
 
@@ -2886,13 +2881,14 @@ function get_height(ivar, lonindex, latindex, levindex)
 ! Variables that have the same vertical coordinate system are easy.
 ! All the variables on "midpoint levels" must be computed.
 !
-!  lev:long_name = "midpoint levels" ;
 ! ilev:long_name = "interface levels" ;
+!  lev:long_name = "midpoint levels" ;
 !
+! For example ... IF:
 ! ilev index    1      2      3      4    ...  27    28    29
 ! ilev value  -7.00, -6.50, -6.00, -5.50, ... 6.00, 6.50, 7.00 ;
-!  lev value  -6.75, -6.25, -5.75, -5.25, ... 6.25, 6.75, 7.25 ;
-!  lev index    1      2      3      4    ...  27    28    29
+!  lev value      -6.75, -6.25, -5.75, -5.25, ... 6.25, 6.75;
+!  lev index        1      2      3      4    ...  27    28
 
 integer, intent(in) :: ivar
 integer, intent(in) :: lonindex
@@ -2902,44 +2898,46 @@ real(r8)            :: get_height
 
 integer  ::  index1,  index2
 
-if (levindex > nlev) then
-   write(string1,*)'requesting out-of-bounds level [',levindex,']'
-   write(string2,*)'for variable ',trim(progvar(ivar)%varname)
-   call error_handler(E_ERR,'get_height', string1, &
-                      source, revision, revdate, text2=trim(string2))
-endif
-
 if (trim(progvar(ivar)%verticalvar) == 'ilev') then
+
+   if (levindex > nilev) then
+      write(string1,*)'requesting out-of-bounds level [',levindex,']'
+      write(string2,*)'for variable ',trim(progvar(ivar)%varname)
+      call error_handler(E_ERR,'get_height', string1, &
+                         source, revision, revdate, text2=string2)
+   endif
 
      index1 = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex)
      get_height = ens_mean(index1)
 
 elseif (trim(progvar(ivar)%verticalvar) == 'lev') then
 
-   ! incoming index  1 should be an average of ilev 1+2
-   ! incoming index  2 should be an average of ilev 2+3
-   ! ...
-   ! incoming index 28 should be an average of ilev 28+29
-   ! incoming index 29 should ALSO be an average of ilev 28+29
-
-   ! TJH: top layer originally contains missing values for TN UN VN O1 OP O2P TI TE 
-   ! TJH: fill_top() has replaced those with the highest valid layer data
-
-   if (levindex == nlev) then
-      index1     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=nlev)
-      get_height = ens_mean(index1)
-   else
-      index1     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex   )
-      index2     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex+1 )
-      get_height = (ens_mean(index1) + ens_mean(index2)) / 2.0_r8
+   if (levindex > nlev) then
+      write(string1,*)'requesting out-of-bounds level [',levindex,']'
+      write(string2,*)'for variable ',trim(progvar(ivar)%varname)
+      call error_handler(E_ERR,'get_height', string1, &
+                         source, revision, revdate, text2=string2)
    endif
+
+   ! Since ZG is defined for level interfaces, requests for heights on 
+   ! midpoints must be calculated.
+   !
+   ! incoming index  1 should be an average of ZG ilev 1+2
+   ! incoming index  2 should be an average of ZG ilev 2+3
+   ! ...
+   ! incoming index 28 should be an average of ZG ilev 28+29
+   ! incoming index 29 is not possible
+
+   index1     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex   )
+   index2     = get_index(ivarZG, indx1=lonindex, indx2=latindex, indx3=levindex+1 )
+   get_height = (ens_mean(index1) + ens_mean(index2)) / 2.0_r8
 
 else
    write(string1,*)'unknown vertical coordinate system <', &
                                   trim(progvar(ivar)%verticalvar),'>'
    write(string2,*)'on variable ',trim(progvar(ivar)%varname)
    call error_handler(E_ERR,'get_height', string1, &
-                      source, revision, revdate, text2=trim(string2))
+                      source, revision, revdate, text2=string2)
 endif
 
 end function get_height
@@ -2948,7 +2946,7 @@ end function get_height
 !-------------------------------------------------------------------------------
 
 
-function get_index(ivar, indx1, indx2, indx3, indx4)
+function get_index(ivar, indx1, indx2, indx3, indx4, knownindex)
 !
 ! returns the statevector index for a lon,lat[,lev[,time]]
 !
@@ -2962,11 +2960,17 @@ function get_index(ivar, indx1, indx2, indx3, indx4)
 ! for a rank 3 variable, as long as the last dimension is 1
 
 integer,           intent(in) :: ivar
-integer, optional, intent(in) :: indx1, indx2, indx3, indx4
+integer, optional, intent(in) :: indx1
+integer, optional, intent(in) :: indx2
+integer, optional, intent(in) :: indx3
+integer, optional, intent(in) :: indx4
+integer, optional, intent(in) :: knownindex
 integer                       :: get_index
 
 integer :: ndim1, ndim2, ndim3, ndim4
 integer :: ix1, ix2, ix3, ix4
+
+real(r8) :: height
 
 ! Set default values, then use input value
 
@@ -2989,7 +2993,7 @@ if     (progvar(ivar)%rank == 0) then ! scalars
       write(string2,*) ' dim1 ', present(indx1), ' dim2 ', present(indx2), &
                        ' dim3 ', present(indx3), ' dim4 ', present(indx4)
       call error_handler(E_ERR, 'get_index', string1, &
-            source, revision, revdate, text2=trim(string2))
+            source, revision, revdate, text2=string2)
    endif
 
 elseif (progvar(ivar)%rank == 1) then
@@ -3001,7 +3005,7 @@ elseif (progvar(ivar)%rank == 1) then
       write(string2,*) ' dim2 ', present(indx2), ' dim3 ', present(indx3), &
                        ' dim4 ', present(indx4)
       call error_handler(E_ERR, 'get_index', string1, &
-            source, revision, revdate, text2=trim(string2))
+            source, revision, revdate, text2=string2)
    endif
 
 elseif (progvar(ivar)%rank == 2) then
@@ -3014,7 +3018,7 @@ elseif (progvar(ivar)%rank == 2) then
       write(string1,*) trim(progvar(ivar)%varname),'called with extra optional arguments.'
       write(string2,*) 'dim3 ',present(indx3), ' dim4 ', present(indx4)
       call error_handler(E_ERR, 'get_index', string1, &
-            source, revision, revdate, text2=trim(string2))
+            source, revision, revdate, text2=string2)
    endif
 
 elseif (progvar(ivar)%rank == 3) then
@@ -3029,7 +3033,7 @@ elseif (progvar(ivar)%rank == 3) then
       write(string1,*) trim(progvar(ivar)%varname),'called with an extra optional argument.'
       write(string2,*) 'dim4 ', present(indx4)
       call error_handler(E_ERR, 'get_index', string1, &
-            source, revision, revdate, text2=trim(string2))
+            source, revision, revdate, text2=string2)
    endif
 
 elseif (progvar(ivar)%rank == 4) then ! Fortran shape is lon.lat.lev.time
@@ -3045,6 +3049,37 @@ elseif (progvar(ivar)%rank == 4) then ! Fortran shape is lon.lat.lev.time
 else
    write(string1,*) trim(progvar(ivar)%varname)//' has unsupported shape.'
    call error_handler(E_ERR, 'get_index', string1, source, revision, revdate )
+endif
+
+! This is useful when testing
+if (present(knownindex)) then
+   if (knownindex /= get_index) then
+
+      if (present(indx1) .and. present(indx2) .and. present(indx3) .and. present(indx4)) then
+         height = get_height(ivar, indx1, indx2, indx3)
+         write(*,*)'index_in, loni, lati, levi, timei', &
+             knownindex, indx1, indx2, indx3, indx4, lons(indx1), lats(indx2), height
+      else if (present(indx1) .and. present(indx2) .and. present(indx3)) then
+         height = get_height(ivar, indx1, indx2, indx3)
+         write(*,*)'index_in, loni, lati, levi', &
+             knownindex, indx1, indx2, indx3, lons(indx1), lats(indx2), height
+      else if (present(indx1) .and. present(indx2)) then
+         write(*,*)'index_in, loni, lati', &
+             knownindex, indx1, indx2, lons(indx1), lats(indx2)
+      else if (present(indx1)) then
+         write(*,*)'index_in, loni', &
+             knownindex, indx1, lons(indx1)
+      else 
+         write(*,*)'index_in', &
+             knownindex
+      endif
+
+      write(string1,*)'FAILURE ... original index /= get_index() value'
+      write(string2,*)'original index = ',knownindex
+      write(string3,*)'get_index()    = ',get_index
+      call error_handler(E_ERR,'get_index', string1, &
+              source, revision, revdate, text2=string2, text3=string3)
+   endif
 endif
 
 end function get_index
@@ -3128,7 +3163,7 @@ elseif ( numdims == 1 ) then
                              progvar(ivar)%indexN
       write(string2, *) 'it ended at ',icount-1
       call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-                source, revision, revdate, text2=trim(string2))
+                source, revision, revdate, text2=string2)
    endif
 
    if ( limit ) then
@@ -3176,7 +3211,7 @@ elseif ( numdims == 2 ) then
                              progvar(ivar)%indexN
       write(string2, *) 'it ended at ',icount-1
       call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-                source, revision, revdate, text2=trim(string2))
+                source, revision, revdate, text2=string2)
    endif
 
    if ( limit ) then
@@ -3225,7 +3260,7 @@ elseif ( numdims == 3 ) then
                              progvar(ivar)%indexN
       write(string2, *) 'it ended at ',icount-1
       call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-                source, revision, revdate, text2=trim(string2))
+                source, revision, revdate, text2=string2)
    endif
 
    if ( limit ) then
@@ -3248,6 +3283,12 @@ elseif ( numdims == 3 ) then
          where (data_3d_array == MISSING_R8) data_3d_array = progvar(ivar)%missingR8
       endif
 
+   endif
+
+   if (do_output() .and. (debug > 3)) then
+      write(string2,*)trim(progvar(ivar)%varname)//' start is ',mystart(1:numdims)
+      write(string3,*)trim(progvar(ivar)%varname)//' count is ',mycount(1:numdims)
+      call error_handler(E_MSG,'vector_to_prog_var',' ',text2=string2,text3=string3)
    endif
 
    call nc_check(nf90_put_var(ncid, VarID, data_3d_array, &
@@ -3277,7 +3318,7 @@ elseif ( numdims == 4 ) then
                              progvar(ivar)%indexN
       write(string2, *) 'it ended at ',icount-1
       call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-                source, revision, revdate, text2=trim(string2))
+                source, revision, revdate, text2=string2)
    endif
 
    if ( limit ) then
@@ -3302,33 +3343,10 @@ elseif ( numdims == 4 ) then
 
    endif
 
-   ! FIXME ... Do not update top level (29) of anything defined on 'lev'
-   ! This block is also used for DART 4D vars that do not have a level,
-   ! but then 'limit' is .false.
-
-   if ( limit .and. (trim(progvar(ivar)%verticalvar) == 'lev')) then 
-
-      ! Check to make sure the shape is [lon lat lev time]
-      ! so that we know the third dimension is the one to adjust.
-      ! The fourth is 'time', which is always a singleton dimension.
-
-      if ((trim(progvar(ivar)%dimnames(3)) == 'lev') .and. &
-          (trim(progvar(ivar)%dimnames(4)) == 'time')) then
-         mycount(3) = mycount(3) - 1
-         write(string1,*)'Only writing ',mycount(3),' levels for ',&
-                         trim(progvar(ivar)%varname)
-         call error_handler(E_MSG, 'vector_to_prog_var:', string1, &
-                source, revision, revdate)
-      else
-         write(string1,*)trim(progvar(ivar)%varname),'has unexpected shape.'
-         write(string2,*)'third  dimension expected to be "lev"  is "', &
-                         trim(progvar(ivar)%dimnames(3)),'"'
-         write(string3,*)'fourth dimension expected to be "time" is "', &
-                         trim(progvar(ivar)%dimnames(4)),'"'
-         call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-                source, revision, revdate, text2=trim(string2), text3=trim(string3))
-      endif
-
+   if (do_output() .and. (debug > 3)) then
+      write(string2,*)trim(progvar(ivar)%varname)//' start is ',mystart(1:numdims)
+      write(string3,*)trim(progvar(ivar)%varname)//' count is ',mycount(1:numdims)
+      call error_handler(E_MSG,'vector_to_prog_var',' ',text2=string2,text3=string3)
    endif
 
    call nc_check(nf90_put_var(ncid, VarID, data_4d_array(:,:,1:mycount(3),:), &
@@ -3361,7 +3379,7 @@ elseif ( numdims == 5 ) then
                              progvar(ivar)%indexN
       write(string2, *) 'it ended at ',icount-1
       call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-                source, revision, revdate, text2=trim(string2))
+                source, revision, revdate, text2=string2)
    endif
 
    if ( limit ) then
@@ -3386,6 +3404,12 @@ elseif ( numdims == 5 ) then
 
    endif
 
+   if (do_output() .and. (debug > 3)) then
+      write(string2,*)trim(progvar(ivar)%varname)//' start is ',mystart(1:numdims)
+      write(string3,*)trim(progvar(ivar)%varname)//' count is ',mycount(1:numdims)
+      call error_handler(E_MSG,'vector_to_prog_var',' ',text2=string2,text3=string3)
+   endif
+
    call nc_check(nf90_put_var(ncid, VarID, data_5d_array, &
            start = mystart(1:numdims), count=mycount(1:numdims)), &
            'vector_to_prog_var', 'put_var '//trim(progvar(ivar)%varname))
@@ -3397,7 +3421,7 @@ else
    write(string2,*)trim(progvar(ivar)%varname),' has rank ', &
                         progvar(ivar)%dimnames(1:progvar(ivar)%rank)
    call error_handler(E_ERR, 'vector_to_prog_var', string1, &
-             source, revision, revdate, text2=trim(string2))
+             source, revision, revdate, text2=string2)
 
 endif
 
@@ -3419,7 +3443,7 @@ if (size(var) /= progvar(ifield)%varsize) then
               'is supposed to have size ',progvar(ifield)%varsize
    write(string2, *) 'it has size ',size(var)
    call error_handler(E_ERR, 'prog_var_to_vector:1D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 icount = progvar(ifield)%index1
@@ -3435,7 +3459,7 @@ if ( (icount-1) /= progvar(ifield)%indexN ) then
                           progvar(ifield)%indexN
    write(string2, *) 'it ended at ',icount-1
    call error_handler(E_ERR, 'prog_var_to_vector:1D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 end subroutine var1d_to_vector
@@ -3454,7 +3478,7 @@ if (size(var) /= progvar(ifield)%varsize) then
               'is supposed to have size ',progvar(ifield)%varsize
    write(string2, *) 'it has size ',size(var)
    call error_handler(E_ERR, 'prog_var_to_vector:2D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 icount = progvar(ifield)%index1
@@ -3472,7 +3496,7 @@ if ( (icount-1) /= progvar(ifield)%indexN ) then
                           progvar(ifield)%indexN
    write(string2, *) 'it ended at ',icount-1
    call error_handler(E_ERR, 'prog_var_to_vector:2D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 end subroutine var2d_to_vector
@@ -3491,7 +3515,7 @@ if (size(var) /= progvar(ifield)%varsize) then
               'is supposed to have size ',progvar(ifield)%varsize
    write(string2, *) 'it has size ',size(var)
    call error_handler(E_ERR, 'prog_var_to_vector:3D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 icount = progvar(ifield)%index1
@@ -3511,7 +3535,7 @@ if ( (icount-1) /= progvar(ifield)%indexN ) then
                           progvar(ifield)%indexN
    write(string2, *) 'it ended at ',icount-1
    call error_handler(E_ERR, 'prog_var_to_vector:3D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 end subroutine var3d_to_vector
@@ -3530,7 +3554,7 @@ if (size(var) /= progvar(ifield)%varsize) then
               'is supposed to have size ',progvar(ifield)%varsize
    write(string2, *) 'it has size ',size(var)
    call error_handler(E_ERR, 'prog_var_to_vector:4D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 icount = progvar(ifield)%index1
@@ -3539,7 +3563,6 @@ do idim4 = 1,size(var,4)
 do idim3 = 1,size(var,3)
 do idim2 = 1,size(var,2)
 do idim1 = 1,size(var,1)
-!  write(8,*)'var ',ifield, icount, idim1, idim2, idim3, idim4
    x(icount) = var(idim1,idim2,idim3,idim4)
    icount = icount + 1
 enddo
@@ -3552,7 +3575,7 @@ if ( (icount-1) /= progvar(ifield)%indexN ) then
                           progvar(ifield)%indexN
    write(string2, *) 'it ended at ',icount-1
    call error_handler(E_ERR, 'prog_var_to_vector:4D', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 
 end subroutine var4d_to_vector
@@ -3571,7 +3594,9 @@ function FindVar_by_kind(ikind)
 integer, intent(in) :: ikind
 integer             :: FindVar_by_kind
 
-integer :: ivar
+integer :: ivar 
+
+FindVar_by_kind = -1
 
 VARLOOP : do ivar = 1,nfields
    if (progvar(ivar)%dart_kind == ikind) then
@@ -3580,8 +3605,10 @@ VARLOOP : do ivar = 1,nfields
    endif
 enddo VARLOOP
 
-write(string1, *) 'unable to find a variable with a DART kind of ',ikind
-call error_handler(E_ERR, 'FindVar_by_kind', string1, source, revision, revdate )
+if (do_output() .and. (debug > 99)) then
+   write(string1, *) 'unable to find a variable with a DART kind of ',ikind
+   call error_handler(E_MSG, 'FindVar_by_kind', string1, source, revision, revdate )
+endif
 
 end function FindVar_by_kind
 
@@ -3612,7 +3639,7 @@ if (Find_Variable_by_index < 0) then
    write(string1,*)'index ',myindx,' is out of range of all variables.'
    write(string2,*)'model size is ',model_size
    call error_handler(E_ERR, 'Find_Variable_by_index'//trim(msgstring), string1, &
-                      source, revision, revdate, text2=trim(string2) )
+                      source, revision, revdate, text2=string2 )
 endif
 
 end function Find_Variable_by_index
@@ -3656,11 +3683,13 @@ if (dimlen .ne. nlat) then
 endif
 if (present(LatDimID)) LatDimID = dimlen
 
+! TIEGCM has a useless top level for everything defined on 'lev'
+! 'nlev' had a local value (i.e. in DART) that is 1 less than 'nilev'
 
 call nc_check(nf90_inq_dimid(ncid, 'lev', DimID), 'SanityCheck', 'inq_dimid lev')
 call nc_check(nf90_inquire_dimension(ncid, DimID, len=dimlen), &
    'SanityCheck', 'inquire_dimension lev')
-if (dimlen .ne. nlev) then
+if (dimlen .ne. (nlev+1)) then
    write(string1, *) trim(filename), ' dim_lev = ',dimlen, ' DART expects ',nlev
    call error_handler(E_ERR,'SanityCheck',string1,source,revision,revdate)
 endif
@@ -3685,7 +3714,7 @@ if (DimID .ne. DimID2) then
    write(string2, *) 'and a time dimension ID of ',DimID, &
                      '. DART requires them to be the same.'
    call error_handler(E_ERR, 'SanityCheck', string1, &
-              source, revision, revdate, text2=trim(string2))
+              source, revision, revdate, text2=string2)
 endif
 if (present(TimeDimID)) TimeDimID = DimID
 
@@ -3757,7 +3786,7 @@ doy   =  mtime(1)
 utsec = (mtime(2)*60 + mtime(3))*60
 get_state_time = set_time(utsec, doy-1) + set_date(year, 1, 1)  ! Jan 1 of whatever year.
 
-if (do_output() .and. (debug > 0)) then
+if (do_output()) then
    write(*,*) trim(filename)//':get_state_time: tiegcm [year, doy, hour, minute]', &
             year, mtime
    call print_date(get_state_time, str=trim(filename)//':get_state_time: date ')
@@ -3814,7 +3843,7 @@ else
 
 endif
 
-if (do_output() .and. debug > 99) then
+if (do_output() .and. (debug > 99)) then
    if (progvar(ivar)%rangeRestricted == BOUNDED_NONE) then
       write(*,*)'TJH ',trim(progvar(ivar)%varname),' has no limits.'
    elseif (progvar(ivar)%rangeRestricted == BOUNDED_BELOW) then
@@ -3830,7 +3859,7 @@ if (do_output() .and. debug > 99) then
       write(string2,*)'minimum value string is ',trim(variable_table(ivar,3))
       write(string3,*)'maximum value string is ',trim(variable_table(ivar,4))
       call error_handler(E_ERR,'SetVariableLimits',string1, &
-         source,revision,revdate,text2=trim(string2),text3=trim(string3))
+         source,revision,revdate,text2=string2,text3=string3)
    endif
 endif
 
@@ -3842,7 +3871,7 @@ if ( progvar(ivar)%rangeRestricted == BOUNDED_BOTH ) then
       write(string2,*)'minimum value (',minvalue,') must be less than '
       write(string3,*)'maximum value (',maxvalue,')'
       call error_handler(E_ERR,'SetVariableLimits',string1, &
-         source,revision,revdate,text2=trim(string2),text3=trim(string3))
+         source,revision,revdate,text2=string2,text3=string3)
    endif
 endif
 

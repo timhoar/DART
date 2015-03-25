@@ -47,9 +47,9 @@
 #BSUB -o tiegcm_filter.%J.log
 #BSUB -P NIMGxxxx
 #BSUB -q regular
-#BSUB -n 96
+#BSUB -n 80
 #BSUB -R "span[ptile=16]"
-#BSUB -W 3:00
+#BSUB -W 1:00
 #BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
@@ -117,16 +117,19 @@ switch ( ${OSTYPE} )
       setenv REMOVE 'rm -rf'
       setenv   COPY 'cp -p'
       setenv   MOVE 'mv -f'
+      setenv   LINK 'ln -s'
       breaksw
    case AIX:
       setenv REMOVE 'rm -rf'
       setenv   COPY 'cp -p'
       setenv   MOVE 'mv -f'
+      setenv   LINK 'ln -s'
       breaksw
    default:
       setenv REMOVE 'rm -rvf'
       setenv   COPY 'cp -v'
       setenv   MOVE 'mv -fv'
+      setenv   LINK 'ln -s'
       breaksw
 endsw
 
@@ -136,12 +139,14 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # Set variables containing various directory names where we will GET things
 # DARTDIR      The location of the DART tiegcm model directory
 # TIEGCMDIR    The location of the TIEGCM executable
-# EXPERIMENT   The location of the initial ensemble of TIEGCM files
+# ENSEMBLEDIR  The location of the initial ensemble of TIEGCM files
+# EXPERIMENT   The (safe) location for the results of this run.
 #-----------------------------------------------------------------------------
 
-set    DARTDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm
-set  TIEGCMDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm/src
-set EXPERIMENT = /glade/p/work/${USER}/initial_ensemble
+set     DARTDIR = /glade/u/home/${USER}/DART/tiegcm/models/tiegcm
+set   TIEGCMDIR = /glade/u/home/${USER}/tiegcm/src
+set ENSEMBLEDIR = /glade/p/work/alexc/startup_files/initial
+set  EXPERIMENT = /glade/p/work/${USER}/${JOBNAME}
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
@@ -149,14 +154,14 @@ set EXPERIMENT = /glade/p/work/${USER}/initial_ensemble
 # The tiegcm initial conditions are in the next block.
 #-----------------------------------------------------------------------------
 
-${COPY} ${DARTDIR}/work/filter                     .   || exit -1
-${COPY} ${DARTDIR}/work/dart_to_model              .   || exit -1
-${COPY} ${DARTDIR}/work/model_to_dart              .   || exit -1
-${COPY} ${DARTDIR}/work/input.nml                  .   || exit -1
-${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .   || exit -1
-${COPY} ${EXPERIMENT}/observation/obs_seq.out      .   || exit -1
+${COPY} ${DARTDIR}/work/filter                       . || exit 1
+${COPY} ${DARTDIR}/work/dart_to_model                . || exit 1
+${COPY} ${DARTDIR}/work/model_to_dart                . || exit 1
+${COPY} ${DARTDIR}/work/input.nml   input.nml.original || exit 1
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh   . || exit 1
+${COPY} ${EXPERIMENT}/observation/obs_seq.out        . || exit 1
 
-${COPY}  ${TIEGCMDIR}/tiegcm-nompi            tiegcm   || exit -1
+${COPY}  ${TIEGCMDIR}/tiegcm-nompi              tiegcm || exit 1
 
 #-----------------------------------------------------------------------------
 # Put all of the DART initial conditions files and all of the TIEGCM files
@@ -168,13 +173,13 @@ ${COPY}  ${TIEGCMDIR}/tiegcm-nompi            tiegcm   || exit -1
 #
 # REQUIREMENTS: for input.nml
 # model_nml            : tiegcm_restart_file_name   = 'tiegcm_restart_p.nc'
-# model_nml            : tiegcm_secondary_file_name = 'tiegcm_s.nc.nc'
+# model_nml            : tiegcm_secondary_file_name = 'tiegcm_s.nc'
 # model_nml            : tiegcm_namelist_file_name  = 'tiegcm.nml'
 # model_to_dart_nml    : file_out                   = 'dart_ics'
 #-----------------------------------------------------------------------------
 # ensemble_manager_nml : single_restart_file_in     = .false.
 # filter_nml           : async                      = 2
-# filter_nml           : adv_ens_command            = 'advance_model.csh'
+# filter_nml           : adv_ens_command            = './advance_model.csh'
 # filter_nml           : start_from_restart         = .TRUE.
 # filter_nml           : restart_in_file_name       = 'filter_ics'
 # filter_nml           : restart_out_file_name      = 'filter_restart'
@@ -182,20 +187,34 @@ ${COPY}  ${TIEGCMDIR}/tiegcm-nompi            tiegcm   || exit -1
 # dart_to_model_nml    : file_in                    = 'dart_restart'
 # dart_to_model_nml    : file_namelist_out          = 'namelist_update'
 
+sed -e "/ tiegcm_restart_file_name /c\ tiegcm_restart_file_name = 'tiegcm_restart_p.nc'" \
+    -e "/ tiegcm_secondary_file_name /c\ tiegcm_secondary_file_name = 'tiegcm_s.nc'" \
+    -e "/ tiegcm_namelist_file_name /c\ tiegcm_namelist_file_name = 'tiegcm.nml'" \
+    -e "/ file_out /c\ file_out = 'dart_ics'" \
+    -e "/ single_restart_file_in /c\ single_restart_file_in = .FALSE." \
+    -e "/ async /c\ async = 2" \
+    -e "/ adv_ens_command /c\ adv_ens_command = './advance_model.csh'" \
+    -e "/ start_from_restart /c\ start_from_restart = .TRUE." \
+    -e "/ restart_in_file_name /c\ restart_in_file_name = 'filter_ics'" \
+    -e "/ restart_out_file_name /c\ restart_out_file_name = 'filter_restart'" \
+    -e "/ file_in /c\ file_in = 'dart_restart'" \
+    -e "/ file_namelist_out /c\ file_namelist_out = 'namelist_update'" \
+    input.nml.original >! input.nml  || exit 2
+
 set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
 set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
-@ i = 1
-while ( $i <= $NUM_ENS )
+@ instance = 1
+while ( $instance <= $NUM_ENS )
 
-  set darticname  = `printf "filter_ics.%04d"          $i`
-  set tiesecond   = `printf "tiegcm_s.nc.%04d"         $i`
-  set tierestart  = `printf "tiegcm_restart_p.nc.%04d" $i`
-  set tieinp      = `printf "tiegcm.nml.%04d"          $i`
+  set darticname  = `printf "filter_ics.%04d"          $instance`
+  set tiesecond   = `printf "tiegcm_s.nc.%04d"         $instance`
+  set tierestart  = `printf "tiegcm_restart_p.nc.%04d" $instance`
+  set tieinp      = `printf "tiegcm.nml.%04d"          $instance`
 
-  ln -sf ${EXPERIMENT}/initial/$tiesecond  .                   || exit -2
-  ln -sf ${EXPERIMENT}/initial/$tierestart .                   || exit -2
-  ln -sf ${EXPERIMENT}/initial/$tieinp     tiegcm.nml.original || exit -2
+  ${COPY} ${ENSEMBLEDIR}/$tiesecond  .                   || exit 2
+  ${COPY} ${ENSEMBLEDIR}/$tierestart .                   || exit 2
+  ${COPY} ${ENSEMBLEDIR}/$tieinp     tiegcm.nml.original || exit 2
 
   # Ensure that the tiegcm.nml for all the ensemble members is identical
   # in all the ways that matter. This will result in a miniumum of changes
@@ -211,7 +230,7 @@ while ( $i <= $NUM_ENS )
       -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
       -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
       -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
-      tiegcm.nml.original >! $tieinp  || exit -3
+      tiegcm.nml.original >! $tieinp  || exit 2
 
   # If an existing ensemble of filter_ics.#### exist, use it.
   # If not, generate one. Be aware - even if they exist, they may
@@ -219,41 +238,46 @@ while ( $i <= $NUM_ENS )
   # If that is the case, you will have to generate your own set anyway.
   # If you get an error from aread_state_restart(), this is likely the case.
 
-  if (  -e  ${EXPERIMENT}/initial/$darticname.GENERATE ) then
-     ln -sf ${EXPERIMENT}/initial/$darticname . || exit -2
+  if (  -e  ${ENSEMBLEDIR}/initial/$darticname.GENERATE ) then
+     ${REMOVE} $darticname
+     ${LINK} ${ENSEMBLEDIR}/initial/$darticname . || exit 2
   else
      # We must convert a tiegcm_restart_p.nc file to a dart_ics file
      # for each ensemble member. So - momentarily, we must
      # create links to the static filenames expected by model_to_dart
 
-     ln -sf $tiesecond  tiegcm_s.nc           || exit -4
-     ln -sf $tierestart tiegcm_restart_p.nc   || exit -4
-     ln -sf $tieinp     tiegcm.nml            || exit -4
+     ${REMOVE} tiegcm_restart_p.nc tiegcm_s.nc tiegcm.nml 
 
-     ./model_to_dart || exit -5
+     ${LINK} $tierestart tiegcm_restart_p.nc   || exit 2
+     ${LINK} $tiesecond  tiegcm_s.nc           || exit 2
+     ${LINK} $tieinp     tiegcm.nml            || exit 2
+
+     ./model_to_dart || exit 2
 
      if (-e dart_ics ) then
-        mv  dart_ics $darticname
+        ${MOVE} dart_ics $darticname
      else
         echo "ERROR: File conversion from $tierestart to $darticname failed."
         echo "ERROR: File conversion from $tierestart to $darticname failed."
         echo "ERROR: File conversion from $tierestart to $darticname failed."
-        exit -5
+        exit 2
      endif
   endif
 
-  @ i += 1
+  @ instance++
 end
 
 #-----------------------------------------------------------------------------
 # Run filter ... 
 #-----------------------------------------------------------------------------
 
-ln -sf tiegcm_restart_p.nc.0001 tiegcm_restart_p.nc   || exit -6
-ln -sf tiegcm_s.nc.0001         tiegcm_s.nc           || exit -6
-ln -sf tiegcm.nml.0001          tiegcm.nml            || exit -6
+${REMOVE} tiegcm_restart_p.nc tiegcm_s.nc tiegcm.nml 
 
-${MPI_RUN_CMD} ./filter || exit -6
+${LINK} tiegcm_restart_p.nc.0001 tiegcm_restart_p.nc   || exit 3
+${LINK} tiegcm_s.nc.0001         tiegcm_s.nc           || exit 3
+${LINK} tiegcm.nml.0001          tiegcm.nml            || exit 3
+
+${MPI_RUN_CMD} ./filter || exit 3
 
 #-----------------------------------------------------------------------------
 # At this point, all the restart,diagnostic files are in the run/CENTRALDIR.

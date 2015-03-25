@@ -96,10 +96,10 @@ while($state_copy <= $num_states)
    set tierestart  = `printf "tiegcm_restart_p.nc.%04d" $ensemble_member`
    set tieinp      = `printf "tiegcm.nml.%04d"          $ensemble_member`
 
-   cp -p ../$input_file dart_restart        || exit 2
-   cp -p ../$tiesecond  tiegcm_s.nc         || exit 2
-   cp -p ../$tierestart tiegcm_restart_p.nc || exit 2
-   cp -p ../$tieinp     tiegcm.nml          || exit 2
+   cp -pv ../$input_file dart_restart        || exit 2
+   cp -pv ../$tiesecond  tiegcm_s.nc         || exit 2
+   cp -pv ../$tierestart tiegcm_restart_p.nc || exit 2
+   cp -pv ../$tieinp     tiegcm.nml          || exit 2
 
    ../dart_to_model >>& $logfile || exit 2  # dart_to_model generates namelist_update
 
@@ -138,11 +138,11 @@ while($state_copy <= $num_states)
 
    if ( -e tiegcm.nml.updated ) then
       echo "tiegcm.nml updated with new start/stop time for ensemble member $ensemble_member"
-      mv tiegcm.nml tiegcm.nml.original
-      mv tiegcm.nml.updated tiegcm.nml
+      mv -v tiegcm.nml tiegcm.nml.original
+      mv -v tiegcm.nml.updated tiegcm.nml
    else
       echo "ERROR tiegcm.nml did not update correctly for ensemble member $ensemble_member."
-      exit 1
+      exit 2
    endif
 
    #----------------------------------------------------------------------
@@ -155,13 +155,14 @@ while($state_copy <= $num_states)
 
    ${RUN_CMD} ../tiegcm < tiegcm.nml >>& $logfile
 
-   set mystatus = $status
+   grep -q "NORMAL EXIT" $logfile
+   set tiegcm_status = $status
 
-   # FIXME ... is there some way to check for a successful model advance?
-   # some string in an output file, perhaps?
-   
-   echo "tiegcm status was $mystatus"
-   grep --line-number "NORMAL EXIT" $logfile
+   if ($tiegcm_status != 0) then
+      echo "ERROR: tiegcm model advance failed."
+      echo "ERROR: check $temp_dir/$logfile"
+      exit 3
+   endif
 
    echo "ensemble member $ensemble_member : after tiegcm" >> $logfile
    ncdump -v mtime tiegcm_restart_p.nc                    >> $logfile
@@ -178,10 +179,10 @@ while($state_copy <= $num_states)
    echo "Starting model_to_dart at "`date`  >>  $logfile
    ../model_to_dart                         >>& $logfile || exit 4
 
-   mv dart_ics            ../$output_file || exit 4
-   mv tiegcm_s.nc         ../$tiesecond   || exit 4
-   mv tiegcm_restart_p.nc ../$tierestart  || exit 4
-   mv tiegcm.nml          ../$tieinp      || exit 4
+   mv -v dart_ics            ../$output_file || exit 4
+   mv -v tiegcm_s.nc         ../$tiesecond   || exit 4
+   mv -v tiegcm_restart_p.nc ../$tierestart  || exit 4
+   mv -v tiegcm.nml          ../$tieinp      || exit 4
 
    @ state_copy++
    @ ensemble_member_line = $ensemble_member_line + 3
