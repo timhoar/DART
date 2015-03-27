@@ -199,7 +199,7 @@ cd ..
 #\rm -rf $temp_dir
 
 # Remove the filter_control file to signal completion
-\rm -f $control_file
+\rm -fv $control_file
 
 echo "Finished advance_model for process $process at "`date`
 
