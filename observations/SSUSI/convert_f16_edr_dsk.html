@@ -83,19 +83,19 @@ but none of the required metadata to interpret them correctly.
 These 2 lines will add the required attributes so that NaNs are replaced with
 a fill value that can be queried and manipulated.
 Since the ON2_UNCERTAINTY is a standard deviation, it is sufficient to make
-the fill value negative.
+the fill value negative. <a href-="#KnownBugs">See the section on Known Bugs</a>
 </P>
 <div class=unix>
 <pre>ncatted -a _FillValue,ON2_UNCERTAINTY,o,f,NaN        input_file.nc
 ncatted -a _FillValue,ON2_UNCERTAINTY,m,f,-1.0       input_file.nc</pre>
 </div>
+<P></P>
 
 <!--==================================================================-->
 
 <A NAME="DataSources"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>DATA SOURCES</H2>
-
 <P>
 <a href="http://ssusi.jhuapl.edu/data_products">http://ssusi.jhuapl.edu/data_products</a>
 </P>
@@ -107,7 +107,7 @@ policy.
 <!--==================================================================-->
 
 <A NAME="Programs"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>PROGRAMS</H2>
 <P>
 <em class=file>DART/observations/SSUSI/convert_f16_edr_dsk.f90</em> 
@@ -134,11 +134,47 @@ likely to need to be made.
 <!-- Describe the bugs.                                               -->
 <!--==================================================================-->
 
+<A NAME="Errors"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>ERRORS</H2>
+<P>
+The code for setting observation error variances is using fixed values,
+and we are not certain if they are correct.  Incoming QC values larger
+than 0 are suspect, but it is not clear if they really signal unusable
+values or whether there are some codes we should accept.
+</P>
+
+<!--==================================================================-->
+<!-- Describe the bugs.                                               -->
+<!--==================================================================-->
+
 <A NAME="KnownBugs"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>KNOWN BUGS</H2>
 <P>
-none
+The netCDF files - as distributed - have NaN values to indicate "MISSING".
+This makes it exceptionally hard to read or work with, as almost everything
+will core dump when trying to perform any math with NaNs. <em class=file>
+convert_f16_edr_dsk.f90</em> tries to count how many values are missing. If the
+NaN has not been replaced with a numerically valid MISSING value, the following
+FATAL ERROR is generated (by the Intel compiler, with debug and traceback enabled):</P>
+<PRE>
+ set_nml_output Echo NML values to log file only
+ Trying to open namelist log dart_log.nml
+forrtl: error (65): floating invalid
+Image              PC                Routine            Line        Source             
+convert_f16_edr_d  000000000051717D  MAIN__                    143  convert_f16_edr_dsk.f90
+convert_f16_edr_d  0000000000409B3C  Unknown               Unknown  Unknown
+libc.so.6          0000003101E1ED5D  Unknown               Unknown  Unknown
+convert_f16_edr_d  0000000000409A39  Unknown               Unknown  Unknown
+Abort (core dumped)
+</PRE>
+
+<P>
+The solution is to replace the NaN values with a viable MISSING value using
+the <em class=program>shell_scripts/netcdf_manip.csh</em> script.
+It relies on the netCDF Operators, freely available from&nbsp;
+<a href="http://nco.sourceforge.net">http://nco.sourceforge.net</a>
 </P>
 
 <!--==================================================================-->
@@ -146,7 +182,7 @@ none
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FUTURE PLANS</H2>
 <P>
 none
@@ -157,7 +193,7 @@ none
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>Terms of Use</H2>
 
 <P>
