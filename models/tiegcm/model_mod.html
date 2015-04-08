@@ -261,7 +261,42 @@ prematurely terminating the namelist.
         output time, it is <strong>imperative</strong> that these variables 
         be specified to occur AFTER their counterparts in the DART namelist.
         This will ensure that the most current variables are used in the
-        calculation of the forward observation operators.</TD>
+        calculation of the forward observation operators.<br />
+        <TABLE border=0 cellpadding=3 width=100% summary='variable description'>
+
+        <tr><td valign=top><em class=code>variables(:,1)</em></td>
+            <td valign=top> Specifies the TIEGCM variable name in the netCDF file.</td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,2)</em></td>
+            <td valign=top> Specifies the DART kind for that variable.</td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,3)</em></td>
+            <td valign=top> Specifies a minimum bound (if any) for that variable.</td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,4)</em></td>
+            <td valign=top> Specifies a maximum bound (if any) for that variable.</td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,5)</em></td>
+            <td valign=top> Specifies what file the variable should come from. 
+                 The only valid possibilies are "restart", "secondary", or "calculate".
+                 "restart" will read from whatever file is specified by 
+                 <em class=code>tiegcm_restart_file_name</em>.
+                 "secondary" will read from whatever file is specified by
+                 <em class=code>tiegcm_secondary_file_name</em>.
+                 "calculate" will call a variable-dependent function -- see 
+                 <em class=file>model_mod.f90</em>:<em class=code>tiegcm_to_dart_vector()</em> for the
+                 <em class=code>create_vtec()</em> example.</td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,6)</em></td>
+            <td valign=top> Specifies if the variable should be updated in the TIEGCM restart file.
+                 The value may be "UPDATE" or anything else.
+                 If <strong>and only if</strong> the variable comes from the restart file 
+                 <strong>and</strong> <em class=code>variables(:,6)</em> == "UPDATE" will the
+                 variable be modified in the TIEGCM restart file. No variables in the secondary file
+                 are EVER modified.</td></tr>
+        </TABLE>
+
+</TD>
 </TR>
 
 </TBODY>
@@ -333,9 +368,8 @@ utilities/utilities_mod.f90
 
 <TABLE>
 <TR><TD><em class=call>use model_mod, only : </em></TD>
-                   <TD><A HREF="#read_TIEGCM_restart">read_TIEGCM_restart</A></TD></TR>
-<TR><TD>&nbsp;</TD><TD><A HREF="#update_TIEGCM_restart">update_TIEGCM_restart</A></TD></TR>
-<TR><TD>&nbsp;</TD><TD><A HREF="#get_restart_file_name">get_restart_file_name</A></TD></TR>
+                   <TD><A HREF="#tiegcm_to_dart_vector">tiegcm_to_dart_vector</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#dart_vector_to_tiegcm">dart_vector_to_tiegcm</A></TD></TR>
 <TR><TD>&nbsp;</TD><TD><A HREF="#get_f107_value">get_f107_value</A></TD></TR>
 <TR><TD>&nbsp;</TD><TD><A HREF="#test_interpolate">test_interpolate</A></TD></TR>
 </TABLE>
@@ -435,7 +469,7 @@ This interface is required to be functional for all applications.
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>index_in&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>index_in</em></TD>
     <TD>Index of state vector element about which information is requested.</TD></TR>
 
 <TR><TD valign=top><em class=code>location</em></TD>
@@ -483,7 +517,7 @@ and defines which generic kind of item is being interpolated.
 <TR><TD valign=top><em class=code>x</em></TD>
     <TD>A model state vector.</TD></TR>
 
-<TR><TD valign=top><em class=code>location&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>location</em></TD>
     <TD>Location to which to interpolate.</TD></TR>
 
 <TR><TD valign=top><em class=code>itype</em></TD>
@@ -529,7 +563,7 @@ number of minutes.
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>var&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>var</em></TD>
     <TD>Smallest forecast step of model.</TD></TR>
 
 </TABLE>
@@ -654,7 +688,7 @@ the DART state vector is reshaped into the original TIEGCM variables and those v
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>ncFileID&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>ncFileID</em></TD>
     <TD>Integer file descriptor to previously-opened netCDF file.</TD></TR>
 
 <TR><TD valign=top><em class=code>ierr</em></TD>
@@ -700,7 +734,7 @@ the DART state vector is reshaped into the original TIEGCM variables and those v
 <TR><TD valign=top><em class=code>statevec</em></TD>
     <TD>A model state vector.</TD></TR>
 
-<TR><TD valign=top><em class=code>copyindex&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>copyindex</em></TD>
     <TD> Integer index of copy to be written.</TD></TR>
 
 <TR><TD valign=top><em class=code>timeindex</em></TD>
@@ -750,7 +784,7 @@ Most other models simply add noise with certain characteristics to the model sta
 <TR><TD valign=top><em class=code>pert_state</em></TD>
     <TD>Perturbed state vector.</TD></TR>
 
-<TR><TD valign=top><em class=code>interf_provided&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>interf_provided</em></TD>
     <TD>This is returned as .TRUE. since the routine exists. A value of .FALSE.
         would indicate that the default DART routine should just add noise to 
         every element of state. </TD></TR>
@@ -865,7 +899,7 @@ This allows one to apply specialized localizations.
     <TD>Reference location.  The distances will be computed
         between this location and every other location in the obs list</TD></TR>
 
-<TR><TD valign=top><em class=code>base_obs_kind&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>base_obs_kind</em></TD>
     <TD>The kind of base_obs_loc</TD></TR>
 
 <TR><TD valign=top><em class=code>obs_loc</em></TD>
@@ -919,7 +953,7 @@ the updated means.
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>ens_mean&nbsp;&nbsp;&nbsp;</em></TD>
+<TR><TD valign=top><em class=code>ens_mean</em></TD>
     <TD>State vector containing the ensemble mean.</TD></TR>
 
 </TABLE>
@@ -934,30 +968,32 @@ the updated means.
 
 <!--===================== DESCRIPTION OF A ROUTINE =====================-->
 
-<A NAME="read_TIEGCM_restart"></A>
+<A NAME="tiegcm_to_dart_vector"></A>
 <br>
 <div class=routine>
-<em class=call>call read_TIEGCM_restart(file_name, statevec, model_time)</em>
+<em class=call>call tiegcm_to_dart_vector(statevec, model_time)</em>
 <pre>
-real(r8), dimension(:), intent(in) :: <em class=code>ens_mean</em>
+real(r8), dimension(:), intent(out) :: <em class=code>statevec</em>
+type(time_type),        intent(out) :: <em class=code>model_time</em>
 </pre>
 </div>
 
-character(len=*),       intent(in)  :: file_name
-real(r8), dimension(:), intent(out) :: statevec
-type(time_type),        intent(out) :: model_time
 
 <div class=indent1>
 <!-- Description -->
 
 <P>
-Read TIEGCM restart file fields and pack it into a DART vector.
+Read TIEGCM fields from the TIEGCM restart file and/or TIEGCM secondary 
+file and pack them into a DART vector.
 </P>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>ens_mean&nbsp;&nbsp;&nbsp;</em></TD>
-    <TD>State vector containing the ensemble mean.</TD></TR>
+<TR><TD valign=top><em class=code>statevec</em></TD>
+    <TD>variable that contains the DART state vector</TD></TR>
+
+<TR><TD valign=top><em class=code>model_time</em></TD>
+    <TD>variable that contains the LAST TIME in the TIEGCM restart file.</TD></TR>
 
 </TABLE>
 
@@ -966,44 +1002,13 @@ Read TIEGCM restart file fields and pack it into a DART vector.
 
 <!--===================== DESCRIPTION OF A ROUTINE =====================-->
 
-<A NAME="update_TIEGCM_restart"></A>
+<A NAME="dart_vector_to_tiegcm"></A>
 <br>
 <div class=routine>
-<em class=call>call update_TIEGCM_restart(file_name, statevec, model_time)</em>
+<em class=call>call dart_vector_to_tiegcm(statevec, dart_time)</em>
 <pre>
-real(r8), dimension(:), intent(in) :: <em class=code>ens_mean</em>
-</pre>
-</div>
-
-character(len=*),       intent(in)  :: file_name
-real(r8), dimension(:), intent(out) :: statevec
-type(time_type),        intent(out) :: model_time
-
-<div class=indent1>
-<!-- Description -->
-
-<P>
-Read TIEGCM restart file fields and pack it into a DART vector.
-</P>
-
-<TABLE width=100% border=0 summary="" cellpadding=3>
-
-<TR><TD valign=top><em class=code>ens_mean&nbsp;&nbsp;&nbsp;</em></TD>
-    <TD>State vector containing the ensemble mean.</TD></TR>
-
-</TABLE>
-
-</div>
-<P></P>
-
-<!--===================== DESCRIPTION OF A ROUTINE =====================-->
-
-<A NAME="get_restart_file_name"></A>
-<br>
-<div class=routine>
-<em class=call>var = get_restart_file_name()</em>
-<pre>
-type(time_type) :: <em class=code>get_restart_file_name</em>
+real(r8), dimension(:), intent(in) :: <em class=code>statevec</em>
+type(time_type),        intent(in) :: <em class=code>dart_time</em>
 </pre>
 </div>
 
@@ -1011,21 +1016,25 @@ type(time_type) :: <em class=code>get_restart_file_name</em>
 <!-- Description -->
 
 <P>
-Returns the smallest useful forecast length (time step) of the model.
-This is set by 
-<em class=file>input.nml</em>:<em class=code>assimilation_period_seconds</em> and
-must be an integer number of TIEGCM dynamical timesteps (as specified by 
-<em class=file>tiegcm.nml</em>:<em class=code>STEP</em>) AND be able to be 
-expressed by <em class=file>tiegcm.nml</em>:<em class=code>STOP</em>.
-Since <em class=code>STOP</em> has three components: day-of-year, hour, and minute, 
-the <em class=code>assimilation_period_seconds</em> must be an integer
-number of minutes.
+Unpacks a DART vector and updates the TIEGCM restart file variables.
+Only those variables designated as 'UPDATE' are put into the TIEGCM restart file.
+All variables are written to the DART diagnostic files <strong>prior</strong> to
+the application of any "clamping". The variables <strong>are "clamped"</strong> before
+being written to the TIEGCM restart file. The clamping limits are specified in
+columns 3 and 4 of <em class=code>&amp;model_nml:variables</em>.
+<br />
+<br />
+The time of the DART state is compared to the time in the restart file
+to ensure that we are not improperly updating a restart file.
 </P>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>var&nbsp;&nbsp;&nbsp;</em></TD>
-    <TD>Smallest forecast step of model.</TD></TR>
+<TR><TD valign=top><em class=code>statevec</em></TD>
+    <TD>Variable containing the DART state vector.</TD></TR>
+
+<TR><TD valign=top><em class=code>dart_time</em></TD>
+    <TD>Variable containing the time of the DART state vector.</TD></TR>
 
 </TABLE>
 
@@ -1037,9 +1046,10 @@ number of minutes.
 <A NAME="get_f107_value"></A>
 <br>
 <div class=routine>
-<em class=call>var = get_f107_value()</em>
+<em class=call>var = get_f107_value(x)</em>
 <pre>
-type(time_type) :: <em class=code>get_f107_value</em>
+real(r8)                           :: <em class=code>get_f107_value</em>
+real(r8), dimension(:), intent(in) :: <em class=code>x</em>
 </pre>
 </div>
 
@@ -1047,21 +1057,18 @@ type(time_type) :: <em class=code>get_f107_value</em>
 <!-- Description -->
 
 <P>
-Returns the smallest useful forecast length (time step) of the model.
-This is set by 
-<em class=file>input.nml</em>:<em class=code>assimilation_period_seconds</em> and
-must be an integer number of TIEGCM dynamical timesteps (as specified by 
-<em class=file>tiegcm.nml</em>:<em class=code>STEP</em>) AND be able to be 
-expressed by <em class=file>tiegcm.nml</em>:<em class=code>STOP</em>.
-Since <em class=code>STOP</em> has three components: day-of-year, hour, and minute, 
-the <em class=code>assimilation_period_seconds</em> must be an integer
-number of minutes.
+If the F10_7 value is part of the DART state, return that value.
+If it is not part of the DART state, just return the F10_7 value 
+from the TIEGCM namelist.
 </P>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>var&nbsp;&nbsp;&nbsp;</em></TD>
-    <TD>Smallest forecast step of model.</TD></TR>
+<TR><TD valign=top><em class=code>x</em></TD>
+    <TD>Variable containing the DART state vector.</TD></TR>
+
+<TR><TD valign=top><em class=code>var</em></TD>
+    <TD>The f10_7 value.</TD></TR>
 
 </TABLE>
 
@@ -1073,27 +1080,36 @@ number of minutes.
 <A NAME="test_interpolate"></A>
 <br>
 <div class=routine>
-<em class=call>call test_interpolate(file_name, statevec, model_time)</em>
+<em class=call>call test_interpolate(x, locarray)</em>
 <pre>
-real(r8), dimension(:), intent(in) :: <em class=code>ens_mean</em>
+real(r8), dimension(:), intent(in) :: <em class=code>x</em>
+real(r8), dimension(3), intent(in) :: <em class=code>locarray</em>
 </pre>
 </div>
-
-character(len=*),       intent(in)  :: file_name
-real(r8), dimension(:), intent(out) :: statevec
-type(time_type),        intent(out) :: model_time
 
 <div class=indent1>
 <!-- Description -->
 
 <P>
-Read TIEGCM restart file fields and pack it into a DART vector.
+This function is <strong>only</strong> used by 
+<a href="../../utilities/model_mod_check.html">model_mod_check.f90</a>
+and can be modified to suit your needs.
+<em class=program>test_interpolate()</em> exercises 
+<em class=program>model_interpolate()</em>,
+<em class=program>get_state_meta_data()</em>,
+<em class=program>static_init_model()</em> and a host of supporting routines. 
 </P>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
 
-<TR><TD valign=top><em class=code>ens_mean&nbsp;&nbsp;&nbsp;</em></TD>
-    <TD>State vector containing the ensemble mean.</TD></TR>
+<TR><TD valign=top><em class=code>x</em></TD>
+    <TD>variable containing the DART state vector.</TD></TR>
+
+<TR><TD valign=top><em class=code>locarray</em></TD>
+    <TD>variable containing the location of interest.<br />
+        locarray(1) is the longitude (in degrees East)<br />
+        locarray(2) is the latitude (in degrees North)<br />
+        locarray(3) is the height (in meters).</TD></TR>
 
 </TABLE>
 
