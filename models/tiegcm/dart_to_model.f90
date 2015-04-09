@@ -4,25 +4,25 @@
 !
 ! $Id$
 
-program dart_to_model
+!----------------------------------------------------------------------
 
-!----------------------------------------------------------------------
-! purpose: interface between TIEGCM and DART
-!
-! method: Read DART state vector ("proprietary" format)
-!         Reform state vector back into TIEGCM fields.
-!         Replace those fields on the TIEGCM restart file with the new values,
-!
-!         Replace 'mtime' variable in the TIEGCM restart file
-!         with the 'valid time' of the DART state vector.
-!         Write out updated namelist variables (e.g., model_time, adv_to_time)
-!         in a file called 'namelist_update'
-!
-!         The dart_to_model_nml namelist setting for advance_time_present
-!         determines whether or not the input file has an 'advance_to_time'.
-!         Typically, only temporary files like 'assim_model_state_ic' have
-!         an 'advance_to_time'.
-!----------------------------------------------------------------------
+!> purpose: interface between TIEGCM and DART
+!>
+!> method: Read DART state vector.
+!>         Reform state vector back into TIEGCM fields.
+!>         Replace those fields on the TIEGCM restart file with the new values,
+!>
+!>         Replace 'mtime' variable in the TIEGCM restart file
+!>         with the 'valid time' of the DART state vector.
+!>         Write out updated namelist variables (e.g., model_time, adv_to_time)
+!>         in a file called 'namelist_update'
+!>
+!>         The dart_to_model_nml namelist setting for advance_time_present
+!>         determines whether or not the input file has an 'advance_to_time'.
+!>         Typically, only temporary files like 'assim_model_state_ic' have
+!>         an 'advance_to_time'.
+
+program dart_to_model
 
 use        types_mod, only : r8
 use    utilities_mod, only : get_unit, initialize_utilities, E_ERR, E_MSG, &

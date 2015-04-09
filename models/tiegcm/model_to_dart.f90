@@ -4,16 +4,16 @@
 !
 ! $Id$
 
-program model_to_dart
+!----------------------------------------------------------------------
 
-!----------------------------------------------------------------------
-! purpose: interface between TIEGCM and DART
-!
-! method: Read TIEGCM restart file (netCDF format).
-!         Reform fields into a DART state vector.
-!         Write out state vector in "proprietary" format for DART
-!
-!----------------------------------------------------------------------
+!> purpose: interface between TIEGCM and DART
+!>
+!> method: Read TIEGCM restart file (netCDF format).
+!>         Reform fields into a DART state vector.
+!>         Write out state vector in DART format.
+!>
+
+program model_to_dart
 
 use        types_mod, only : r8
 use    utilities_mod, only : get_unit, initialize_utilities, finalize_utilities, &
@@ -76,6 +76,7 @@ call tiegcm_to_dart_vector(x_state, model_time)
 iunit = open_restart_write(trim(file_out))
 call awrite_state_restart(model_time, x_state, iunit)
 call close_restart(iunit)
+deallocate(x_state)
 
 ! write a little summary
 call print_date(model_time, str='model_to_dart: tiegcm date')
