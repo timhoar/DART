@@ -1132,9 +1132,31 @@ and can be modified to suit your needs.
 <A NAME="FilesUsed"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FILES</H2>
-<UL>
-   <LI>Models are free to read and write files as they see fit.
-</UL>
+
+<TABLE width=100% border=0 cellspacing=10 cellpadding=3 summary="">
+<TBODY valign=top>
+<TR><TH align=left>filename</TH>
+    <TH align=left>purpose</TH></TR>
+<TR><TD>tiegcm.nml</TD>
+    <TD>TIEGCM control file modified to control starting and stopping.</TD></TR>
+<TR><TD>input.nml</TD>
+    <TD>to read the model_mod namelist</TD></TR>
+<TR><TD>tiegcm_restart_p.nc</TD>
+    <TD>both read and modified by the TIEGCM model_mod</TD></TR>
+<TR><TD>tiegcm_s.nc</TD>
+    <TD>read by the GCOM model_mod for metadata purposes.</TD></TR>
+<TR><TD>namelist_update</TD>
+    <TD>DART file containing information useful for starting and stopping TIEGCM.
+        <em class=program>advance_model.csh</em> uses this to update the 
+        TIEGCM file <em class=program>tiegcm.nml</em></TD></TR>
+<TR><TD>dart_log.out</TD>
+    <TD>the run-time diagnostic output</TD></TR>
+<TR><TD>dart_log.nml</TD>
+    <TD>the record of all the namelists (and their values) actually USED 
+        </TD></TR>
+</TABLE>
+
+<P><!-- make sure the 'top' is aligned correctly --></P>
 
 <!--==================================================================-->
 <!-- Cite references, if need be.                                     -->
@@ -1143,15 +1165,57 @@ and can be modified to suit your needs.
 <A NAME="References"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
-<ol>
-<li>Matsuo, T., and E. A. Araujo-Pradere (2011), Role of thermosphere-ionosphere coupling in a global ionosphere specification, Radio Science, 46, RS0D23, doi:10.1029/2010RS004576</li>
-<li> Lee, I. T., T, Matsuo, A. D. Richmond, J. Y. Liu, W. Wang, C. H. Lin, J. L. Anderson, and M. Q. Chen, Assimilation of FORMOSAT-3/COSMIC electron density profiles into thermosphere/Ionosphere coupling model by using ensemble Kalman filter (2012), Journal of Geophysical Research, 117, A10318, doi:10.1029/2012JA017700</li>
-<li> Matsuo, T., I. T. Lee, and J. L. Anderson, Thermospheric mass density specification using an ensemble Kalman filter (2013), Journal of Geophysical Research, 118, 1339-1350, doi:10.1002/jgra.50162 </li>
-<li>Lee, I. T., H. F. Tsai, J. Y. Liu, Matsuo, T., and L. C. Chang (2013), Modeling impact of FORMOSAT-7/COSMIC-2 mission on ionospheric space weather monitoring, Journal of Geophysical Research, 118, 6518-6523, doi:10.1002/jgra.50538</li>
-<li>Matsuo, T. (2014), Upper atmosphere data assimilation with an ensemble Kalman filter, in Modeling the Ionosphere-Thermosphere System, Geophys. Monogr. Ser., vol. 201, edited by J. Huba, R. Schunk, and G. Khazanov, pp. 273-282, John Wiley & Sons, Ltd, Chichester, UK, doi:10.1002/9781118704417</li>
-<li>Hsu, C.-H., T. Matsuo, W. Wang, and J. Y. Liu  (2014), Effects of inferring unobserved thermospheric and ionospheric state variables by using an ensemble Kalman filter on global ionospheric specification and forecasting, Journal of Geophysical Research, 119, 9256–9267, doi:10.1002/2014JA020390</li> 
-<li> Chartier, A., T. Matsuo, J. L. Anderson, G. Lu, T. Hoar, N. Collins, A. Coster, C. Mitchell, L. Paxton, G. Bust (2015), Ionospheric Data Assimilation and Forecasting During Storms, Journal of Geophysical Research, under review </li>
+<ul>
+<li>Matsuo, T., and E. A. Araujo-Pradere (2011),<br />
+Role of thermosphere-ionosphere coupling in a global ionosphere specification,<br />
+<i>Radio Science</i>, <b>46</b>, RS0D23, 
+<a href="http://dx.doi.org/doi:10.1029/2010RS004576">doi:10.1029/2010RS004576</a></li>
+
+<li style="list-style: none"><!-- whitespace --><br /></li>
+
+<li> Lee, I. T., T, Matsuo, A. D. Richmond, J. Y. Liu, W. Wang, C. H. Lin, J. L. Anderson, and M. Q. Chen (2012),<br />
+Assimilation of FORMOSAT-3/COSMIC electron density profiles into thermosphere/Ionosphere coupling model by using ensemble Kalman filter,<br />
+<i>Journal of Geophysical Research</i>, <b>117</b>, A10318, 
+<a href="http://dx.doi.org/doi:10.1029/2012JA017700">doi:10.1029/2012JA017700</a></li>
+
+<li style="list-style: none"><!-- whitespace --><br /></li>
+
+<li> Matsuo, T., I. T. Lee, and J. L. Anderson (2013),<br />
+Thermospheric mass density specification using an ensemble Kalman filter,<br />
+<i>Journal of Geophysical Research</i>, <b>118</b>, 1339-1350, 
+<a href="http://dx.doi.org/doi:10.1002/jgra.50162">doi:10.1002/jgra.50162</a></li>
+
+<li style="list-style: none"><!-- whitespace --><br /></li>
+
+<li>Lee, I. T., H. F. Tsai, J. Y. Liu, Matsuo, T., and L. C. Chang (2013),<br />
+Modeling impact of FORMOSAT-7/COSMIC-2 mission on ionospheric space weather monitoring,<br />
+<i>Journal of Geophysical Research</i>, <b>118</b>, 6518-6523, 
+<a href="http://dx.doi.org/doi:10.1002/jgra.50538">doi:10.1002/jgra.50538</a></li>
+
+<li style="list-style: none"><!-- whitespace --><br /></li>
+
+<li>Matsuo, T. (2014),<br />
+Upper atmosphere data assimilation with an ensemble Kalman filter, in Modeling the Ionosphere-Thermosphere System,<br />
+<i>Geophys. Monogr. Ser.</i>, vol. 201, 
+edited by J. Huba, R. Schunk, and G. Khazanov, pp. 273-282, John Wiley &amp; Sons, Ltd, Chichester, UK, 
+<a href="http://dx.doi.org/doi:10.1002/9781118704417">doi:10.1002/9781118704417</a></li>
+
+<li style="list-style: none"><!-- whitespace --><br /></li>
+
+<li>Hsu, C.-H., T. Matsuo, W. Wang, and J. Y. Liu  (2014),<br />
+Effects of inferring unobserved thermospheric and ionospheric state variables by using an ensemble Kalman filter on global ionospheric specification and forecasting,<br />
+<i>Journal of Geophysical Research</i>, <b>119</b>, 9256-9267, 
+<a href="http://dx.doi.org/doi:10.1002/2014JA020390">doi:10.1002/2014JA020390</a>
+</li> 
+
+<li style="list-style: none"><!-- whitespace --><br /></li>
+
+<li> Chartier, A., T. Matsuo, J. L. Anderson, G. Lu, T. Hoar, N. Collins, A. Coster, C. Mitchell, L. Paxton, G. Bust (2015),<br />
+Ionospheric Data Assimilation and Forecasting During Storms,<br />
+<i>Journal of Geophysical Research</i>, under review </li>
 </ol>
+
+<P><!-- make sure the 'top' is aligned correctly --></P>
 
 <!--==================================================================-->
 <!-- Describe all the error conditions and codes.                     -->
