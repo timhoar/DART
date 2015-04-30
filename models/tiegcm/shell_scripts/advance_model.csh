@@ -96,10 +96,10 @@ while($state_copy <= $num_states)
    set tierestart  = `printf "tiegcm_restart_p.nc.%04d" $ensemble_member`
    set tieinp      = `printf "tiegcm.nml.%04d"          $ensemble_member`
 
-   cp -pv ../$input_file dart_restart        || exit 2
-   cp -pv ../$tiesecond  tiegcm_s.nc         || exit 2
-   cp -pv ../$tierestart tiegcm_restart_p.nc || exit 2
-   cp -pv ../$tieinp     tiegcm.nml          || exit 2
+   cp -pv ../$input_file dart_restart        >>&   $logfile || exit 2
+   cp -pv ../$tiesecond  tiegcm_s.nc         >>&   $logfile || exit 2
+   cp -pv ../$tierestart tiegcm_restart_p.nc >>&   $logfile || exit 2
+   cp -pv ../$tieinp     tiegcm.nml          >>&   $logfile || exit 2
 
    ../dart_to_model >>& $logfile || exit 2  # dart_to_model generates namelist_update
 
@@ -149,9 +149,9 @@ while($state_copy <= $num_states)
    # Block 3: Run the model
    #----------------------------------------------------------------------
 
-   echo "ensemble member $ensemble_member : before tiegcm" >> $logfile
-   ncdump -v mtime tiegcm_restart_p.nc                     >> $logfile
-   echo "Starting tiegcm at "`date`                        >> $logfile
+   echo "ensemble member $ensemble_member : before tiegcm" >>  $logfile
+   ncdump -v mtime tiegcm_restart_p.nc                     >>& $logfile
+   echo "Starting tiegcm at "`date`                        >>  $logfile
 
    ${RUN_CMD} ../tiegcm < tiegcm.nml >>& $logfile
 
@@ -164,8 +164,8 @@ while($state_copy <= $num_states)
       exit 3
    endif
 
-   echo "ensemble member $ensemble_member : after tiegcm" >> $logfile
-   ncdump -v mtime tiegcm_restart_p.nc                    >> $logfile
+   echo "ensemble member $ensemble_member : after tiegcm" >>  $logfile
+   ncdump -v mtime tiegcm_restart_p.nc                    >>& $logfile
 
    #----------------------------------------------------------------------
    # Block 4: Convert the model output to form needed by DART
