@@ -37,47 +37,54 @@
 <H2>Overview</H2>
 
 <P>
-This is the DART interface to the Thermosphere Ionosphere Electrodynamic 
-General Circulation Model 
-(<a href="http://www.hao.ucar.edu/modeling/tgcm/tie.php">TIEGCM</a>).
-It is <strong>strongly</strong>
-recommended that you become familiar with running TIEGCM
-<strong>before</strong> you try to run DART/TIEGCM. The TIEGCM source code
-and restart files are <strong>not</strong> included in DART, you must get them
-from the NCAR High Altitude Observatory 
-<a href="http://www.hao.ucar.edu/modeling/tgcm/download.php">download website</a>.
-DART is designed so that the TIEGCM source code can be used with no 
-modifications, as DART runs TIEGCM as a completely separate executable.
+This is the DART interface to the Thermosphere Ionosphere Electrodynamic General Circulation Model 
+(<a href="http://www.hao.ucar.edu/modeling/tgcm/tie.php">TIEGCM</a>), which is a community model 
+developed at the NCAR High Altitude Observatory. TIEGCM is widely used by the space physics and
+aeronomy community and is one of the most well-validated models of the Earth's upper atmosphere.
+DART/TIEGCM has been used to assimilate neutral mass density retrieved from satellite-borne 
+accelerometers and electon density obtained from ground-based and space-based GNSS signals. 
+Unlike other ionospheric data assimilation applications, this approach allows simultaneous assimilation
+of thermospheric and ionospheric parameters by taking advantage of the coupling of plasma and neutral 
+constituents described in TIEGCM.  DART/TIEGCM's demonstrated capability to infer under-observed 
+thermospheric parameters from abundant electron density observations has important implications
+for the future of upper atmosphere research. 
+
 <br /><br />
-Certain assumptions are made about the mannner in which TIEGCM is run.
-There can only be 1 each of the [restart,secondary] files. 
-The last timestep in the restart file is the only timestep which is 
-converted to a DART state, and only the last timestep in the TIEGCM 
-restart file is ever modified by DART. In the course of an assimilation
-experiment, it is usually necessary to make a short forecast with TIEGCM.
-DART writes out an ancillary file with the information necessary to 
-advance TIEGCM to the required time. The DART script 
-<em class=program>advance_model.csh</em> reads this information and
-modifies the <em class=file>tiegcm.nml</em> such that TIEGCM stops
-at the requested time. 
+DART is designed so that the TIEGCM source code can be used with no modifications, as DART runs 
+TIEGCM as a completely separate executable. The TIEGCM source code and restart files are 
+<strong>not</strong> included in DART, so you must obtain them from the NCAR High Altitude Observatory  
+(<a href="http://www.hao.ucar.edu/modeling/tgcm/download.php">download website</a>).  
+It is <strong>strongly</strong> recommended that you become familiar with running TIEGCM 
+<strong>before</strong> you try to run DART/TIEGCM (See the  
+<a href="http://www.hao.ucar.edu/modeling/tgcm/doc/userguide/html">TIEGCM User's Guide</a>).
+Some assumptions are made about the mannner in which TIEGCM is run:
+(1) There can only be 1 each of the TIEGCM primary (restart) and secondary NetCDF history files. 
+The TIEGCM primary history files contain the prognostic variables necessary to restart the model,
+while the secondary history files contain diagnostic variables;
+(2) The last timestep in the restart file is the only timestep which is converted to a DART state vector, 
+and only the last timestep in the TIEGCM primary file is ever modified by DART. 
+The TIEGCM variables to be included in a DART state vector, and possibly updated by the assimilation, 
+are specified in the DART namelist. (Some of the TIEGCM variables used to compute observation
+priors need not to be updated.) It is required to associate the TIEGCM variable name with 
+a 'generic' DART counterpart (e.g., <em class=code>NE</em> is <em class=code>KIND_ELECTRON_DENSITY</em>). 
+The composition of the DART state vector and which variables get updated in the TIEGCM primary file 
+are under complete user control.
+
 <br /><br />
-The TIEGCM variables to be converted to a DART state, and possibly updated
-by the assimilation, are specified in a Fortran namelist. It is required to
-associate the variable name with a 'generic' DART counterpart -- 
-<em class=code>NE</em> is <em class=code>KIND_ELECTRON_DENSITY</em>, 
-for example. The composition of the DART input and what gets updated in the
-TIEGCM restart file are under complete user control.
-<br /><br />
-The run scripts <em class=program>run_filter.csh</em> and 
-<em class=program>run_perfect_model_obs.csh</em> are configured to run under
-the LSF queueing system. The scripting examples exploit an 'embarassingly-simple'
-parallel paradigm in that each TIEGCM instance is a single-threaded executable 
-and all ensemble members may run simultaneously. As such, there is an advantage to
-matching the ensemble size to the number of tasks. Requesting more tasks than the
-number of ensemble members may speed up the DART portion of an 
-assimilation (ie <em class=program>filter</em>) but will not make the 
-model advances faster.  <em class=program>filter</em> may be compiled with 
-MPI and can exploit all available tasks. 
+In the course of a filtering experiment, it is necessary to make a short forecast with TIEGCM.
+DART writes out an ancillary file with the information necessary to advance TIEGCM to the required time. 
+The DART script <em class=program>advance_model.csh</em> reads this information and modifies 
+the TIEGCM namelist <em class=file>tiegcm.nml</em> such that TIEGCM runs upto the requested time 
+when DART assimilates the next set of observations. 
+The run scripts <em class=program>run_filter.csh</em> and <em class=program>run_perfect_model_obs.csh</em> 
+are configured to run under the LSF queueing system. The scripting examples exploit an 'embarassingly-simple'
+parallel paradigm in that each TIEGCM instance is a single-threaded executable and all ensemble members may 
+run simultaneously. To use these run scripts, the TIECGM executable needs to be compiled with no MPI option.
+As such, there is an advantage to matching the ensemble size to the number of tasks. 
+Requesting more tasks than the number of ensemble members may speed up the DART portion of an 
+assimilation (i.e., <em class=program>filter</em>) but will not make the model advance faster.  
+The <em class=program>filter</em> may be compiled with MPI and can exploit all available tasks. 
+
 </P>
 
 <H2>Quickstart guide to running</H2>
@@ -1137,7 +1144,13 @@ and can be modified to suit your needs.
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
 <ol>
-<li> none </li>
+<li>Matsuo, T., and E. A. Araujo-Pradere (2011), Role of thermosphere-ionosphere coupling in a global ionosphere specification, Radio Science, 46, RS0D23, doi:10.1029/2010RS004576</li>
+<li> Lee, I. T., T, Matsuo, A. D. Richmond, J. Y. Liu, W. Wang, C. H. Lin, J. L. Anderson, and M. Q. Chen, Assimilation of FORMOSAT-3/COSMIC electron density profiles into thermosphere/Ionosphere coupling model by using ensemble Kalman filter (2012), Journal of Geophysical Research, 117, A10318, doi:10.1029/2012JA017700</li>
+<li> Matsuo, T., I. T. Lee, and J. L. Anderson, Thermospheric mass density specification using an ensemble Kalman filter (2013), Journal of Geophysical Research, 118, 1339-1350, doi:10.1002/jgra.50162 </li>
+<li>Lee, I. T., H. F. Tsai, J. Y. Liu, Matsuo, T., and L. C. Chang (2013), Modeling impact of FORMOSAT-7/COSMIC-2 mission on ionospheric space weather monitoring, Journal of Geophysical Research, 118, 6518-6523, doi:10.1002/jgra.50538</li>
+<li>Matsuo, T. (2014), Upper atmosphere data assimilation with an ensemble Kalman filter, in Modeling the Ionosphere-Thermosphere System, Geophys. Monogr. Ser., vol. 201, edited by J. Huba, R. Schunk, and G. Khazanov, pp. 273-282, John Wiley & Sons, Ltd, Chichester, UK, doi:10.1002/9781118704417</li>
+<li>Hsu, C.-H., T. Matsuo, W. Wang, and J. Y. Liu  (2014), Effects of inferring unobserved thermospheric and ionospheric state variables by using an ensemble Kalman filter on global ionospheric specification and forecasting, Journal of Geophysical Research, 119, 9256–9267, doi:10.1002/2014JA020390</li> 
+<li> Chartier, A., T. Matsuo, J. L. Anderson, G. Lu, T. Hoar, N. Collins, A. Coster, C. Mitchell, L. Paxton, G. Bust (2015), Ionospheric Data Assimilation and Forecasting During Storms, Journal of Geophysical Research, under review </li>
 </ol>
 
 <!--==================================================================-->
