@@ -45,6 +45,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 use        meteor_mod, only : wind_dirspd_to_uv
 use       obs_err_mod, only : sat_wind_error, sat_wv_wind_error
 use      obs_kind_mod, only : SAT_U_WIND_COMPONENT, SAT_V_WIND_COMPONENT
+use          sort_mod, only : index_sort
 use obs_utilities_mod, only : getvar_real, get_or_fill_QC, add_obs_to_seq, &
                               create_3d_obs, getvar_int, getdimlen
 
@@ -76,11 +77,11 @@ real(r8) :: uwnd, vwnd, oerr, qc
 ! end FIXME
 
 
-real(r8), allocatable :: lat(:), lon(:), latu(:), lonu(:), &
-                          pres(:), prsu(:), tobs(:), tobu(:), &
-                          wdir(:), wspd(:)
-integer,  allocatable :: band(:), bndu(:)
+real(r8), allocatable :: lat(:), lon(:), pres(:),  &
+                         tobs(:), wdir(:), wspd(:)
+integer,  allocatable :: band(:), tused(:)
 integer,  allocatable :: qc_wdir(:), qc_wspd(:)
+integer,  allocatable :: used(:), sorted_used(:)
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
@@ -116,13 +117,10 @@ call nc_check( nf90_open(satwnd_netcdf_file, nf90_nowrite, ncid), &
 
 call getdimlen(ncid, "recNum", nobs)
 
-allocate( lat(nobs))  ;  allocate( lon(nobs))
-allocate(latu(nobs))  ;  allocate(lonu(nobs))
-allocate(pres(nobs))  ;  allocate(prsu(nobs))
-allocate(tobs(nobs))  ;  allocate(tobu(nobs))
-allocate(band(nobs))  ;  allocate(bndu(nobs))
-allocate(wdir(nobs))  ;  allocate(wspd(nobs))
-allocate(qc_wdir(nobs)) ;  allocate(qc_wspd(nobs))
+allocate(lat(nobs), lon(nobs), pres(nobs), tobs(nobs))
+allocate(band(nobs), wdir(nobs), wspd(nobs))
+allocate(tused(nobs), used(nobs), sorted_used(nobs))
+allocate(qc_wdir(nobs), qc_wspd(nobs))
 
 ! read in the data arrays
 call getvar_real(ncid, "obLat",       lat            ) ! latitude
@@ -171,33 +169,51 @@ endif
 qc = 1.0_r8
 
 nused = 0
-obsloop: do n = 1, nobs
-
-  ! compute time of observation
-  time_obs = increment_time(comp_day0, nint(tobs(n)))
+obsloop1: do n = 1, nobs
 
   ! check the lat/lon values to see if they are ok
-  if ( lat(n) >  90.0_r8 .or. lat(n) <  -90.0_r8 ) cycle obsloop
-  if ( lon(n) > 180.0_r8 .or. lon(n) < -180.0_r8 ) cycle obsloop
+  if ( lat(n) >  90.0_r8 .or. lat(n) <  -90.0_r8 ) cycle obsloop1
+  if ( lon(n) > 180.0_r8 .or. lon(n) < -180.0_r8 ) cycle obsloop1
 
+  ! change lon from -180 to 180 into 0-360
   if ( lon(n) < 0.0_r8 )  lon(n) = lon(n) + 360.0_r8
 
   ! Check for duplicate observations
   do i = 1, nused
-    if ( lon(n) == lonu(i) .and. &
-         lat(n) == latu(i) .and. &
-        prsu(n) == pres(i) .and. &
-        band(n) == bndu(i) .and. &
-        tobs(n) == tobu(i) ) cycle obsloop
+    if ( lon(n) ==  lon(used(i)) .and. &
+         lat(n) ==  lat(used(i)) .and. &
+        pres(n) == pres(used(i)) .and. &
+        band(n) == band(used(i)) .and. &
+        tobs(n) == tobs(used(i)) ) cycle obsloop1
   end do
 
   ! if selecting only certain bands, cycle if not wanted
   if (.not. allbands) then
-     if (.not. iruse  .and. band(n) == 1) cycle obsloop
-     if (.not. visuse .and. band(n) == 2) cycle obsloop
+     if (.not. iruse  .and. band(n) == 1) cycle obsloop1
+     if (.not. visuse .and. band(n) == 2) cycle obsloop1
      if (.not. wvuse  .and. &
-         (band(n) == 3  .or.  band(n) == 5  .or. band(n) == 7)) cycle obsloop
+         (band(n) == 3  .or.  band(n) == 5  .or. band(n) == 7)) cycle obsloop1
   endif
+
+  ! the 'used' array are the index numbers of used obs
+  ! the 'tused' array are the times of those obs so we can
+  ! sort them later by time.
+  nused = nused + 1
+  used(nused) = n
+  tused(nused) = tobs(n)
+
+end do obsloop1
+
+! sort by time
+call index_sort(tused, sorted_used, nused)
+
+obsloop2: do i = 1, nused
+
+  ! get the next unique observation in sorted time order
+  n = used(sorted_used(i))
+
+  ! compute time of observation
+  time_obs = increment_time(comp_day0, nint(tobs(n)))
 
   ! extract actual time of observation in file into oday, osec.
   call get_time(time_obs, osec, oday)
@@ -211,7 +227,7 @@ obsloop: do n = 1, nobs
 
    !  perform sanity checks on observation errors and values
    if ( oerr == missing_r8 .or. wdir(n) < 0.0_r8 .or. wdir(n) > 360.0_r8 .or. &
-      wspd(n) < 0.0_r8 .or. wspd(n) > 120.0_r8 )  cycle obsloop
+      wspd(n) < 0.0_r8 .or. wspd(n) > 120.0_r8 )  cycle obsloop2
 
       call create_3d_obs(lat(n), lon(n), pres(n), VERTISPRESSURE, uwnd, &
                          SAT_U_WIND_COMPONENT, oerr, oday, osec, qc, obs)
@@ -223,14 +239,7 @@ obsloop: do n = 1, nobs
 
   endif
 
-  nused = nused + 1
-  latu(nused) =  lat(n)
-  lonu(nused) =  lon(n)
-  prsu(nused) = pres(n)
-  band(nused) = bndu(n)
-  tobu(nused) = tobs(n)
-
-end do obsloop
+end do obsloop2
 
 ! need to wait to close file because in the loop it queries the
 ! report types.

@@ -16,8 +16,8 @@
 #
 #BSUB -J tiegcm_perfect
 #BSUB -o tiegcm_perfect.%J.log
-#BSUB -P P3507xxxx
-#BSUB -q regular
+#BSUB -P P8685xxxx
+#BSUB -q small
 #BSUB -n 1
 #BSUB -W 1:00
 #BSUB -N -u ${USER}@ucar.edu
@@ -107,9 +107,9 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # EXPERIMENT   The (safe) location for the results of this run.
 #-----------------------------------------------------------------------------
 
-set     DARTDIR = /glade/u/home/${USER}/DART/tiegcm/models/tiegcm
-set   TIEGCMDIR = /glade/u/home/${USER}/tiegcm/src
-set ENSEMBLEDIR = /glade/p/work/alexc/startup_files/initial
+set     DARTDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm
+set   TIEGCMDIR = /glade/p/image/RDA_strawman/TIEGCM_files
+set ENSEMBLEDIR = /glade/p/image/RDA_strawman/TIEGCM_files/ensembles
 set  EXPERIMENT = /glade/p/work/${USER}/${JOBNAME}
 
 #-----------------------------------------------------------------------------
@@ -125,7 +125,7 @@ ${COPY} ${DARTDIR}/work/input.nml   input.nml.original || exit 1
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh   . || exit 1
 ${COPY} ${DARTDIR}/work/obs_seq.in                   . || exit 1
 
-${COPY} ${TIEGCMDIR}/tiegcm-nompi             tiegcm || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm-nompi               tiegcm || exit 1
 
 ${COPY} ${ENSEMBLEDIR}/tiegcm_restart_p.nc           . || exit 1
 ${COPY} ${ENSEMBLEDIR}/tiegcm_s.nc                   . || exit 1

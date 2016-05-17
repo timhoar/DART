@@ -20,7 +20,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-type(location_type) :: loc0(6), loc1, loc2, loc3, loc4, locA(7), locB(5)
+type(location_type) :: loc0(6), loc1, loc2, loc3, loc4, locA(8), locB(8)
 integer             :: iunit, iunit1, iunit2, i
 real(r8)            :: loc2_val, lon, lat
 character(len=102)  :: testbuf
@@ -43,10 +43,10 @@ do i = 1, 5
 end do
 
 print *, ''
-print *, 'reading in 7 locations for file read/write tests:'
+print *, 'reading in 8 locations for file read/write tests:'
 
-! read in 7 different locs for the tests below
-do i = 1, 7
+! read in 8 different locs for the tests below
+do i = 1, 8
    call interactive_location(locA(i))
 enddo
 
@@ -68,7 +68,7 @@ iunit = open_file('location_test_file.txt', form='formatted', action='write')
 call write_location(iunit, loc1)
 call write_location(iunit, loc2)
 
-do i = 1, 5
+do i = 1, 8
    call write_location(iunit, locA(i))
 enddo
 
@@ -98,7 +98,7 @@ iunit = open_file('location_test_file.bin', form='unformatted', action='write')
 call write_location(iunit, loc1, 'unformatted')
 call write_location(iunit, loc2, 'unformatted')
 
-do i = 1, 5
+do i = 1, 8
    call write_location(iunit, locA(i), 'unformatted')
 enddo
 
@@ -125,28 +125,28 @@ write(*,*) 'testing write to a char buffer'
 
 print *, ''
 print *, 'raw locations: '
-do i = 1, 5
+do i = 1, 8
    print *, get_location(locA(i))
 enddo
 print *, ''
 print *, 'locations formatted to a char buffer:'
-do i = 1, 5
+do i = 1, 8
    call write_location(0, locA(i), 'formatted', testbuf)
    print *, 'string length: ', len_trim(testbuf)
 enddo
-do i = 1, 5
+do i = 1, 8
    call write_location(0, locA(i), 'formatted', testbuf)
    print *, trim(testbuf)
 enddo
 
 print *, ''
 print *, 'ascii readback: '
-do i = 1, 5
+do i = 1, 8
    locB(i) = set_location_missing()
    locB(i) = read_location(iunit1, 'formatted')
    print *, get_location(locB(i))
 enddo
-do i = 1, 5
+do i = 1, 8
    call write_location(0, locB(i), 'formatted', testbuf)
    print *, trim(testbuf)
 enddo
@@ -156,12 +156,12 @@ open(iunit, file = 'location_test_file.bin', form='unformatted', action='read')
 
 print *, ''
 print *, 'binary readback: '
-do i = 1, 5
+do i = 1, 8
    locB(i) = set_location_missing()
    locB(i) = read_location(iunit2, 'unformatted')
    print *, get_location(locB(i))
 enddo
-do i = 1, 5
+do i = 1, 8
    call write_location(0, locB(i), 'formatted', testbuf)
    print *, trim(testbuf)
 enddo

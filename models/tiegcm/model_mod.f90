@@ -105,8 +105,6 @@ integer            :: assimilation_period_seconds = 3600
 integer, parameter :: max_num_variables = 30
 integer, parameter :: max_num_columns = 6
 character(len=NF90_MAX_NAME) :: variables(max_num_variables * max_num_columns) = ' '
-! FIXME ... variable_table can be read directly in the namelist, does not need
-! to be ingested as a 1D array 
 
 namelist /model_nml/ output_state_vector, tiegcm_restart_file_name, &
                      tiegcm_secondary_file_name, tiegcm_namelist_file_name, &
@@ -1074,7 +1072,6 @@ else
    call nc_check(nf90_put_var(ncid,ilevVarID,ilevs),'nc_write_model_atts','put_var ilevs')
 
    deallocate(temp_lon)
-   ! TJH/TOMOKO FIXME ... what about plevs, pilevs ...
 
 endif
 
@@ -2113,7 +2110,7 @@ character(len=*), intent(in):: file_name
 integer :: ncid
 integer :: TimeDimID, time_dimlen, VarID
 
-real(r8) :: spvalR8, spvalR4
+real(r8) :: spvalR8
 
 if( .not. file_exist(file_name)) then
   write(string1,*) trim(file_name),' not available.'
@@ -2621,7 +2618,6 @@ subroutine create_vtec( ncid, last_time, vTEC)
 !
 ! Create the vTEC from constituents in the netCDF file.
 !
-! FIXME ... check the calculation of vTEC ...
 
 integer,                  intent(in)  :: ncid
 integer,                  intent(in)  :: last_time
@@ -2845,8 +2841,6 @@ end subroutine vert_interp
 
 function get_height(ivar, lonindex, latindex, levindex)
 ! TIEGCM's 'natural' vertical coordinate is pressure, DART needs it in height.
-!
-! TOMOKO FIXME check whole routine
 !
 ! Need the ensemble mean value of ZG for this location.
 !

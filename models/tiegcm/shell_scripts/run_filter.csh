@@ -126,8 +126,8 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 #-----------------------------------------------------------------------------
 
 set     DARTDIR = /glade/u/home/${USER}/DART/tiegcm/models/tiegcm
-set   TIEGCMDIR = /glade/u/home/${USER}/tiegcm/src
-set ENSEMBLEDIR = /glade/p/work/alexc/startup_files/initial
+set   TIEGCMDIR = /glade/p/image/RDA_strawman/TIEGCM_files
+set ENSEMBLEDIR = /glade/p/image/RDA_strawman/TIEGCM_files/ensembles
 set  EXPERIMENT = /glade/p/work/${USER}/${JOBNAME}
 
 #-----------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-#!/bin/csh
+#!/bin/csh 
 #
 # DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -29,101 +29,78 @@
 # edit the input.nml in the work directory to select any options;
 # it will be copied to the various places it is needed.
 #
-# the processing directory name is relative to the 'work' directory.
+# if the processing directory name is a relative path, it should
+# be relative to the gps converter 'work' directory.
 #
-# the options for satellite names, and available data times are:
+# CHECK these against the cdaac web site for latest info.  as an
+# example, a snapshot of available data as of May 2016 is:
 #
-#    cosmic:    all 6 COSMIC : 2006.194 - now*
-#    cosmicrt:  COSMIC : realtime
-#    champ:     CHAMP : 2001.139 - 2008.274
-#    grace:     Grace-A : 2007.059 - now*
-#    tsx:       German TerraSAR-X : 2008.041 - now*
-#    metopa:    Metop-A/GRAS : 2008.061 - now*
-#    sacc:      Argentinan SAC-C : 2006.068 - now*
-#    saccrt:    SAC-C : realtime
-#    ncofs:     new Air Force C/NOFS : 2010.335 - now*
-#    ncofsrt:   C/NOFS : realtime
-#
-#  - dates are YYYY.DDD where DDD is day number in year
-#  - now* means current date minus 3-4 months.  reprocessed data
-#    lags that much behind.  realtime means up to today's date,
-#    with less quality control.
-#  - only select one of reprocessed or realtime for a satellite 
-#    or you will get duplicated observations.
-#
+# champ2014  2001.138 - 2008.279 
+# cnofs      2010.060 - 2011.365
+# cnofsrt    2012.001 - 2015.193
+# cosmic2013 2006.112 - 2014.120
+# cosmic     2014.121 - 2015.364
+# cosmicrt   2014.181 - 2016.123
+# gpsmet     1995.111 - 1997.047
+# gpsmetas   1995.237 - 1997.016
+# grace      2007.059 - 2015.364
+# kompsat5rt 2015.305 - 2016.123
+# metopa2016 2007.274 - 2015.365
+# metopb     2013.032 - 2015.059
+# sacc       2006.068 - 2011.215
+# saccrt     2011.329 - 2013.226
+# tsx        2008.041 - 2015.333
 #
 #     created June 2008, Ryan Torn NCAR/MMM
 #     updated Nov  2008, nancy collins ncar/cisl
 #     updated Aug  2009, nancy collins ncar/cisl
 #     updated Oct  2010, Ryan and nancy
 #     updated Jul  2011, nancy (added support for other satellites)
+#     revised May  2016, nancy (full support for daily tar files)
 # 
 #
-# ------- 
-# From the CDAAC web site about the use of 'wget' to download
-# the many files needed to do this process:
+# This script uses the 'wget' command to download data from the CDAAC
+# web site.  Data is available as a single tar file per satellite per day.  
+# The profiles are stored one per file after untarring the archive.  
+# The current filename scheme includes the satellite and YYYY.DOY, e.g.:
 #
-#   Hints for using wget for fetching CDAAC files from CDAAC:
+# wget http://cdaac-www.cosmic.ucar.edu/cdaac/rest/tarservice/data/cosmic/atmPrf/2012.304
+#        -O cosmic_atmPrf_2012.304.tar 
 #   
-#   Here is one recipe for fetching all cosmic real time atmPrf files for one day:
-#   
-#   wget -nd -np -r -l 10 -w 2 --http-user=xxxx --http-passwd=xxxx \
-#         http://cosmic-io.cosmic.ucar.edu/cdaac/login/cosmicrt/level2/atmPrf/2009.007/
-#   
-# (note - now http://cdaac-www.cosmic.ucar.edu/...)
-#
-#   The option -np (no parents) is important. Without it, all manner of 
-#   files from throughout the site will be loaded, I think due to the 
-#   links back to the main page which are everywhere.
-#   
-#   The option -r (recursive fetch) is necessary unless there is just 
-#   one file you want to fetch.
-#   
-#   The option -l 10 (limit of recursive depth to 10 levels) is necessary 
-#   in order to get around the default 5 level depth.
-#   
-#   The option -nd dumps all fetched files into your current directory. 
-#   Otherwise a directory hierarchy will be created: 
-#     cosmic-io.cosmic.ucar.edu/cdaac/login/cosmic/level2/atmPrf/2006.207
-#   
-#   The option -w 2 tells wget to wait two seconds between each file fetch 
-#   so as to have pity on the poor web server.
-# ------- 
-# 
-# note: there are between 1000 and 3000 files per day.  without the -w
-# flag i was getting about 5 files per second (each individual file is
-# relatively small).  but with -w 1 obviously we get slightly less than
-# a file a second, -w 2 is half that again.  this script uses -w 1 by
-# default, but if you are trying to download a lot of days i'd recommend
-# removing it.
+# If this changes (again) this script will need to be updated.
 #
 ########################################################################
 
+# start of user-settable section - should only need to set these once
+
+# top level DART directory
+setenv DART_DIR    /glade/p/home/$USER/DART
+
+# your CDAAC web site user name and password
+set cdaac_user    = nscollins
+set cdaac_pw      = xxxxxxx
+
+# end of user-settable section
+
 ########################################################################
-
-# should only have to set the DART_DIR, and if downloading, set the
-# web site user name and password for access.  expects to use the 'wget'
-# utility to download files from the web page.  
-
-# top level directory (root where observations/gps dir is found)
-setenv DART_DIR    /home/user/DART
-set cdaac_user    = username
-set cdaac_pw      = password
-
-# old site, still seems to work:
-#set gps_repository_path = 'http://cosmic-io.cosmic.ucar.edu/cdaac/login'
-# new site:
-set gps_repository_path = 'http://cdaac-www.cosmic.ucar.edu/cdaac/login'
 
 setenv DART_WORK_DIR  ${DART_DIR}/observations/gps/work
 setenv CONV_PROG      convert_cosmic_gps_cdf
 setenv DATE_PROG      advance_time
 
-# if you are in a hurry, this has no delay between requests:
-#set wget_cmd           = 'wget -q -nd -np -r -l 10 -w 0'
-set wget_cmd            = 'wget -q -nd -np -r -l 10 -w 1'
+# CDAAC web site path:
+set gps_repository_path = 'http://cdaac-www.cosmic.ucar.edu/cdaac/rest/tarservice/data'
 
+# wget seems to print a lot of output showing progress.
+# this flag tries to print less often but i haven't found a way to turn 
+# it off completely.  --progress:none was discussed in a wget forum 
+# but i see no indication it was implemented
+set wget_cmd            = 'wget --progress=dot:mega '
+
+# this helps with debugging and isn't really that verbose
 set chatty=yes
+
+# start of executable stuff
 
 if ($# != 6) then
    echo usage: $0 date workdir downld convert cleanup satlist
@@ -261,13 +238,14 @@ if ( $downld == 'yes' ) then
       if ( $chatty == 'yes' ) then
          echo 'copying data files from satellite: ' ${sat}
       endif
-      ${get} ${gps_repository_path}/${sat}/level2/atmPrf/${yyyy}.${mday}/
-      rm -f *.html *.txt
+      # new, tar file per day!
+      echo ${get} ${gps_repository_path}/${sat}/atmPrf/${yyyy}.${mday} -O ${sat}_atmPrf_${yyyy}.${mday}.tar
+      ${get} ${gps_repository_path}/${sat}/atmPrf/${yyyy}.${mday} -O ${sat}_atmPrf_${yyyy}.${mday}.tar
    end
    rm input.nml
    
    if ( $chatty == 'yes' ) then
-      echo `/bin/ls . | grep _nc | wc -l` 'raw files downloaded at ' `date`
+      echo `/bin/ls *_atmPrf_${yyyy}.${mday}.tar | wc -l` 'tar files downloaded at ' `date`
    endif
    
    cd ${DART_WORK_DIR}
@@ -283,34 +261,57 @@ if ( $convert == 'yes') then
    if ( $chatty == 'yes' ) then
       echo 'starting gpsro conversion at ' `date`
    endif
-   
-   rm -f flist
+     
    set yyyy    = `echo $datea | cut -b1-4`
+   set yyyymm  = `echo $datea | cut -b1-6`
    set jyyyydd = `echo ${datea}00 0 -j | ./${DATE_PROG}`
    @ mday = $jyyyydd[2] + 1000  ;  set mday = `echo $mday | cut -b2-4`
    echo 'converting obs for date: ' $datea
-   
-   /bin/ls -1 ${datea}/*.${yyyy}.${mday}.*_nc >! flist
-   
-   set nfiles = `cat flist | wc -l`
-   if ( $chatty == 'yes' ) then
-      echo $nfiles ' to process for file ' $datea 
-   endif
-   
-   ./${CONV_PROG} >>! convert_output_log
 
-   rm -rf flist
-   #rm -rf cosmic_gps_input.nc flist
-   if ( -e obs_seq.gpsro ) then
-       mv obs_seq.gpsro obs_seq.gpsro_${datea}
+   cd ${datea}
+   cp ../input.nml .
+   echo 'current dir now ' `pwd`
+
+   # make sure directory has no leftovers from before
+   rm -fr atmPrf*_nc flist obs_seq.gpsro
+
+   foreach sat ( `cat ../$satlist` )
+     echo 'converting obs for satellite: ' $sat
+
+     set next_tarfile = ${sat}_atmPrf_${yyyy}.${mday}.tar 
+
+     if ( ! -e $next_tarfile || -z $next_tarfile ) then
+       echo $next_tarfile NOT DOWNLOADED or ZERO LENGTH, SKIPPING
+       continue
+     else
+       echo untarring $next_tarfile into daily profiles
+     endif
+
+     tar --strip-components=3 -xf $next_tarfile
+     /bin/ls -1 atmPrf_*.${yyyy}.${mday}.*_nc >! flist
+     
+     set nfiles = `cat flist | wc -l`
+     if ( $chatty == 'yes' ) then
+      echo $nfiles $sat ' profiles to process for day ' $datea 
+     endif
    
-      if ( $chatty == 'yes' ) then
-         echo "all observations for day in file obs_seq.gpsro_${datea} at " `date`
-      endif
+     ../${CONV_PROG} >>! ../convert_output_log
+
+     # keep tar files but remove individual profile files so next
+     # pass doesn't add them into the output file.
+     rm -rf flist atmPrf_*.${yyyy}.${mday}.*_nc 
+   end
+
+   if ( -e obs_seq.gpsro ) then
+     mv obs_seq.gpsro ../obs_seq.gpsro_${datea}
+     
+     if ( $chatty == 'yes' ) then
+       echo "all observations for day in file obs_seq.gpsro_${datea} at " `date`
+     endif
    else
-      if ( $chatty == 'yes' ) then
-         echo "no obs found for date ${datea}, or conversion failed.'
-      endif
+     if ( $chatty == 'yes' ) then
+       echo "no obs found for date ${datea}, or conversion failed."
+     endif
    endif
 
    cd ${DART_WORK_DIR}

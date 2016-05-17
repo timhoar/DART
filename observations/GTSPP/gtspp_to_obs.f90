@@ -53,9 +53,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 integer, parameter ::   num_copies = 1,   &   ! number of copies in sequence
                         num_qc     = 1        ! number of QC entries
 
-character (len=129) :: next_infile
-character (len=80)  :: name
-character (len=6)   :: subset
+character (len=256) :: next_infile
+character (len=NF90_MAX_NAME) :: dimname
 integer :: ncid, varid, ndepths, k, nfiles, num_new_obs,  &
            oday, osec,                   &
            iday, isec,               &
@@ -194,7 +193,7 @@ fileloop: do      ! until out of files
    
    ! get the number of depths
    call nc_check( nf90_inq_dimid(ncid, "depth", varid), 'inq dimid depth')
-   call nc_check( nf90_inquire_dimension(ncid, varid, name, ndepths), 'inq dim depth')
+   call nc_check( nf90_inquire_dimension(ncid, varid, len=ndepths, name=dimname), 'inq dim depth')
    
    ! and read in the depth array
    call nc_check( nf90_inq_varid(ncid, "depth", varid),'inq varid depth')
@@ -240,7 +239,6 @@ fileloop: do      ! until out of files
 
    call nc_check( nf90_close(ncid) , 'close file')
    
-! debug
    if (debug) then
       print *, 'input file: ', trim(next_infile)
       print *, 'ndepths: ', ndepths

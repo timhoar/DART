@@ -61,9 +61,9 @@
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-! case(SAT_RHO) 
+! case(SAT_RHO)
 !      call get_expected_upper_atm_density(state, location, obs_val, istatus)
-! case(CHAMP_DENSITY) 
+! case(CHAMP_DENSITY)
 !      call get_expected_upper_atm_density(state, location, obs_val, istatus)
 ! case(GND_GPS_VTEC)
 !      call get_expected_gnd_gps_vtec(state, location, obs_val, istatus)
@@ -72,9 +72,9 @@
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-! case(SAT_RHO) 
+! case(SAT_RHO)
 !      continue
-! case(CHAMP_DENSITY) 
+! case(CHAMP_DENSITY)
 !      continue
 ! case(GND_GPS_VTEC)
 !      continue
@@ -83,9 +83,9 @@
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-! case(SAT_RHO) 
+! case(SAT_RHO)
 !      continue
-! case(CHAMP_DENSITY) 
+! case(CHAMP_DENSITY)
 !      continue
 ! case(GND_GPS_VTEC)
 !      continue
@@ -94,9 +94,9 @@
 ! END DART PREPROCESS WRITE_OBS_DEF
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-! case(SAT_RHO) 
+! case(SAT_RHO)
 !      continue
-! case(CHAMP_DENSITY) 
+! case(CHAMP_DENSITY)
 !      continue
 ! case(GND_GPS_VTEC)
 !      continue
@@ -117,6 +117,7 @@ use     obs_kind_mod, only : KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
                              KIND_MOLEC_OXYGEN_MIXING_RATIO, &
                              KIND_TEMPERATURE, &
                              KIND_PRESSURE, &
+                             KIND_DENSITY, &
                              KIND_DENSITY_ION_E, &
                              KIND_GND_GPS_VTEC, &
                              KIND_GEOPOTENTIAL_HEIGHT, &
@@ -142,7 +143,7 @@ real(r8), PARAMETER :: N2_molar_mass = 28.0_r8
 real(r8), PARAMETER :: O_molar_mass  = 16.0_r8
 real(r8), PARAMETER :: O2_molar_mass = 32.0_r8
 real(r8), PARAMETER :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
-integer,  PARAMETER :: MAXLEVELS = 100 ! more than max levels expected in the model 
+integer,  PARAMETER :: MAXLEVELS = 100 ! more than max levels expected in the model
 
 character(len=512) :: string1, string2, string3
 
@@ -159,18 +160,28 @@ end subroutine initialize_module
 
 subroutine get_expected_upper_atm_density(x, location, obs_val, istatus)
 !-----------------------------------------------------------------------------
-!Given DART state vector and a location, 
-!it computes thermospheric neutral density [Kg/m3] 
+!Given DART state vector and a location,
+!it computes thermospheric neutral density [Kg/m3]
 !The istatus variable should be returned as 0 unless there is a problem
 !
 real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
-real(r8)                        :: mmro1, mmro2 ! mass mixing ratio 
-real(r8)                        :: pressure, temperature 
+real(r8)                        :: mmro1, mmro2 ! mass mixing ratio
+real(r8)                        :: pressure, temperature
 
 if ( .not. module_initialized ) call initialize_module
+
+! Some models (i.e. GITM) have density as part of the state.
+! If it is available, just return it. If density is not state,
+! then we need to create it from its constituents.
+
+call interpolate(x, location, KIND_DENSITY, obs_val, istatus)
+if (istatus == 0) return
+
+! This part was implemented for TIEGCM. Check the units for use with
+! other models.
 
 call interpolate(x, location, KIND_ATOMIC_OXYGEN_MIXING_RATIO, mmro1, istatus)
 if (istatus /= 0) then
@@ -193,17 +204,17 @@ if (istatus /= 0) then
    return
 endif
 
-!density [Kg/m3] =  pressure [N/m2] * M [g/mol] / temperature [K] / R [N*m/K/kmol] 
+!density [Kg/m3] =  pressure [N/m2] * M [g/mol] / temperature [K] / R [N*m/K/kmol]
 obs_val          =  pressure &
                  /(mmro1/O_molar_mass + mmro2/O2_molar_mass +(1-mmro1-mmro2)/N2_molar_mass) &
-                 /temperature/universal_gas_constant 
+                 /temperature/universal_gas_constant
 
 end subroutine get_expected_upper_atm_density
 
 
 subroutine get_expected_gnd_gps_vtec(state_vector, location, obs_val, istatus)
 !-----------------------------------------------------------------------------
-!Given DART state vector and a location, 
+!Given DART state vector and a location,
 !it computes ground GPS vertical total electron content
 !The istatus variable should be returned as 0 unless there is a problem
 
@@ -212,7 +223,7 @@ type(location_type), intent(in) :: location
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
 
-! Given a location and the state vector from one of the ensemble members, 
+! Given a location and the state vector from one of the ensemble members,
 ! compute the model-predicted total electron content that would be in the
 ! integrated column from an instrument looking straight down at the tangent point.
 ! 'istatus' is the return code.  0 is success; any positive value signals an
@@ -220,7 +231,7 @@ integer,            intent(out) :: istatus
 ! Negative istatus values are reserved for internal use only by DART.
 
 integer  :: nAlts, iAlt
-real(r8), allocatable :: ALT(:), IDensityS_ie(:) 
+real(r8), allocatable :: ALT(:), IDensityS_ie(:)
 real(r8) :: loc_vals(3)
 real(r8) :: tec
 type(location_type) :: probe
@@ -248,13 +259,13 @@ LEVELS: do iAlt=1, size(ALT)+1
            source, revision, revdate, text2=string2, text3=string3)
    endif
 
-   ! At each altitude interpolate the 2D IDensityS_ie to the lon-lat where data 
-   ! point is located. After this loop we will have a column centered at the data 
+   ! At each altitude interpolate the 2D IDensityS_ie to the lon-lat where data
+   ! point is located. After this loop we will have a column centered at the data
    ! point's lon-lat and at all model altitudes.
-   probe = set_location(loc_vals(1), loc_vals(2), real(iAlt, r8), VERTISLEVEL) !probe is where we have data 
-   call interpolate(state_vector, probe, KIND_DENSITY_ION_E, IDensityS_ie(iAlt), istatus) 
+   probe = set_location(loc_vals(1), loc_vals(2), real(iAlt, r8), VERTISLEVEL) !probe is where we have data
+   call interpolate(state_vector, probe, KIND_DENSITY_ION_E, IDensityS_ie(iAlt), istatus)
    if (istatus /= 0) exit LEVELS
-   call interpolate(state_vector, probe, KIND_GEOPOTENTIAL_HEIGHT, ALT(iAlt), istatus) 
+   call interpolate(state_vector, probe, KIND_GEOPOTENTIAL_HEIGHT, ALT(iAlt), istatus)
    if (istatus /= 0) exit LEVELS
    nAlts = nAlts+1
 enddo LEVELS
@@ -271,7 +282,7 @@ obs_val = tec * 10.0**(-16) !units of TEC are "10^16" #electron/m^2 instead of j
 
 deallocate(ALT, IDensityS_ie)
 
-! Good return code. 
+! Good return code.
 istatus = 0
 
 end subroutine get_expected_gnd_gps_vtec
@@ -280,7 +291,7 @@ end subroutine get_expected_gnd_gps_vtec
 
 subroutine get_expected_gps_vtec_extrap(state_vector, location, obs_val, istatus)
 !-----------------------------------------------------------------------------
-! Given DART state vector and a location, 
+! Given DART state vector and a location,
 ! compute ground GPS vertical total electron content including an estimate of
 ! the contribution from above the model (the 'extra'polated part)
 ! The istatus variable should be returned as 0 unless there is a problem
@@ -308,7 +319,7 @@ end subroutine get_expected_gps_vtec_extrap
 
 subroutine get_expected_O_N2_ratio(state_vector, location, obs_val, istatus)
 !-----------------------------------------------------------------------------
-! 
+!
 ! First, find the number of levels in the model.
 ! Then, loop down through the levels to create a top-down vertical profile.
 !       As we do that, we accumulate the amount of N2 and O, stopping when
@@ -326,8 +337,6 @@ type(location_type) :: loc
 
 real(r8), parameter :: Max_N2_column_density = 1.0E21_r8
 
-real(r8) :: voxel_number_density
-real(r8) :: mmrn2
 real(r8) :: N2_total
 real(r8) :: O_total
 
@@ -358,7 +367,8 @@ obs_val = MISSING_R8
 
 call error_handler(E_MSG, 'get_expected_O_N2_ratio', 'routine not tested', &
            source, revision, revdate, &
-           text2='routine in obs_def/obs_def_upper_atm_mod.f90')
+           text2='routine in obs_def/obs_def_upper_atm_mod.f90', &
+           text3='test and inform the DART development team. Thanks -- Tim.')
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -441,7 +451,7 @@ N2_mmr = 1.0_r8 - O_mmr(1:nlevels) - O2_mmr(1:nlevels)
 
 total_number_density = pressure(1:nlevels) / (k_constant * temperature(1:nlevels))
 
- O_number_density =  O_mmr(1:nlevels) * mbar /  O_molar_mass * total_number_density 
+ O_number_density =  O_mmr(1:nlevels) * mbar /  O_molar_mass * total_number_density
 N2_number_density = N2_mmr(1:nlevels) * mbar / N2_molar_mass * total_number_density
 
 if ( 1 == 2 ) then ! DEBUG BLOCK NOT IN USE
@@ -476,7 +486,7 @@ TOPDOWN : do ilayer = nlevels,1,-1
    if ((N2_total+N2_integrated) >= Max_N2_column_density) then
       ! only store part of the final layer so as not to overshoot 10^21 m^-2
       ! Let y2 == N2_total, y = Max_N2_column_density, y1 = N2_total + N2_integrated
-      ! the layer fraction is (y - y2)/(y1-y2) 
+      ! the layer fraction is (y - y2)/(y1-y2)
       ! (Max_N2_column_density - N2_total)/(N2_total + N2_integrated - N2_total)
       layerfraction = (Max_N2_column_density - N2_total) / N2_integrated
       N2_total = N2_total + N2_integrated*layerfraction
@@ -497,9 +507,8 @@ deallocate(N2_mmr, mbar, total_number_density, O_number_density, N2_number_densi
 end subroutine get_expected_O_N2_ratio
 
 
-
 end module obs_def_upper_atm_mod
-! END DART PREPROCESS MODULE CODE      
+! END DART PREPROCESS MODULE CODE
 
 ! <next few lines under version control, do not edit>
 ! $URL$

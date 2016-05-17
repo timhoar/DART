@@ -176,6 +176,7 @@ logical :: COMPARE_TO_CORRECT = .false.    ! normally false
 !                                    to one radian in horizontal
 ! vert_normalization_scale_height -> Number scale heights that give a distance 
 !                                    equivalent to one radian in horizontal
+! maintain_original_vert          -> DEPRECATED.  use the special values now.
 ! approximate_distance            -> Use a faster table lookup for the trig math.
 !                                    Works well for global models and large areas,
 !                                    and improves performance.  For smaller regions
@@ -183,6 +184,15 @@ logical :: COMPARE_TO_CORRECT = .false.    ! normally false
 ! nlon                            -> Number longitude boxes for get_close_obs 
 !                                    nlon MUST BE ODD
 ! nlat                            -> Number latitude boxes for get_close_obs
+! output_box_info                 -> Useful for debugging performance problems.
+! print_box_level                 -> How much data to print out.
+! special_vert_normalization_obs_types -> Which obs types to modify the default vert
+!                                    normalization values
+! special_vert_normalization_pressure       -> must give all 4 values for each type listed
+! special_vert_normalization_heights
+! special_vert_normalization_levels
+! special_vert_normalization_scale_heights
+
 
 logical  :: horiz_dist_only                 = .true.
 real(r8) :: vert_normalization_pressure     = 100000.0_r8
@@ -235,7 +245,7 @@ contains
 
 subroutine initialize_module()
 
-integer :: iunit, io, i, v, k, typecount, type_index
+integer :: iunit, io, i, k, typecount, type_index
 
 
 if (module_initialized) return
@@ -335,10 +345,10 @@ if (special_vert_normalization_obs_types(1) /= 'null' .or. &
                             text2=trim(special_vert_normalization_obs_types(i)))
       endif
 
-      per_type_vert_norm(VERTISLEVEL, i)       = special_vert_normalization_levels(i)
-      per_type_vert_norm(VERTISPRESSURE, i)    = special_vert_normalization_pressures(i)
-      per_type_vert_norm(VERTISHEIGHT, i)      = special_vert_normalization_heights(i)
-      per_type_vert_norm(VERTISSCALEHEIGHT, i) = special_vert_normalization_scale_heights(i)
+      per_type_vert_norm(VERTISLEVEL,       type_index) = special_vert_normalization_levels(i)
+      per_type_vert_norm(VERTISPRESSURE,    type_index) = special_vert_normalization_pressures(i)
+      per_type_vert_norm(VERTISHEIGHT,      type_index) = special_vert_normalization_heights(i)
+      per_type_vert_norm(VERTISSCALEHEIGHT, type_index) = special_vert_normalization_scale_heights(i)
       
    enddo
 
@@ -371,28 +381,39 @@ else
    write(msgstring,'(A,f17.5)') ' # scale heights ~ 1 horiz radian: ', vert_normalization_scale_height
    call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
 
-   do i = 1, num_special_vert_norms
-      if ((per_type_vert_norm(VERTISLEVEL,       i) /= vert_normalization_level) .or. &
-          (per_type_vert_norm(VERTISPRESSURE,    i) /= vert_normalization_pressure) .or. &
-          (per_type_vert_norm(VERTISHEIGHT,      i) /= vert_normalization_height) .or. &
-          (per_type_vert_norm(VERTISSCALEHEIGHT, i) /= vert_normalization_scale_height)) then
+   if (allocated(per_type_vert_norm)) then
+      typecount = get_num_obs_kinds()  ! ignore function name, this is specific type count
+      do i = 1, typecount
+         if ((per_type_vert_norm(VERTISLEVEL,       i) /= vert_normalization_level) .or. &
+             (per_type_vert_norm(VERTISPRESSURE,    i) /= vert_normalization_pressure) .or. &
+             (per_type_vert_norm(VERTISHEIGHT,      i) /= vert_normalization_height) .or. &
+             (per_type_vert_norm(VERTISSCALEHEIGHT, i) /= vert_normalization_scale_height)) then
  
-         write(msgstring,'(2A)') 'Altering vertical normalization for type ', trim(special_vert_normalization_obs_types(i))
-         call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
-         write(msgstring,'(A,f17.5)') '       # pascals ~ 1 horiz radian: ', &
-               per_type_vert_norm(VERTISPRESSURE, i)
-         call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
-         write(msgstring,'(A,f17.5)') '        # meters ~ 1 horiz radian: ', &
-               per_type_vert_norm(VERTISHEIGHT, i)
-         call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
-         write(msgstring,'(A,f17.5)') '  # model levels ~ 1 horiz radian: ', &
-               per_type_vert_norm(VERTISLEVEL, i)
-         call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
-         write(msgstring,'(A,f17.5)') ' # scale heights ~ 1 horiz radian: ', &
-               per_type_vert_norm(VERTISSCALEHEIGHT, i)
-         call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
-      endif
-   enddo
+            write(msgstring,'(2A)') 'Altering default vertical normalization for type ', trim(get_obs_kind_name(i))
+            call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
+            if (per_type_vert_norm(VERTISPRESSURE,    i) /= vert_normalization_pressure) then
+               write(msgstring,'(A,f17.5)') '       # pascals ~ 1 horiz radian: ', &
+                     per_type_vert_norm(VERTISPRESSURE, i)
+               call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
+            endif
+            if (per_type_vert_norm(VERTISHEIGHT,      i) /= vert_normalization_height) then
+               write(msgstring,'(A,f17.5)') '        # meters ~ 1 horiz radian: ', &
+                     per_type_vert_norm(VERTISHEIGHT, i)
+               call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
+            endif
+            if (per_type_vert_norm(VERTISLEVEL,       i) /= vert_normalization_level) then
+               write(msgstring,'(A,f17.5)') '  # model levels ~ 1 horiz radian: ', &
+                     per_type_vert_norm(VERTISLEVEL, i)
+               call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
+            endif
+            if (per_type_vert_norm(VERTISSCALEHEIGHT, i) /= vert_normalization_scale_height) then
+               write(msgstring,'(A,f17.5)') ' # scale heights ~ 1 horiz radian: ', &
+                     per_type_vert_norm(VERTISSCALEHEIGHT, i)
+               call error_handler(E_MSG,'location_mod:',msgstring,source,revision,revdate)
+            endif
+         endif
+      enddo
+   endif
 endif
 
 ! Set up a lookup table for cos and sin for approximate but fast distances
@@ -793,24 +814,24 @@ write(string1, '(A,F12.8,1X,F12.8,1X,A)') 'Lon/Lat(deg): ',  loc%lon*RAD2DEG, &
 ! case the caller is listing out locations with different vert units.
 ! concatinate the vertical on the end of the horizontal and put it all
 ! into the return string. 
+
 select case  (loc%which_vert)
    case (VERTISUNDEF)
-      write(charstring, '(A,1X,A)')       trim(string1), '              Undefined'
+      write(charstring, '(A,16x,A)')    trim(string1), ' Undefined'
    case (VERTISSURFACE)
-      write(charstring, '(A,1X,F12.5,A)') trim(string1), loc%vloc, '  surface (m)'
+      write(charstring, '(A,1x,F15.7,A)') trim(string1), loc%vloc, ' surface (m)'
    case (VERTISLEVEL)
-      write(charstring, '(A,1X,F5.0,A)')  trim(string1), loc%vloc, '         level'
+      write(charstring, '(A,1x,F6.0,A)')  trim(string1), loc%vloc, '          level'
    case (VERTISPRESSURE)
-      write(charstring, '(A,1X,F12.7,A)') trim(string1), loc%vloc / 100.0_r8, '  hPa'
+      write(charstring, '(A,1x,F15.7,A)') trim(string1), loc%vloc / 100.0_r8, ' hPa'
    case (VERTISHEIGHT)
-      write(charstring, '(A,1X,F20.7,A)') trim(string1), loc%vloc / 1000.0_r8, '  km'
+      write(charstring, '(A,1x,F15.7,A)') trim(string1), loc%vloc / 1000.0_r8, ' km'
    case (VERTISSCALEHEIGHT)
-      write(charstring, '(A,1X,F12.7,A)') trim(string1), loc%vloc, '  scale ht'
+      write(charstring, '(A,1x,F15.7,A)') trim(string1), loc%vloc, ' scale ht'
    case default
       write(msgstring, *) 'unrecognized key for vertical type: ', loc%which_vert
       call error_handler(E_ERR, 'write_location', msgstring, source, revision, revdate)
 end select
-
 
 end subroutine write_location
 
@@ -1307,7 +1328,7 @@ else
 endif
 
 ! make a gtt type array for each different cutoff distance
-! (just 1 type is the most common case.)
+! (a single type is the most common case)
 allocate(gc%gtt(gc%nt))
 
 if (present(maxdist_list)) then
@@ -1535,21 +1556,40 @@ close_ind = -99
 if(present(dist)) dist = -99.0_r8
 this_dist = 999999.0_r8   ! something big.
 
-! map from type index to gtt index
-if (base_obs_type < 1 .or. base_obs_type > size(gc%type_to_cutoff_map)) then
-   write(msgstring,'(A,I8)')'base_obs_type out of range, is ', base_obs_type
-   write(msgstring1,'(A,2I8)')'must be between ', 1, size(gc%type_to_cutoff_map)
-   call write_location (0, base_obs_loc, charstring=msgstring2)
-   call error_handler(E_ERR, 'get_close_obs', msgstring, source, revision, revdate, &
-                      text2=msgstring1, text3=msgstring2)
-endif
-bt = gc%type_to_cutoff_map(base_obs_type)
-if (bt < 1 .or. bt > gc%nt) then
-   write(msgstring,'(A,I8)')'mapped type index out of range, is ', bt
-   write(msgstring1,'(A,2I8)')'must be between ', 1, gc%nt
-   write(msgstring2, '(A)')'internal error, should not happen.  Contact DART Support'
-   call error_handler(E_ERR, 'get_close_obs', msgstring, source, revision, revdate, &
-                      text2=msgstring1, text3=msgstring2)
+! handle identity obs correctly -- only support them if there are no
+! per-obs-type cutoffs.  identity obs don't have a specific type, they
+! only have a generic kind based on what index into the state vector is
+! specified.  if this is absolutely needed by someone, i can rejigger the
+! code to try to use the default cutoff for identity obs, but it's tricky
+! to identify which obs type is using the default.  in theory it's possible
+! to specify a default cutoff and then specify a per-type cutoff for every
+! other type in the system.  in that case i don't have a map entry for the
+! default, and it's a pain to construct one.  so i'm punting for now.
+if (base_obs_type < 0) then
+   if (gc%nt > 1) then
+      write(msgstring,  '(A)') 'no support for identity obs if per-obs-type cutoffs are specified'
+      write(msgstring1, '(A)') 'contact dart support if you have a need for this combination'
+      call error_handler(E_ERR, 'get_close_obs', msgstring, source, revision, revdate, &
+                         text2=msgstring1)
+   endif
+   bt = 1
+else
+   ! map from type index to gtt index
+   if (base_obs_type < 1 .or. base_obs_type > size(gc%type_to_cutoff_map)) then
+      write(msgstring,'(A,I8)')'base_obs_type out of range, is ', base_obs_type
+      write(msgstring1,'(A,2I8)')'must be between ', 1, size(gc%type_to_cutoff_map)
+      call write_location (0, base_obs_loc, charstring=msgstring2)
+      call error_handler(E_ERR, 'get_close_obs', msgstring, source, revision, revdate, &
+                         text2=msgstring1, text3=msgstring2)
+   endif
+   bt = gc%type_to_cutoff_map(base_obs_type)
+   if (bt < 1 .or. bt > gc%nt) then
+      write(msgstring,'(A,I8)')'mapped type index out of range, is ', bt
+      write(msgstring1,'(A,2I8)')'must be between ', 1, gc%nt
+      write(msgstring2, '(A)')'internal error, should not happen.  Contact DART Support'
+      call error_handler(E_ERR, 'get_close_obs', msgstring, source, revision, revdate, &
+                         text2=msgstring1, text3=msgstring2)
+   endif
 endif
 
 ! the list of locations in the locs() argument must be the same
@@ -2145,12 +2185,12 @@ subroutine print_get_close_type(gc, tt, amount)
 ! dump from all mpi tasks in a format that can be plotted with matlab.
 
 type(get_close_type), intent(in) :: gc
-integer, intent(in)              :: tt
+integer, intent(in), optional    :: tt
 integer, intent(in), optional    :: amount
 
-integer :: i, j, k, first, index, mytask, alltasks
+integer :: i, j, k, first, index, mytask, alltasks, whichtt
 integer :: sample, nfull, nempty, howmuch, total, maxcount, maxi, maxj
-logical :: tickmark(gc%gtt(tt)%num), iam0
+logical :: tickmark(gc%gtt(1)%num), iam0
 real(r8) :: lon_cen, lat_cen
 
 logical, save :: write_now = .true.
@@ -2161,7 +2201,15 @@ character(len=64) :: fname
 ! cumulative times through this routine
 been_called = been_called + 1
 
-! second arg is now an int, not logical, and means:
+! second arg is optional, defaults to 1, and selects which
+! of the cutoff structs to print
+if (present(tt)) then
+   whichtt = tt
+else
+   whichtt = 1
+endif
+
+! third arg is now an int, not logical, and means:
 ! 0 = very terse, only box summary (default).  
 ! 1 = structs and first part of arrays.
 ! 2 = all parts of all arrays.
@@ -2192,7 +2240,7 @@ endif
 ! locations from the state vector in one set of boxes, but just a few
 ! locations from the locations in another.  this lets you turn off
 ! the debugging level for the large set and leave it on for the small.
-!if (gc%gtt(tt)%num > 100) howmuch = 0
+!if (gc%gtt(whichtt)%num > 100) howmuch = 0
 
 ! print the get_close_type derived type values
 
@@ -2200,46 +2248,46 @@ if (howmuch /= 0 .and. iam0) then
    write(msgstring,*) 'get_close_type values:'
    call error_handler(E_MSG, 'loc', msgstring)
 
-   write(msgstring,*) ' num = ', gc%gtt(tt)%num
+   write(msgstring,*) ' num = ', gc%gtt(whichtt)%num
    call error_handler(E_MSG, 'loc', msgstring)
 
    write(msgstring,*) ' nlon, nlat = ', nlon, nlat
    call error_handler(E_MSG, 'loc', msgstring)
 
-   write(msgstring,"(A,F12.6)") ' maxdist = ', gc%gtt(tt)%maxdist
+   write(msgstring, "(A,F12.6)") ' maxdist = ', gc%gtt(whichtt)%maxdist
    call error_handler(E_MSG, 'loc', msgstring)
-   write(msgstring, "(A,3(F12.6))") ' latbox: bot, top, width = ', gc%gtt(tt)%bot_lat, gc%gtt(tt)%top_lat, gc%gtt(tt)%lat_width
+   write(msgstring, "(A,3(F12.6))") ' latbox: bot, top, width = ', gc%gtt(whichtt)%bot_lat, gc%gtt(whichtt)%top_lat, gc%gtt(whichtt)%lat_width
    call error_handler(E_MSG, 'loc', msgstring)
-   write(msgstring, "(A,3(F12.6))") ' lonbox: bot, top, width = ', gc%gtt(tt)%bot_lon, gc%gtt(tt)%top_lon, gc%gtt(tt)%lon_width
-   call error_handler(E_MSG, 'loc', msgstring)
-
-   write(msgstring,"(A,F12.6)") ' maxdist = ', RAD2DEG*gc%gtt(tt)%maxdist
-   call error_handler(E_MSG, 'loc', msgstring)
-   write(msgstring, "(A,3(F12.6))") ' latbox: bot, top, width = ', RAD2DEG*gc%gtt(tt)%bot_lat, RAD2DEG*gc%gtt(tt)%top_lat, RAD2DEG*gc%gtt(tt)%lat_width
-   call error_handler(E_MSG, 'loc', msgstring)
-   write(msgstring, "(A,3(F12.6))") ' lonbox: bot, top, width = ', RAD2DEG*gc%gtt(tt)%bot_lon, RAD2DEG*gc%gtt(tt)%top_lon, RAD2DEG*gc%gtt(tt)%lon_width
+   write(msgstring, "(A,3(F12.6))") ' lonbox: bot, top, width = ', gc%gtt(whichtt)%bot_lon, gc%gtt(whichtt)%top_lon, gc%gtt(whichtt)%lon_width
    call error_handler(E_MSG, 'loc', msgstring)
 
-   write(msgstring,*) ' lon_cyclic = ', gc%gtt(tt)%lon_cyclic
+   write(msgstring, "(A,F12.6)") ' maxdist = ', RAD2DEG*gc%gtt(whichtt)%maxdist
+   call error_handler(E_MSG, 'loc', msgstring)
+   write(msgstring, "(A,3(F12.6))") ' latbox: bot, top, width = ', RAD2DEG*gc%gtt(whichtt)%bot_lat, RAD2DEG*gc%gtt(whichtt)%top_lat, RAD2DEG*gc%gtt(whichtt)%lat_width
+   call error_handler(E_MSG, 'loc', msgstring)
+   write(msgstring, "(A,3(F12.6))") ' lonbox: bot, top, width = ', RAD2DEG*gc%gtt(whichtt)%bot_lon, RAD2DEG*gc%gtt(whichtt)%top_lon, RAD2DEG*gc%gtt(whichtt)%lon_width
+   call error_handler(E_MSG, 'loc', msgstring)
+
+   write(msgstring,*) ' lon_cyclic = ', gc%gtt(whichtt)%lon_cyclic
    call error_handler(E_MSG, 'loc', msgstring)
 endif
 
 ! this one can be very large.   print only the first nth unless
 ! instructed otherwise.  (print n+1 because 1 more value fits on
 ! the line because it prints ( i ) and not ( i, j ) like the others.)
-if (allocated(gc%gtt(tt)%loc_box)) then
-   i = size(gc%gtt(tt)%loc_box,1)
-   if (i/= gc%gtt(tt)%num) then
-      write(msgstring,*) ' warning: size of loc_box incorrect, nlocs, i =', gc%gtt(tt)%num, i
+if (allocated(gc%gtt(whichtt)%loc_box)) then
+   i = size(gc%gtt(whichtt)%loc_box,1)
+   if (i/= gc%gtt(whichtt)%num) then
+      write(msgstring,*) ' warning: size of loc_box incorrect, nlocs, i =', gc%gtt(whichtt)%num, i
       call error_handler(E_MSG, 'locations_mod', msgstring)
    endif
    if (howmuch > 1) then
       ! DEBUG
-      write(msgstring,"(A,I8,A,36(I8,1X))") ' loc_box(',i,') =', gc%gtt(tt)%loc_box(1:min(i,36))  ! (nlocs)
-      !write(msgstring,*) ' loc_box(',i,') =', gc%gtt(tt)%loc_box    ! (nlocs)
+      write(msgstring,"(A,I8,A,36(I8,1X))") ' loc_box(',i,') =', gc%gtt(whichtt)%loc_box(1:min(i,36))  ! (nlocs)
+      !write(msgstring,*) ' loc_box(',i,') =', gc%gtt(whichtt)%loc_box    ! (nlocs)
       call error_handler(E_MSG, 'locations_mod', msgstring)
    else if(howmuch > 0) then
-      write(msgstring,*) ' loc_box(',i,') =', gc%gtt(tt)%loc_box(1:min(i,sample+1))
+      write(msgstring,*) ' loc_box(',i,') =', gc%gtt(whichtt)%loc_box(1:min(i,sample+1))
       call error_handler(E_MSG, 'locations_mod', msgstring)
       write(msgstring,*) '  <rest of loc_box omitted>'
       call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2253,9 +2301,9 @@ endif
 
 ! like loc_box, this one can be very large.   print only the first nth unless
 ! instructed otherwise
-if (allocated(gc%gtt(tt)%start)) then
-   i = size(gc%gtt(tt)%start,1)
-   j = size(gc%gtt(tt)%start,2)
+if (allocated(gc%gtt(whichtt)%start)) then
+   i = size(gc%gtt(whichtt)%start,1)
+   j = size(gc%gtt(whichtt)%start,2)
    if ((i /= nlon) .or. (j /= nlat)) then
       write(msgstring,*) ' warning: size of start incorrect, nlon, nlat, i, j =', nlon, nlat, i, j
       call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2264,11 +2312,11 @@ if (allocated(gc%gtt(tt)%start)) then
       write(msgstring,*) ' start(',i,j,') ='              ! (nlon, nlat)
       call error_handler(E_MSG, 'locations_mod', msgstring)
       do k=1, j
-         write(msgstring,"(36(I8,1X))") gc%gtt(tt)%start(1:min(i,36), k)
+         write(msgstring,"(36(I8,1X))") gc%gtt(whichtt)%start(1:min(i,36), k)
          call error_handler(E_MSG, 'locations_mod', msgstring)
       enddo
    else if (howmuch > 0) then
-      write(msgstring,*) ' start(',i,j,') =', gc%gtt(tt)%start(1:min(i,sample), 1)
+      write(msgstring,*) ' start(',i,j,') =', gc%gtt(whichtt)%start(1:min(i,sample), 1)
       call error_handler(E_MSG, 'locations_mod', msgstring)
       write(msgstring,*) '  <rest of start omitted>'
       call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2281,9 +2329,9 @@ else
 endif
 
 ! as above, print only first n unless second arg is .true.
-if (allocated(gc%gtt(tt)%lon_offset)) then
-   i =  size(gc%gtt(tt)%lon_offset,1)
-   j =  size(gc%gtt(tt)%lon_offset,2)
+if (allocated(gc%gtt(whichtt)%lon_offset)) then
+   i =  size(gc%gtt(whichtt)%lon_offset,1)
+   j =  size(gc%gtt(whichtt)%lon_offset,2)
    if ((i /= nlat) .or. (j /= nlat)) then
       write(msgstring,*) ' warning: size of lon_offset incorrect, nlat, i, j =', nlat, i, j
       call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2292,11 +2340,11 @@ if (allocated(gc%gtt(tt)%lon_offset)) then
       write(msgstring,*) ' lon_offset(',i,j,') ='                 ! (nlat, nlat)
       call error_handler(E_MSG, 'locations_mod', msgstring)
       do k=1, j
-         write(msgstring,"(36(I8,1X))") gc%gtt(tt)%lon_offset(1:min(i,36), k) 
+         write(msgstring,"(36(I8,1X))") gc%gtt(whichtt)%lon_offset(1:min(i,36), k) 
          call error_handler(E_MSG, 'locations_mod', msgstring)
       enddo
    else if (howmuch > 0) then
-      write(msgstring,*) ' lon_offset(',i,j,') =', gc%gtt(tt)%lon_offset(1:min(i,sample), 1)
+      write(msgstring,*) ' lon_offset(',i,j,') =', gc%gtt(whichtt)%lon_offset(1:min(i,sample), 1)
       call error_handler(E_MSG, 'locations_mod', msgstring)
       write(msgstring,*) '  <rest of lon_offset omitted>'
       call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2309,9 +2357,9 @@ else
 endif
 
 ! as above, print only first n unless second arg is .true.
-if (allocated(gc%gtt(tt)%count)) then
-   i = size(gc%gtt(tt)%count,1)
-   j = size(gc%gtt(tt)%count,2)
+if (allocated(gc%gtt(whichtt)%count)) then
+   i = size(gc%gtt(whichtt)%count,1)
+   j = size(gc%gtt(whichtt)%count,2)
    if ((i /= nlon) .or. (j /= nlat)) then
       write(msgstring,*) ' warning: size of count incorrect, nlon, nlat, i, j =', &
                       nlon, nlat, i, j
@@ -2321,11 +2369,11 @@ if (allocated(gc%gtt(tt)%count)) then
       write(msgstring,*) ' count(',i,j,') ='              ! (nlon, nlat)
       call error_handler(E_MSG, 'locations_mod', msgstring)
       do k=1, j
-         write(msgstring,"(36(I8,1X))") gc%gtt(tt)%count(1:min(i,36), k) 
+         write(msgstring,"(36(I8,1X))") gc%gtt(whichtt)%count(1:min(i,36), k) 
          call error_handler(E_MSG, 'locations_mod', msgstring)
       enddo
    else if (howmuch > 0) then
-      write(msgstring,*) ' count(',i,j,') =', gc%gtt(tt)%count(1:min(i,sample), 1)
+      write(msgstring,*) ' count(',i,j,') =', gc%gtt(whichtt)%count(1:min(i,sample), 1)
       call error_handler(E_MSG, 'locations_mod', msgstring)
       write(msgstring,*) '  <rest of count omitted>'
       call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2348,10 +2396,10 @@ tickmark = .FALSE.
 
 do i=1, nlon
    do j=1, nlat
-      first = gc%gtt(tt)%start(i, j)
-      do k=1, gc%gtt(tt)%count(i, j)
+      first = gc%gtt(whichtt)%start(i, j)
+      do k=1, gc%gtt(whichtt)%count(i, j)
          index = first + k - 1
-         if ((index < 1) .or. (index > gc%gtt(tt)%num)) then
+         if ((index < 1) .or. (index > gc%gtt(whichtt)%num)) then
             write(msgstring, *) 'exiting at first bad value; could be more'
             call error_handler(E_MSG, 'locations_mod', msgstring)
             write(msgstring, *) 'bad loc list index, in box: ', index, i, j
@@ -2369,7 +2417,7 @@ do i=1, nlon
    enddo
 enddo
 
-do i=1, gc%gtt(tt)%num
+do i=1, gc%gtt(whichtt)%num
   if (.not. tickmark(i)) then
      write(msgstring, *) 'exiting at first bad value; could be more'
      call error_handler(E_MSG, 'locations_mod', msgstring)
@@ -2401,19 +2449,19 @@ endif
 
 do i=1, nlon
    if (howmuch == -8) then
-      lon_cen = gc%gtt(tt)%bot_lon + ((i-1)*gc%gtt(tt)%lon_width) + (gc%gtt(tt)%lon_width/2.0)
+      lon_cen = gc%gtt(whichtt)%bot_lon + ((i-1)*gc%gtt(whichtt)%lon_width) + (gc%gtt(whichtt)%lon_width/2.0)
       write(funit, '(A,I2,A,I4,A,F12.9,A)') 'xlocs(', i, ',', mytask+1, ') = ',  lon_cen, ';'
    endif
    do j=1, nlat
       if (howmuch == -8 .and. i==1) then
-         lat_cen = gc%gtt(tt)%bot_lat + ((j-1)*gc%gtt(tt)%lat_width) + (gc%gtt(tt)%lat_width/2.0)
+         lat_cen = gc%gtt(whichtt)%bot_lat + ((j-1)*gc%gtt(whichtt)%lat_width) + (gc%gtt(whichtt)%lat_width/2.0)
          write(funit, '(A,I2,A,I4,A,F12.9,A)') 'ylocs(', j, ',', mytask+1, ') = ',  lat_cen, ';'
       endif
-      if (gc%gtt(tt)%count(i, j) > 0) then
+      if (gc%gtt(whichtt)%count(i, j) > 0) then
          nfull = nfull + 1
-         total = total + gc%gtt(tt)%count(i, j)
-         if (gc%gtt(tt)%count(i, j) > maxcount) then
-            maxcount = gc%gtt(tt)%count(i, j)
+         total = total + gc%gtt(whichtt)%count(i, j)
+         if (gc%gtt(whichtt)%count(i, j) > maxcount) then
+            maxcount = gc%gtt(whichtt)%count(i, j)
             maxi = i
             maxj = j
          endif
@@ -2423,7 +2471,7 @@ do i=1, nlon
       ! output for grid boxes; in matlab-friendly format
       if (howmuch == -8) then
          write(funit, '(A,I2,A,I2,A,I4,A,I8,A)') 'boxes(', i, ', ', j, &
-                                ',', mytask+1, ') = ', gc%gtt(tt)%count(i, j), ';'
+                                ',', mytask+1, ') = ', gc%gtt(whichtt)%count(i, j), ';'
       endif
    enddo
 enddo

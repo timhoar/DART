@@ -23,7 +23,7 @@ use   time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, set_time
 use      utilities_mod, only : initialize_utilities, find_namelist_in_file,    &
                                check_namelist_read, nmlfileunit, do_nml_file,   &
                                get_next_filename, error_handler, E_ERR, E_MSG, &
-                               nc_check, find_textfile_dims, do_nml_term
+                               nc_check, find_textfile_dims, do_nml_term, finalize_utilities
 use       location_mod, only : VERTISHEIGHT, set_location
 use   obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq,       &
                                static_init_obs_sequence, init_obs, destroy_obs, &
@@ -35,7 +35,7 @@ use   obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind,
                                set_obs_def_error_variance, set_obs_def_location, &
                                set_obs_def_key
 use    obs_def_gps_mod, only : set_gpsro_ref
-use       obs_kind_mod, only : GPSRO_REFRACTIVITY
+use       obs_kind_mod, only : GPSRO_REFRACTIVITY     ! GPSRO_BENDING_ANGLE
 use  obs_utilities_mod, only : add_obs_to_seq
 
 use           netcdf
@@ -52,19 +52,20 @@ character(len=128), parameter :: revdate  = "$Date$"
 integer, parameter ::   num_copies = 1,   &   ! number of copies in sequence
                         num_qc     = 1        ! number of QC entries
 
-character (len=129) :: msgstring, next_infile
-character (len=80)  :: name
+character (len=512) :: msgstring, msgstring2, next_infile
+character (len=NF90_MAX_NAME)  :: name
 character (len=6)   :: subset
 integer :: ncid, varid, nlevels, k, nfiles, num_new_obs, oday, osec, &
            iyear, imonth, iday, ihour, imin, isec, glat, glon, zloc, obs_num, &
-           io, iunit, nobs, filenum, dummy
-logical :: file_exist, first_obs, did_obs, from_list = .false.
-real(r8) :: hght_miss, refr_miss, azim_miss, oerr,               & 
+           io, iunit, nobs, filenum, dummy, numrejected
+character (len=1) :: badqc
+logical :: file_exist, first_obs, from_list = .false.
+real(r8) :: hght_miss, refr_miss, azim_miss, benda_miss, oerr,   & 
             qc, lato, lono, hghto, refro, azimo, wght, nx, ny,   & 
             nz, rfict, obsval, phs, obs_val(1), qc_val(1)
 
 real(r8), allocatable :: lat(:), lon(:), hght(:), refr(:), azim(:), & 
-                         hghtp(:), refrp(:)
+                         hghtp(:), refrp(:), benda(:)
 
 type(obs_def_type)      :: obs_def
 type(obs_sequence_type) :: obs_seq
@@ -75,19 +76,21 @@ type(time_type)         :: time_obs, prev_time
 !  Declare namelist parameters
 !------------------------------------------------------------------------
 
-integer, parameter :: nmaxlevels = 200   !  max number of observation levels
+integer, parameter :: NMAXLEVELS = 200   !  max number of observation levels
 
-logical  :: local_operator = .true.   ! see html file for more on non/local
-real(r8) :: obs_levels(nmaxlevels) = -1.0_r8
-real(r8) :: ray_ds = 5000.0_r8    ! delta stepsize (m) along ray, nonlocal op
-real(r8) :: ray_htop = 15000.0_r8 ! max height (m) for nonlocal op
-character(len=128) :: gpsro_netcdf_file     = 'cosmic_gps_input.nc'
-character(len=128) :: gpsro_netcdf_filelist = 'cosmic_gps_input_list'
-character(len=128) :: gpsro_out_file        = 'obs_seq.gpsro'
+logical  :: local_operator         = .true.   ! see html file for more on non/local
+logical  :: use_original_kuo_error = .false.  ! alternative is use lidia c's version
+real(r8) :: obs_levels(NMAXLEVELS) = -1.0_r8
+real(r8) :: ray_ds                 = 5000.0_r8    ! delta stepsize (m) along ray, nonlocal op
+real(r8) :: ray_htop               = 15000.0_r8 ! max height (m) for nonlocal op
+character(len=256) :: gpsro_netcdf_file     = 'cosmic_gps_input.nc'
+character(len=256) :: gpsro_netcdf_filelist = 'cosmic_gps_input_list'
+character(len=256) :: gpsro_out_file        = 'obs_seq.gpsro'
 
 namelist /convert_cosmic_gps_nml/ obs_levels, local_operator, ray_ds,   &
                                   ray_htop, gpsro_netcdf_file,          &
-                                  gpsro_netcdf_filelist, gpsro_out_file
+                                  gpsro_netcdf_filelist, gpsro_out_file, &
+                                  use_original_kuo_error
 
 ! initialize some values
 obs_num = 1
@@ -107,13 +110,18 @@ if (do_nml_file()) write(nmlfileunit, nml=convert_cosmic_gps_nml)
 if (do_nml_term()) write(     *     , nml=convert_cosmic_gps_nml)
 
 ! namelist checks for sanity
+if (.not. use_original_kuo_error .and. .not. local_operator) then
+  call error_handler(E_ERR, 'convert_cosmic_gps_cdf',                     &
+                     'New error values only implemented for local operator', &
+                     source, revision, revdate)
+endif
 
 !  count observation levels, make sure observation levels increase from 0
 nlevels = 0
-do k = 1, nmaxlevels
-  if ( obs_levels(k) == -1.0_r8 )  exit
+LEVELLOOP: do k = 1, NMAXLEVELS
+  if ( obs_levels(k) == -1.0_r8 )  exit LEVELLOOP
   nlevels = k
-end do
+end do LEVELLOOP
 do k = 2, nlevels
   if ( obs_levels(k-1) >= obs_levels(k) ) then
     call error_handler(E_ERR, 'convert_cosmic_gps_cdf',       &
@@ -146,30 +154,32 @@ call init_obs(prev_obs, num_copies, num_qc)
 inquire(file=gpsro_out_file, exist=file_exist)
 if ( file_exist ) then
 
-   print *, "found existing obs_seq file, appending to ", trim(gpsro_out_file)
+   write(msgstring, *) "found existing obs_seq file, appending to ", trim(gpsro_out_file)
+   write(msgstring2, *) "adding up to a maximum of ", num_new_obs, " new observations"
+   call error_handler(E_MSG, 'convert_cosmic_gps_cdf', msgstring, &
+                      source, revision, revdate, text2=msgstring2)
    call read_obs_seq(gpsro_out_file, 0, 0, num_new_obs, obs_seq)
 
 else
 
-  print *, "no existing obs_seq file, creating ", trim(gpsro_out_file)
-  print *, "max entries = ", num_new_obs
-  call init_obs_sequence(obs_seq, num_copies, num_qc, num_new_obs)
+   write(msgstring,  *) "no previously existing obs_seq file, creating ", trim(gpsro_out_file)
+   write(msgstring2, *) "with up to a maximum of ", num_new_obs, " observations"
+   call error_handler(E_MSG, 'convert_cosmic_gps_cdf', msgstring, &
+                      source, revision, revdate, text2=msgstring2)
 
-  do k = 1, num_copies
-    call set_copy_meta_data(obs_seq, k, 'COSMIC GPS observation')
-  end do
-  do k = 1, num_qc
-    call set_qc_meta_data(obs_seq, k, 'COSMIC QC')
-  end do
+   call init_obs_sequence(obs_seq, num_copies, num_qc, num_new_obs)
+   call set_copy_meta_data(obs_seq, 1, 'COSMIC GPS Observation')
+   call set_qc_meta_data(obs_seq, 1, 'COSMIC QC')
 
 end if
 
 
-did_obs = .false.
-
-! main loop that does either a single file or a list of files
+! main loop that does either a single file or a list of files.
+! the data is currently distributed as a single profile per file.
 
 filenum = 1
+numrejected = 0
+
 fileloop: do      ! until out of files
 
    ! get the single name, or the next name from a list
@@ -181,66 +191,102 @@ fileloop: do      ! until out of files
    endif
    if (next_infile == '') exit fileloop
   
-   !  open the occultation profile, check if it is within the window
+   !  open the next occultation profile
    call nc_check( nf90_open(next_infile, nf90_nowrite, ncid), 'file open', next_infile)
-   call nc_check( nf90_get_att(ncid,nf90_global,'year',  iyear) ,'get_att year')
-   call nc_check( nf90_get_att(ncid,nf90_global,'month', imonth),'get_att month')
-   call nc_check( nf90_get_att(ncid,nf90_global,'day',   iday)  ,'get_att day')
-   call nc_check( nf90_get_att(ncid,nf90_global,'hour',  ihour) ,'get_att hour')
-   call nc_check( nf90_get_att(ncid,nf90_global,'minute',imin)  ,'get_att minute')
-   call nc_check( nf90_get_att(ncid,nf90_global,'second',isec)  ,'get_att second')
+
+   ! this is new with the cosmic 2013 reprocessed obs.  they have included profiles
+   ! which have failed their QC checking but added a global attribute 'bad' which
+   ! is char "1" for bad profiles.   if there is no 'bad' attribute, or if there is one
+   ! and the value is "0", then it is ok to proceed.  otherwise close the file and
+   ! cycle the loop to pick up the next file.
+
+   io = nf90_get_att(ncid,nf90_global,'bad', badqc)
+   if ((io == nf90_noerr) .and. (badqc /= "0")) then
+      ! profile with a bad QC
+      numrejected = numrejected + 1
+      call nc_check( nf90_close(ncid) , 'close file', next_infile)
+      filenum = filenum + 1
+      cycle fileloop 
+   endif
+
+   ! process the profile
+   call nc_check( nf90_get_att(ncid,nf90_global,'year',  iyear) ,'get_att year',   next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'month', imonth),'get_att month',  next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'day',   iday)  ,'get_att day',    next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'hour',  ihour) ,'get_att hour',   next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'minute',imin)  ,'get_att minute', next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'second',isec)  ,'get_att second', next_infile)
    
    time_obs = set_date(iyear, imonth, iday, ihour, imin, isec)
    call get_time(time_obs,  osec, oday)
    
-   call nc_check( nf90_inq_dimid(ncid, "MSL_alt", varid), 'inq dimid MSL_alt')
-   call nc_check( nf90_inquire_dimension(ncid, varid, name, nobs), 'inq dim MSL_alt')
+   call nc_check( nf90_inq_dimid(ncid, "MSL_alt", varid),          'inq dimid MSL_alt', next_infile)
+   call nc_check( nf90_inquire_dimension(ncid, varid, name, nobs), 'inq dim MSL_alt',   next_infile)
    
-   call nc_check( nf90_get_att(ncid,nf90_global,'lon',  glon) ,'get_att lon'  )
-   call nc_check( nf90_get_att(ncid,nf90_global,'lat',  glat) ,'get_att lat'  )
-   call nc_check( nf90_get_att(ncid,nf90_global,'rfict',rfict),'get_att rfict')
+   call nc_check( nf90_get_att(ncid,nf90_global,'lon',  glon) ,'get_att lon',   next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'lat',  glat) ,'get_att lat',   next_infile)
+   call nc_check( nf90_get_att(ncid,nf90_global,'rfict',rfict),'get_att rfict', next_infile)
    rfict = rfict * 1000.0_r8
    
    allocate(hghtp(nobs)) ;  allocate(refrp(nobs))
    allocate( lat(nobs))  ;  allocate( lon(nobs))
    allocate(hght(nobs))  ;  allocate(refr(nobs))
-   allocate(azim(nobs))
+   allocate(azim(nobs))  ;  allocate(benda(nobs))
    
    ! read the latitude array
-   call nc_check( nf90_inq_varid(ncid, "Lat", varid) ,'inq varid Lat')
-   call nc_check( nf90_get_var(ncid, varid, lat)     ,'get var   Lat')
+   call nc_check( nf90_inq_varid(ncid, "Lat", varid) ,'inq varid Lat', next_infile)
+   call nc_check( nf90_get_var(ncid, varid, lat)     ,'get var   Lat', next_infile)
    
    ! read the latitude array
-   call nc_check( nf90_inq_varid(ncid, "Lon", varid) ,'inq varid Lon')
-   call nc_check( nf90_get_var(ncid, varid, lon)     ,'get var   Lon')
+   call nc_check( nf90_inq_varid(ncid, "Lon", varid) ,'inq varid Lon', next_infile)
+   call nc_check( nf90_get_var(ncid, varid, lon)     ,'get var   Lon', next_infile)
    
    ! read the altitude array
-   call nc_check( nf90_inq_varid(ncid, "MSL_alt", varid) ,'inq varid MSL_alt')
-   call nc_check( nf90_get_var(ncid, varid, hght)        ,'get_var   MSL_alt')
-   call nc_check( nf90_get_att(ncid, varid, '_FillValue', hght_miss) ,'get_att _FillValue MSL_alt')
+   call nc_check( nf90_inq_varid(ncid, "MSL_alt", varid) ,'inq varid MSL_alt', next_infile)
+   call nc_check( nf90_get_var(ncid, varid, hght)        ,'get_var   MSL_alt', next_infile)
+   call nc_check( nf90_get_att(ncid, varid, '_FillValue', hght_miss) ,'get_att _FillValue MSL_alt', next_infile)
    
    ! read the refractivity
-   call nc_check( nf90_inq_varid(ncid, "Ref", varid) ,'inq varid Ref')
-   call nc_check( nf90_get_var(ncid, varid, refr)    ,'get var   Ref')
-   call nc_check( nf90_get_att(ncid, varid, '_FillValue', refr_miss) ,'get_att _FillValue Ref')
+   call nc_check( nf90_inq_varid(ncid, "Ref", varid) ,'inq varid Ref', next_infile)
+   call nc_check( nf90_get_var(ncid, varid, refr)    ,'get var   Ref', next_infile)
+   call nc_check( nf90_get_att(ncid, varid, '_FillValue', refr_miss) ,'get_att _FillValue Ref', next_infile)
    
-   ! read the dew-point temperature array
-   call nc_check( nf90_inq_varid(ncid, "Azim", varid) ,'inq varid Azim')
-   call nc_check( nf90_get_var(ncid, varid, azim)     ,'get var   Azim')
-   call nc_check( nf90_get_att(ncid, varid, '_FillValue', azim_miss) ,'get_att _FillValue Azim')
+   ! read the bending angle
+   call nc_check( nf90_inq_varid(ncid, "Bend_ang", varid) ,'inq varid Bend_ang', next_infile)
+   call nc_check( nf90_get_var(ncid, varid, benda)    ,'get var   Bend_ang', next_infile)
+   call nc_check( nf90_get_att(ncid, varid, '_FillValue', benda_miss) ,'get_att _FillValue benda', next_infile)
    
-   call nc_check( nf90_close(ncid) , 'close file')
+   ! read the azimuth of occultation plane - only used for non-local operator
+   call nc_check( nf90_inq_varid(ncid, "Azim", varid) ,'inq varid Azim', next_infile)
+   call nc_check( nf90_get_var(ncid, varid, azim)     ,'get var   Azim', next_infile)
+   call nc_check( nf90_get_att(ncid, varid, '_FillValue', azim_miss) ,'get_att _FillValue Azim', next_infile)
    
+   call nc_check( nf90_close(ncid) , 'close file', next_infile)
+   
+   !where(hght(1: < -998)) then
+   !   write(*,*) 'height array:'
+   !   write(*,*) hght
+   !endwhere
+   !where (any(refr < -998)) then
+   !  write(*,*) 'refractivity array:'
+   !  write(*,*) refr
+   !endwhere
+   !where (any(benda < -998)) then
+   !  write(*,*) 'bending angle array:'
+   !  write(*,*) benda
+   !endwhere
+
    ! convert units here.
    hghtp(:) = hght(:) * 1000.0_r8
    refrp(:) = refr(:) * 1.0e-6_r8
     
-   first_obs = .true.
-   
    obsloop2: do k = 1, nlevels
    
      call interp_height_wght(hght, obs_levels(k), nobs, zloc, wght)
-     if ( zloc < 1 )  cycle obsloop2
+     if ( zloc < 1 )  then
+        !write(*,*) 'level ', k, ' unable to find ', obs_levels(k), ' between 1 ', hght(1), ' and ', nobs, hght(nobs)
+        cycle obsloop2
+     endif
    
      ! lon(zloc) and lon(zloc+1) range from -180 to +180
      ! call a subroutine to handle the wrap point.
@@ -261,7 +307,11 @@ fileloop: do      ! until out of files
         rfict     = 0.0_r8
    
         obsval = refro
-        oerr   = 0.01_r8 * ref_obserr_kuo_percent(hghto * 0.001_r8) * obsval
+        if (use_original_kuo_error) then
+           oerr   = 0.01_r8 * ref_obserr_kuo_percent(hghto * 0.001_r8) * obsval
+        else
+           oerr   = gsi_refractivity_error(hghto, lato, is_it_global=.true., factor=1.0_r8)
+        endif
         subset = 'GPSREF'
    
      else
@@ -278,8 +328,8 @@ fileloop: do      ! until out of files
    
        obsval = phs
        oerr   = 0.01_r8 * excess_obserr_percent(hghto * 0.001_r8) * obsval
-   !print *, 'hghto,obsval,perc,err=', hghto, obsval, &
-   !          excess_obserr_percent(hghto * 0.001_r8), oerr
+       !DEBUG print *, 'hghto,obsval,perc,err=', hghto, obsval, &
+       !DEBUG          excess_obserr_percent(hghto * 0.001_r8), oerr
        subset = 'GPSEXC'
    
      end if
@@ -301,33 +351,31 @@ fileloop: do      ! until out of files
 
      obs_num = obs_num+1
 
-     if (.not. did_obs) did_obs = .true.
-   
    end do obsloop2
 
   ! clean up and loop if there is another input file
-  deallocate( lat, lon, hght, refr, azim, hghtp, refrp)
+  deallocate( lat, lon, hght, refr, azim, benda, hghtp, refrp)
 
   filenum = filenum + 1
 
 end do fileloop
 
-! done with main loop.  if we added any obs to the sequence, write it out.
-if (did_obs) then
-!print *, 'ready to write, nobs = ', get_num_obs(obs_seq)
-   if (get_num_obs(obs_seq) > 0) &
-      call write_obs_seq(obs_seq, gpsro_out_file)
+! done with main loop.  if we added any new obs to the sequence, write it out.
+if (obs_num > 1) call write_obs_seq(obs_seq, gpsro_out_file)
 
-   ! minor stab at cleanup, in the off chance this will someday get turned
-   ! into a subroutine in a module.  probably not all that needs to be done,
-   ! but a start.
-   call destroy_obs(obs)
-! if obs == prev_obs then you can't delete the same obs twice.
-! buf if they differ, then it's a leak.  for now, don't delete prev
-! since the program is exiting here anyway.
-   !call destroy_obs(prev_obs)
-   if (get_num_obs(obs_seq) > 0) call destroy_obs_sequence(obs_seq)
+! cleanup memory
+call destroy_obs_sequence(obs_seq)
+call destroy_obs(obs)   ! do not destroy prev_obs, which is same as obs
+
+write(msgstring, *) 'processed ', filenum-1, ' total profiles'
+call error_handler(E_MSG, 'convert_cosmic_gps_obs', msgstring, source, revision, revdate)
+
+if (numrejected > 0) then
+   write(msgstring,  *) numrejected, ' profiles rejected for bad incoming quality control'
+   call error_handler(E_MSG, 'convert_cosmic_gps_obs', msgstring, source, revision, revdate)
 endif
+
+call finalize_utilities()
 
 ! END OF MAIN ROUTINE
 
@@ -435,57 +483,6 @@ end do
 
 return
 end subroutine excess
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
-!   excess_obserr_percent - function that computes the observation 
-!                           error percentage for a given height.
-!
-!    hght - height of excess observation (km)
-!
-!     created Hui Liu NCAR/MMM
-!     updated June 2008, Ryan Torn NCAR/MMM
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-function excess_obserr_percent(hght)
-
-use types_mod, only : r8
-
-implicit none
-
-integer, parameter :: nobs_level = 18
-
-real(r8), intent(in) :: hght
-
-integer  :: k, k0
-real(r8) :: hght0, exc_err(nobs_level), obs_ht(nobs_level), excess_obserr_percent
-
-!-------------------------------------------------------------------------------
-! obs height in km
-data obs_ht/17.0_r8, 16.0_r8, 15.0_r8, 14.0_r8, 13.0_r8, 12.0_r8, & 
-            11.0_r8, 10.0_r8,  9.0_r8,  8.0_r8,  7.0_r8,  6.0_r8, &
-             5.0_r8,  4.0_r8,  3.0_r8,  2.0_r8,  1.0_r8,  0.0_r8/
-
-data exc_err/0.2_r8,  0.2_r8,  0.2_r8,  0.2_r8,  0.2_r8,  0.2_r8, & 
-             0.2_r8,  0.3_r8,  0.4_r8,  0.5_r8,  0.6_r8,  0.7_r8, &
-             0.8_r8,  0.9_r8,  1.0_r8,  1.1_r8,  1.2_r8,  1.3_r8/
-
-!-------------------------------------------------------------------------------
-
-hght0 = max(hght,0.0_r8)
-
-do k = 1, nobs_level
-  if ( hght >= obs_ht(k) ) then
-    k0 = k
-    exit
-  end if
-end do
-
-excess_obserr_percent = exc_err(k0) + (exc_err(k0) - exc_err(k0-1)) / & 
-                        (obs_ht(k0) - obs_ht(k0-1)) * (hght - obs_ht(k0))
-
-return
-end function excess_obserr_percent
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -694,57 +691,6 @@ end subroutine ref_int
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-!   ref_obserr_kuo_percent - function that computes the observation 
-!                            error for a refractivity observation.
-!                            These numbers are taken from a Kuo paper.
-!
-!    hght - height of refractivity observation
-!
-!     created Hui Liu NCAR/MMM
-!     modified June 2008, Ryan Torn NCAR/MMM
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-function ref_obserr_kuo_percent(hght)
-
-use   types_mod, only : r8
-
-implicit none
-
-integer, parameter :: nobs_level = 22  !  maximum number of obs levels
-
-real(r8), intent(in)  :: hght
-
-integer  :: k, k0
-real(r8) :: hght0, ref_err(nobs_level), obs_ht(nobs_level), ref_obserr_kuo_percent
-
-!   observation error heights (km) and errors
-data obs_ht/17.98_r8, 16.39_r8, 14.97_r8, 13.65_r8, 12.39_r8, 11.15_r8, &
-             9.95_r8,  8.82_r8,  7.82_r8,  6.94_r8,  6.15_r8,  5.45_r8, & 
-             4.83_r8,  4.27_r8,  3.78_r8,  3.34_r8,  2.94_r8,  2.59_r8, & 
-             2.28_r8,  1.99_r8,  1.00_r8,  0.00_r8/
-
-data ref_err/0.48_r8,  0.56_r8,  0.36_r8,  0.28_r8,  0.33_r8,  0.41_r8, & 
-             0.57_r8,  0.73_r8,  0.90_r8,  1.11_r8,  1.18_r8,  1.26_r8, & 
-             1.53_r8,  1.85_r8,  1.81_r8,  2.08_r8,  2.34_r8,  2.43_r8, & 
-             2.43_r8,  2.43_r8,  2.43_r8,  2.43_r8/
-
-hght0 = max(hght, 0.0_r8)
-
-do k = 1, nobs_level
-  
-  k0 = k
-  if ( hght0 >= obs_ht(k) )  exit
-
-end do 
-
-ref_obserr_kuo_percent = ref_err(k0) + (ref_err(k0) - ref_err(k0-1)) / &
-                             (obs_ht(k0)-obs_ht(k0-1)) * (hght0-obs_ht(k0))
-
-return
-end function ref_obserr_kuo_percent
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
 !   tanvec01 - subroutine that computes the unit vector tangent of the 
 !              ray at the perigee.
 !
@@ -928,6 +874,250 @@ if (lono < 0.0_r8) lono = lono + 360.0_r8
 compute_lon_wrap = lono
 
 end function compute_lon_wrap
+
+! three different error options:
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   excess_obserr_percent - function that computes the observation 
+!                           error percentage for a given height.
+!
+!    hght - height of excess observation (km)
+!
+!     created Hui Liu NCAR/MMM
+!     updated June 2008, Ryan Torn NCAR/MMM
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function excess_obserr_percent(hght)
+
+use types_mod, only : r8
+
+implicit none
+
+integer, parameter :: nobs_level = 18
+
+real(r8), intent(in) :: hght
+
+integer  :: k, k0
+real(r8) :: hght0, exc_err(nobs_level), obs_ht(nobs_level), excess_obserr_percent
+
+!-------------------------------------------------------------------------------
+! obs height in km
+data obs_ht/17.0_r8, 16.0_r8, 15.0_r8, 14.0_r8, 13.0_r8, 12.0_r8, & 
+            11.0_r8, 10.0_r8,  9.0_r8,  8.0_r8,  7.0_r8,  6.0_r8, &
+             5.0_r8,  4.0_r8,  3.0_r8,  2.0_r8,  1.0_r8,  0.0_r8/
+
+data exc_err/0.2_r8,  0.2_r8,  0.2_r8,  0.2_r8,  0.2_r8,  0.2_r8, & 
+             0.2_r8,  0.3_r8,  0.4_r8,  0.5_r8,  0.6_r8,  0.7_r8, &
+             0.8_r8,  0.9_r8,  1.0_r8,  1.1_r8,  1.2_r8,  1.3_r8/
+
+!-------------------------------------------------------------------------------
+
+hght0 = max(hght,0.0_r8)
+
+do k = 1, nobs_level
+  if ( hght >= obs_ht(k) ) then
+    k0 = k
+    exit
+  end if
+end do
+
+excess_obserr_percent = exc_err(k0) + (exc_err(k0) - exc_err(k0-1)) / & 
+                        (obs_ht(k0) - obs_ht(k0-1)) * (hght - obs_ht(k0))
+
+return
+end function excess_obserr_percent
+
+! routines below here were lifted from soyoung ha's version of
+! the ncep bufr format converter for gps obs, including lidia's error spec
+
+! soyoung says this error spec from bill is only 1 of 5 possible profiles
+! and most appropriate for the CONUS domain.  if used for global obs, it
+! should be updated to include the other functions.  nsc jan 2016
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   ref_obserr_kuo_percent - function that computes the observation 
+!                            error for a refractivity observation.
+!                            These numbers are taken from a Kuo paper.
+!
+!    hght - height of refractivity observation
+!
+!     created Hui Liu NCAR/MMM
+!     modified June 2008, Ryan Torn NCAR/MMM
+!     modified August 2015, Soyoung Ha NCAR/MMM
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function ref_obserr_kuo_percent(hght)
+
+use   types_mod, only : r8
+
+implicit none
+
+integer, parameter :: nobs_level = 22  !  maximum number of obs levels
+
+real(r8), intent(in)  :: hght
+
+integer  :: k, k0
+real(r8) :: hght0, ref_err(nobs_level), obs_ht(nobs_level), ref_obserr_kuo_percent
+
+!   observation error heights (km) and errors
+data obs_ht/17.98_r8, 16.39_r8, 14.97_r8, 13.65_r8, 12.39_r8, 11.15_r8, &
+             9.95_r8,  8.82_r8,  7.82_r8,  6.94_r8,  6.15_r8,  5.45_r8, & 
+             4.83_r8,  4.27_r8,  3.78_r8,  3.34_r8,  2.94_r8,  2.59_r8, & 
+             2.28_r8,  1.99_r8,  1.00_r8,  0.00_r8/
+
+data ref_err/0.48_r8,  0.56_r8,  0.36_r8,  0.28_r8,  0.33_r8,  0.41_r8, & 
+             0.57_r8,  0.73_r8,  0.90_r8,  1.11_r8,  1.18_r8,  1.26_r8, & 
+             1.53_r8,  1.85_r8,  1.81_r8,  2.08_r8,  2.34_r8,  2.43_r8, & 
+             2.43_r8,  2.43_r8,  2.43_r8,  2.43_r8/
+
+hght0 = max(hght, 0.0_r8)
+
+do k = 1, nobs_level
+  
+  k0 = k
+  if ( hght0 >= obs_ht(k) )  exit
+
+end do 
+
+if(k0.eq.1) then    ! HA
+   ref_obserr_kuo_percent = ref_err(k0)
+else
+   ref_obserr_kuo_percent = ref_err(k0) + (ref_err(k0) - ref_err(k0-1)) / &
+                           (obs_ht(k0)-obs_ht(k0-1)) * (hght0-obs_ht(k0))
+endif
+
+return
+end function ref_obserr_kuo_percent
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   gsi_refractivity_error - function that computes the observation 
+!                            error as in GSI
+!
+!    Input:
+!    H   -- input real value geometric height [m]
+!    lat -- latitude in degree 
+!    is_it_global -- is your forecast model regional or global? (T or F)
+!    factor -- quick way to scale all the errors up or down for testing
+!
+!    Output:
+!    gsi_refractivity_error -- output refractivity observation error [N]
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function gsi_refractivity_error(H, lat, is_it_global, factor)
+ real(r8), intent(in)  :: H
+ real(r8), intent(in)  :: lat
+ logical,  intent(in)  :: is_it_global
+ real(r8), intent(in)  :: factor
+ real(r8)              :: gsi_refractivity_error
+
+ real(r8) :: zkm, rerr
+ integer  :: kk
+ 
+ zkm = H * 0.001       ! height in km
+ rerr = 1.0_r8
+
+ if(is_it_global) then    ! for global
+
+ if((lat >= 20.0_r8) .or. (lat <= -20.0_r8)) then
+    rerr = -1.321_r8 + 0.341_r8 * zkm - 0.005_r8 * zkm ** 2
+ else
+    if(zkm > 10.0_r8) then
+       rerr = 2.013_r8 - 0.060_r8 * zkm + 0.0045_r8 * zkm ** 2
+    else
+       rerr = -1.18_r8 + 0.058_r8 * zkm + 0.025_r8 * zkm ** 2
+    endif
+ endif
+
+ else     ! for regional 
+
+ if((lat >= 20.0_r8) .or. (lat <= -20.0_r8)) then
+    if(zkm > 10.0_r8) then
+       rerr = -1.321_r8 + 0.341_r8 * zkm - 0.005_r8 * zkm ** 2
+    else
+       rerr = -1.2_r8 + 0.065_r8 * zkm + 0.021_r8 * zkm ** 2
+    endif
+ endif
+
+ endif    ! if(is_it_global) then
+
+ if (factor /= 1.0_r8) then
+    gsi_refractivity_error = 1./(abs(exp(rerr))*factor)
+ else
+    gsi_refractivity_error = 1./abs(exp(rerr))
+ endif
+
+ return
+end function gsi_refractivity_error
+
+! end error options
+
+! next function is currently unused in this converter:
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!    compute_geopotential_height 
+!    subroutine converts geometric height to geopotential height
+!
+!    Input:
+!    H   -- input real value geometric height [m]
+!    lat -- latitude in degree 
+!
+!    Output:
+!    Z -- output real value geopotential height [m]
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function compute_geopotential_height(H, lat)
+ real(r8), intent(in)  :: H 
+ real(r8), intent(in)  :: lat
+ real(r8)              :: compute_geopotential_height
+
+! -----------------------------------------------------------------------*/
+   real(r8) :: pi2, latr
+   real(r8) :: semi_major_axis, semi_minor_axis, grav_polar, grav_equator
+   real(r8) :: earth_omega, grav_constant, flattening, somigliana
+   real(r8) :: grav_ratio, sin2, termg, termr, grav, eccentricity
+
+!  Parameters below from WGS-84 model software inside GPS receivers.
+   parameter(semi_major_axis = 6378.1370d3)    ! (m)
+   parameter(semi_minor_axis = 6356.7523142d3) ! (m)
+   parameter(grav_polar = 9.8321849378)        ! (m/s2)
+   parameter(grav_equator = 9.7803253359)      ! (m/s2)
+   parameter(earth_omega = 7.292115d-5)        ! (rad/s)
+   parameter(grav_constant = 3.986004418d14)   ! (m3/s2)
+   parameter(grav = 9.80665d0)                 ! (m/s2) WMO std g at 45 deg lat
+   parameter(eccentricity = 0.081819d0)        ! unitless
+   parameter(pi2 = 3.14159265358979d0/180.d0)
+
+!  Derived geophysical constants
+   parameter(flattening = (semi_major_axis-semi_minor_axis) / semi_major_axis)
+
+   parameter(somigliana = (semi_minor_axis/semi_major_axis)*(grav_polar/grav_equator)-1.d0)
+
+   parameter(grav_ratio = (earth_omega*earth_omega * &
+                semi_major_axis*semi_major_axis * semi_minor_axis)/grav_constant)
+
+!  Sanity Check
+   if(lat.gt.90 .or. lat.lt.-90) then
+      print*, 'compute_geopotential_height: Latitude is not between -90 and 90 degrees: ',lat
+      return
+   endif
+
+   latr = lat * (pi2)        ! in radians
+   sin2  = sin(latr) * sin(latr)
+   termg = grav_equator * ( (1.d0+somigliana*sin2) / &
+           sqrt(1.d0-eccentricity*eccentricity*sin2) )
+   termr = semi_major_axis / (1.d0 + flattening + grav_ratio - 2.d0*flattening*sin2)
+
+   compute_geopotential_height = (termg/grav)*((termr*H)/(termr+H))
+   !print '(A,3f15.5)','compute_geopotential_height:',&
+   !                   H,compute_geopotential_height,H-compute_geopotential_height
+
+end function compute_geopotential_height
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 end program
 

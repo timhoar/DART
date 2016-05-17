@@ -65,8 +65,6 @@
    inf_sd_lower_bound          = 0.0,                     0.0
    /
 
-# inf_flavor is 0:none, 1:obs space, 2: varying state space, 3: fixed state_space
-
 &smoother_nml
    num_lags              = 0
    start_from_restart    = .false.
@@ -121,7 +119,7 @@
 #              'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',   'NO_COPY_BACK',
 #              'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',   'NO_COPY_BACK',
 #              'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary', 'NO_COPY_BACK',
-#              'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'  'NO_COPY_BACK' 
+#              'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'  'NO_COPY_BACK'
 
 &model_nml
    debug                       = 1
@@ -140,7 +138,7 @@
                'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
                'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
                'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
-               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK' 
+               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
    /
 
 
@@ -171,7 +169,7 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'CHAMP_DENSITY','GPS_VTEC_EXTRAP','SSUSI_O_N2_RATIO'
-   evaluate_these_obs_types   = 'GPS_PROFILE','GROUND_SLANT_TEC','GND_GPS_VTEC'
+   evaluate_these_obs_types   = 'GPS_PROFILE','GND_GPS_VTEC'
    /
 
 &assim_model_nml

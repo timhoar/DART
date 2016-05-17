@@ -145,8 +145,8 @@ output from the script. Check that first. If that does not provide the
 information needed, go to the run directory (i.e. CENTRALDIR) and check the 
 <em class=file>dart_log.out</em>. It usually provides the same information as
 the email, but sometimes it can help. If that does not help, go to any of
-the CENTRALDIR/<em class=file>advance_temp00??</em> directories and read the 
-<em class=file>log_advance.00??.txt</em> file. 
+the CENTRALDIR/<em class=file>advance_temp<i>nnnn</i></em> directories and read the 
+<em class=file>log_advance.<i>nnnn</i>.txt</em> file. 
 <P>
 
 <!--=====================================================================-->
@@ -1135,24 +1135,28 @@ and can be modified to suit your needs.
 
 <TABLE width=100% border=0 cellspacing=10 cellpadding=3 summary="">
 <TBODY valign=top>
-<TR><TH align=left>filename</TH>
+<TR><TH align=left><em class=file>filename</em></TH>
     <TH align=left>purpose</TH></TR>
-<TR><TD>tiegcm.nml</TD>
+<TR><TD><em class=file>tiegcm.nml</em></TD>
     <TD>TIEGCM control file modified to control starting and stopping.</TD></TR>
-<TR><TD>input.nml</TD>
+<TR><TD><em class=file>input.nml</em></TD>
     <TD>to read the model_mod namelist</TD></TR>
-<TR><TD>tiegcm_restart_p.nc</TD>
+<TR><TD><em class=file>tiegcm_restart_p.nc</em></TD>
     <TD>both read and modified by the TIEGCM model_mod</TD></TR>
-<TR><TD>tiegcm_s.nc</TD>
+<TR><TD><em class=file>tiegcm_s.nc</em></TD>
     <TD>read by the GCOM model_mod for metadata purposes.</TD></TR>
-<TR><TD>namelist_update</TD>
+<TR><TD><em class=file>namelist_update</em></TD>
     <TD>DART file containing information useful for starting and stopping TIEGCM.
         <em class=program>advance_model.csh</em> uses this to update the 
         TIEGCM file <em class=program>tiegcm.nml</em></TD></TR>
-<TR><TD>dart_log.out</TD>
+<TR><TD><em class=file>dart_log.out</em></TD>
     <TD>the run-time diagnostic output</TD></TR>
-<TR><TD>dart_log.nml</TD>
+<TR><TD><em class=file>dart_log.nml</em></TD>
     <TD>the record of all the namelists (and their values) actually USED 
+        </TD></TR>
+<TR><TD><em class=file>log_advance.<i>nnnn</i>.txt</em></TD>
+    <TD>the run-time output of everything that happens in <em class=program>advance_model.csh</em>. 
+        This file will be in the <em class=file>advance_temp<i>nnnn</i></em> directory.
         </TD></TR>
 </TABLE>
 
