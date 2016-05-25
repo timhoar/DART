@@ -138,7 +138,26 @@ executables, initial ensemble, etc.
        <li>Steps 1-5 are repeated until the input DART observation sequence file
       
 </OL>
-   
+  
+<H3>Observation types and their converter programs:</H3>
+<OL>
+    <li>CHAMP_DENSITY ... 
+       <ul><li>CHAMP/CHAMP_density_text_to_obs.f90</li></ul>
+    </li>
+
+    <li>SSUSI_O_N2_RATIO
+       <ul><li>SSUSI/convert_f16_edr_dsk.f90</li></ul>
+    </li>
+
+    <li>GND_GPS_VTEC
+       <ul><li>gnd_gps_vtec/gnd_gps_vtec_text_to_obs.f90</li></ul>
+    </li>
+
+    <li>SAT_RHO
+       <ul><li>text_GITM/text_to_obs.f90</li></ul>
+    </li>
+</OL>
+
 <H3>What to check when things go wrong.</H3>
 <P>The scripts are designed to send email to the user that contains the run-time
 output from the script. Check that first. If that does not provide the 

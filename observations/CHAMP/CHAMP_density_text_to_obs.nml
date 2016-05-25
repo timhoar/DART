@@ -1,0 +1,11 @@
+
+# Valid "observation_type"s are: CHAMP_DENSITY, GRACEA_DENSITY, GRACEB_DENSITY, SAT_RHO
+
+&CHAMP_density_text_to_obs_nml
+   text_input_file         = "../data/2002/Density_3deg_02_338.ascii"
+   obs_out_file            = "obs_seq.out"
+   observation_type        = "CHAMP_DENSITY"
+   append_to_existing_file = .false.
+   debug                   = .false.
+  /
+
