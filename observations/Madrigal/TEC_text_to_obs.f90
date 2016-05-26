@@ -24,7 +24,7 @@ use  time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                               set_date, set_time, get_time, print_date, &
                               operator(-), operator(+), operator(>=)
 
-use      location_mod, only : VERTISHEIGHT
+use      location_mod, only : VERTISHEIGHT, VERTISLEVEL
 
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                               static_init_obs_sequence, init_obs, write_obs_seq, &
@@ -47,39 +47,37 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=256) :: text_input_file            = 'gps050122g.002.txt'
 character(len=256) :: obs_out_file               = 'obs_seq.out'
-character(len=obstypelength) :: observation_type = 'GPS_VTEC_EXTRAP'
-logical            :: append_to_existing_file    = .false.
-logical            :: debug                      = .true.
 
 namelist /TEC_text_to_obs_nml/  &
      text_input_file, &
-     obs_out_file,    &
-     observation_type,  &
-     append_to_existing_file,  &
-     debug
+     obs_out_file
+
+character(len=obstypelength) :: observation_type = 'GPS_VTEC_EXTRAP'
 
 character(len=512)  :: string1, string2
 character(len=1024) :: input_line
 
 integer :: oday, osec, rcio, iunit
-integer :: year, day, second
+integer :: iloc, num_missing
+integer :: year, month, day, hour, minute, second
 integer :: num_copies, num_qc, max_obs, linenum
 integer :: observation_type_int
 
-logical  :: file_exist, first_obs
+logical  :: first_obs
 
-real(r8) :: temp, terr, qc
-real(r8) :: lat, lon, vert
+real(r8) :: tec, tec_std, qc
+real(r8) :: lat, lon
 
-real(r8) :: second_r !CHAMP seconds are reals instead of ints
+!The error variance was chosen by Alex Chartier ... this includes
+! observation error and error of representativeness.
+real(r8), PARAMETER :: observation_error_variance = 25.0_r8
 
 !variables to be discarded (only needed so that the read line works)
 integer  :: ignore_i
-real     :: ignore_r
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
-type(time_type)         :: comp_day0, time_obs, prev_time
+type(time_type)         :: time_obs, prev_time
 
 ! start of executable code
 
@@ -90,6 +88,7 @@ call find_namelist_in_file('input.nml', 'TEC_text_to_obs_nml', iunit)
 read(iunit, nml = TEC_text_to_obs_nml, iostat = rcio)
 call check_namelist_read(iunit, rcio, 'TEC_text_to_obs_nml')
 
+! Not really needed, but already here when imported from CHAMP ...
 call set_observation_type()
 
 ! time setup
@@ -106,7 +105,7 @@ call error_handler(E_MSG, 'TEC_text_to_obs', string1, &
 ! each observation in this series will have a single observation value
 ! and a quality control flag.  the max possible number of obs needs to
 ! be specified but it will only write out the actual number created.
-max_obs    = 100000
+max_obs    = 2000000
 num_copies = 1
 num_qc     = 1
 
@@ -125,53 +124,37 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 call set_copy_meta_data(obs_seq, 1, 'observation')
 call set_qc_meta_data(obs_seq, 1, 'Data QC')
 
-! If you want to append to existing files (e.g. you have a lot of
-! small text files you want to combine), you can do it this way,
-! or you can use the obs_sequence_tool to merge a list of files
-! once they are in DART obs_seq format.
-
-if (append_to_existing_file) then
-   inquire(file=obs_out_file, exist=file_exist)
-   if ( file_exist ) then
-     write(string1,*)'..  inserting into "'//trim(obs_out_file)//'"'
-     call error_handler(E_MSG,'TEC_text_to_obs',string1)
-     call read_obs_seq(obs_out_file, 0, 0, max_obs, obs_seq)
-   endif
-endif
-
 ! Set the DART data quality control.   0 is good data.
 ! increasingly larger QC values are more questionable quality data.
+
 qc = 0.0_r8
 
-! The first  line is the version and origin information.
-! The second line is a description of the columns and units.
+! The first line is a description of the columns and units.
 ! As long as these are constant, we can skip them.
-! column 01 * Two-digit Year (years)
-! column 02 * Day of the Year (days)
-! column 03 * Second of the Day (GPS time,sec)
-! column 04 * Center Latitude of 3-degree Bin (deg)
-! column 05 * Satellite Geodetic Latitude (deg)
-! column 06 * Satellite Longitude (deg)
-! column 07 * Satellite Height (km)
-! column 08 * Satellite Local Time (hours)
-! column 09 * Satellite Quasi-Dipole Latitude (deg)
-! column 10 * Satellite Magnetic Longitude (deg)
-! column 11 * Satellite Magnetic Local Time (hours)
-! column 12 * Neutral Density (kg/m^3)
-! column 13 * Neutral Density Normalized to 400km using NRLMSISe00
-! column 14 * Neutral Density Normalized to 410km using NRLMSISe00
-! column 15 * NRLMSISe00 Neutral Density at Satellite Height
-! column 15 * Uncertainty in Neutral Density (kg/m^3)
-! column 17 * Number of Data Points in Current Averaging Bin
-! column 18 * Number of Points in Current Averaging Bin that Required Interpolation
-! column 19 * Average Coefficient of Drag Used in Current Averaging Bin
+! column 01 * YEAR
+! column 02 * MONTH
+! column 03 * DAY
+! column 04 * HOUR
+! column 05 * MIN
+! column 06 * SEC
+! column 07 * UT1_UNIX   (skipping)
+! column 08 * UT2_UNIX   (skipping)
+! column 09 * RECNO      (skipping)
+! column 10 * GDLAT Geodetic latitude of measurement - Units: deg
+! column 11 * GLON Geographic longitude of measurement - Units: deg
+! column 12 * TEC Vertically integrated electron density - Units: tec
+! column 13 * DTEC Error in Vertically integrated electron density - Units: tec
+!
+! 1 TEC unit = 1E16 electrons per square meter
 
 read(iunit,"(A)") input_line
-read(iunit,"(A)") input_line
 
-linenum = 2
+linenum = 1
+num_missing = 0
 
 obsloop: do    ! no end limit - have the loop break when input ends
+
+   if (mod(linenum,100000) == 0) write(*,*)'Processing line ',linenum 
 
    ! read in a line from the text file.   What you need to create an obs:
    !  location: lat, lon, and height in pressure or meters
@@ -184,9 +167,10 @@ obsloop: do    ! no end limit - have the loop break when input ends
    read(iunit, "(A)", iostat=rcio) input_line
 
    if (rcio < 0) then
-      write(string1,*) trim(text_input_file)//' had ', linenum-2,' observations.'
+      write(string1,*) trim(text_input_file)//' had ', linenum-1,' data lines.'
+      write(string2,*) 'of those, ',num_missing,' had "missing" values.'
       call error_handler(E_MSG,'TEC_text_to_obs',string1, &
-                         source, revision, revdate)
+                 source, revision, revdate, text2=string2)
       exit obsloop
    endif
 
@@ -194,70 +178,67 @@ obsloop: do    ! no end limit - have the loop break when input ends
       write(string1,*) 'got bad read code (', rcio,') on line ',linenum
       write(string2,*) 'of ',trim(text_input_file)
       call error_handler(E_ERR,'TEC_text_to_obs',string1, &
-                   source, revision, revdate, text2=string2)
+                 source, revision, revdate, text2=string2)
    endif
 
    linenum = linenum + 1
 
-   ! here is a line from sisko.colorado.edu/sutton/data/ver2.2/champ/density/2002/ascii/,
-   !data format is:
-   !+ 1)year(2I), 2)day(3I), 3)second(8.3F), 4)round(lat), 5)lat(d,-90 90), 6)lon(d,-180 180), 7)alt(km),
-   !+ 8)LT, 9)Mlat, 10)Mlon, 11)MLT, 12)Rho(Density!), 13)MSISRho400, 14)MSISRho410, 15)MSISRhoSat
-   !+ 16)Rho uncertainty (I'm guessing std deviation from units: kg/m^3) 17)points averaged over
-   !+ 18)points needing interpolation 19)coeff of drag averaged over bin
+   ! Some of the lines have 'missing' (as a character string). If this 
+   ! is present - count them up, skip the line and cycle to the next line.
+
+   iloc = index(input_line,'missing')
+   if (iloc /= 0) then
+      num_missing = num_missing + 1
+      cycle obsloop
+   endif
+
+   ! assumed format:
+   !  1    2     3   4    5   6     7        8       9    10    11   12  13
+   ! YEAR MONTH DAY HOUR MIN SEC UT1_UNIX UT2_UNIX RECNO GDLAT GLON TEC DTEC
 
    read(input_line, *, iostat=rcio) &
-        year, day, second_r, ignore_i, lat, lon, vert, &
-        ignore_r, ignore_r, ignore_r, ignore_r, temp, ignore_r, ignore_r, ignore_r, &
-        terr, ignore_i, &
-        ignore_i, ignore_r
+        year, month, day, hour, minute, second, ignore_i, ignore_i, ignore_i, lat, lon, tec, tec_std
 
    if (rcio /= 0) then
       write(string1,*) 'unable to parse line ',linenum
       write(string2,*) 'of ',trim(text_input_file)
       call error_handler(E_ERR,'TEC_text_to_obs',string1, &
-                      source, revision, revdate, text2=string2)
+                 source, revision, revdate, text2=string2)
    endif
 
-   vert = vert * 1000.0_r8 ! DART needs alt in meters, CHAMP has km
-
-   if (debug) print *, 'this observation located at lat, lon, vert = ', lat, lon, vert
-
    ! if lon comes in between -180 and 180, use these lines instead:
-   if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
-   if ( lon > 180.0_r8 .or. lon < -180.0_r8 ) cycle obsloop
-   if ( lon <   0.0_r8 ) lon = lon + 360.0_r8 ! changes into 0-360
+   if ( lat >   90.0_r8 ) lat =  90.0_r8
+   if ( lat <  -90.0_r8 ) lat = -90.0_r8
+   if ( lon <    0.0_r8 ) lon = lon + 360.0_r8
+   if ( lon >= 360.0_r8 ) lon = 0.0_r8
 
    ! put date into a dart time format
 
-   year      = 2000 + year !because year in file is (2I) - 2 digits
-   comp_day0 = set_date(year, 1, 1, 0, 0, 0)  ! always Jan 1 of whatever year.
-   second    = nint(second_r)
-   time_obs  = comp_day0 + set_time(second, day-1)
+   time_obs = set_date(year, month, day, hour, minute, second)
 
    ! extract time of observation into gregorian day, sec.
    call get_time(time_obs, osec, oday)
 
-   if (debug) call print_date(time_obs, 'this obs time is')
-
    ! make an obs derived type, and then add it to the sequence
+   ! The choice of sticking it at model level 20 is problematic
+   ! but allows vertical localization. This should be some
+   ! better vertisheight
 
-   call create_3d_obs(lat, lon, vert, VERTISHEIGHT, temp, &
-                      observation_type_int, terr, oday, osec, qc, obs)
+   call create_3d_obs(lat, lon, 20.0_r8, VERTISLEVEL, tec, &
+               observation_type_int, observation_error_variance, oday, osec, qc, obs)
    call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
-
-   if (debug) print *, 'added '//trim(observation_type)//' obs to output seq'
 
 end do obsloop
 
 ! if we added any obs to the sequence, write it out to a file now.
 if ( get_num_obs(obs_seq) > 0 ) then
-   !if (debug) print *, 'writing obs_seq, obs_count = ', get_num_obs(obs_seq)
-   print *, 'writing obs_seq, obs_count = ', get_num_obs(obs_seq)
+   write(string1, *)'obs_count = ', get_num_obs(obs_seq)
+   call error_handler(E_MSG, 'TEC_text_to_obs', string1, &
+              source, revision, revdate)
    call write_obs_seq(obs_seq, obs_out_file)
 else
    call error_handler(E_MSG,'TEC_text_to_obs','no observations in sequence', &
-                      source, revision, revdate)
+              source, revision, revdate)
 endif
 
 ! end of main program
@@ -279,19 +260,13 @@ character(len=obstypelength) :: observation_string
 observation_string = observation_type
 call to_upper(observation_string)
 
-if     (trim(observation_string) == 'TEC') then
-              observation_type_int = TEC
-elseif (trim(observation_string) == 'GRACEA_DENSITY') then
-              observation_type_int = GRACEA_DENSITY
-elseif (trim(observation_string) == 'GRACEB_DENSITY') then
-              observation_type_int = GRACEB_DENSITY
-elseif (trim(observation_string) == 'SAT_RHO') then
-              observation_type_int = SAT_RHO
+if     (trim(observation_string) == 'GPS_VTEC_EXTRAP') then
+              observation_type_int = GPS_VTEC_EXTRAP
 else 
    write(string1,*)'Unable to interpret observation string "'//trim(observation_type)//'"'
-   write(string2,*)'valid strings are "GPS_VTEC_EXTRAP"'
+   write(string2,*)'valid string is "GPS_VTEC_EXTRAP"'
    call error_handler(E_ERR, 'TEC_text_to_obs', string1, &
-                      source, revision, revdate, text2=string2)
+              source, revision, revdate, text2=string2)
 endif  
 
 end subroutine set_observation_type

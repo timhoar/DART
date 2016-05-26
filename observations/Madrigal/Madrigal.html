@@ -71,13 +71,77 @@ set of data. There are several methods of data download (Python, Matlab) - this 
 The remaining instructions assume you have downloaded an ASCII file and put it in the
 <em class=file>Madrigal/downloads</em> directory.
 </P>
-<div class=unix>
+
+<div>This was the result of the "<em class=mono>View info</em>" menu:
 <pre>
-cd Madrigal/data
-tar -zxvf ../downloads/Density_3deg_2002.ascii.tar.gz
-chmod 444 2002/*.ascii
+Catalog/Header information for gps050124g.002
+
+Catalog information from record 0:
+
+KRECC       2001 Catalogue Record, Version 1                                    
+KINSTE      8000  World-wide GPS Receiver Network                               
+MODEXP         1  Conversion to vertical TEC                                    
+CMODEXP All Total electron content (TEC) measurements in this file are          
+CMODEXP vertical TEC, where 1 TEC unit = 1E16 electrons per square meter.       
+CMODEXP The conversion from the line-of-sight TEC values to vertical TEC        
+CMODEXP are done by assuming a slab ionosphere at 350 km.  This means that      
+CMODEXP only elevation needs to be considered in mapping line-of-sight TEC      
+CMODEXP to vertical TEC.                                                        
+CMODEXP                                                                         
+CMODEXP Processing version 4.0 - Released May 13, 2009                          
+CMODEXP   4.0 notes: New logic added to remove isolated tec data below          
+CMODEXP              the TEC distribution median                                
+CMODEXP   3.0 notes: Fixes scaling bug in version 2.0.                          
+CMODEXP   2.0 notes:                                                            
+CMODEXP   This all-python processing code includes more rigorous                
+CMODEXP   error analysis, and uses Bayesian error analysis to                   
+CMODEXP   better estimate TEC, which reduces the error.                         
+CMODEXP                                                                         
+CMODEXP More details are available from: http://www.haystack.mit.edu/           
+C                                                                               
+GGLAT1       -90 degrees. Lowest geographic latitude measured                   
+GGLAT2        90 degrees. Highest geographic latitude measured                  
+GGLON1         0 degrees. Westmost geographic longitude measured                
+GGLON2       360 degrees. Eastmost geographic longitude measured                
+IBYRE       2005 Beginning year                                                 
+IBDTE       0124 Beginning month and day                                        
+IBHME       0000 Beginning UT hour and minute                                   
+IBCSE       0000 Beginning centisecond                                          
+IEYRE       2005 Ending year                                                    
+IEDTE       0125 Ending month and day                                           
+IEHME       0000 Ending UT hour and minute                                      
+IECSE       0000 Ending centisecond                                             
+C                                                                               
+CPI      A. Coster, B. Rideout                                                  
+CPREPDAT 2009-06-17 10:17:37.828097                                             
+
+Header information from record 1:
+
+KRECH               3002 Header Record, Version 2                               
+KINST          3    8000 World-wide GPS Receiver Network                        
+KINDAT         4    3500 Minimum scalloping TEC processing                      
+C                                                                               
+IBYRT               2005 Beginning year                                         
+IBDTT               0124 Beginning month and day                                
+IBHMT               0000 Beginning UT hour and minute                           
+IBCST               0000 Beginning centisecond                                  
+IEYRT               2005 Ending year                                            
+IEDTT               0125 Ending month and day                                   
+IEHMT               0000 Ending UT hour and minute                              
+IECST               0000 Ending centisecond                                     
+LPROL         13      16 Length of prologue in data records                     
+JPAR          14       0 Number of single-valued parameters                     
+MPAR          15       3 Number of multiple-values parameters                   
+C 2D Parameters:                                                                
+KODM(1)       17     160 Geodetic latitude of measurement        1.0e-02     deg
+KODM(2)              170 Geodetic longitude of measurement       1.0e-02     deg
+KODM(3)              524 Vertically integrated electron density  1.0e-01     tec
+KODM(4)             -524 Error in Vert integ electron density    1.0e-01     tec
+CANALYST B. Rideout (brideout@haystack.mit.edu)                                 
+CANDATE  2009-06-17 10:17:37.836526 
 </pre>
 </div>
+
 <P>
 This should expand into a <em class=file>Madrigal/data/2002</em> directory with a
 file for each day.  These are the input for the converter. The first line has
