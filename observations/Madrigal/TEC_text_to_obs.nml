@@ -1,0 +1,11 @@
+
+# Valid "observation_type"s are: GPS_VTEC_EXTRAP
+
+&TEC_text_to_obs_nml
+   text_input_file         = "../downloads/gps050122g.002.txt"
+   obs_out_file            = "obs_seq.out"
+   observation_type        = "CHAMP_DENSITY"
+   append_to_existing_file = .false.
+   debug                   = .false.
+  /
+

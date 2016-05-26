@@ -1,0 +1,317 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+          "http://www.w3.org/TR/html4/strict.dtd">
+<HTML>
+<HEAD>
+<TITLE>DART observation converters from the CEDAR Archival Madrigal Database</TITLE>
+<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
+<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+</HEAD>
+<BODY>
+<A NAME="TOP"></A>
+
+<H1>PROGRAM <em class=program>TEC_to_obs</em></H1>
+
+<table border=0 summary="" cellpadding=5>
+<tr>
+    <td valign=middle>
+    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    </td>
+    <td>
+       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+          <small><small>version information for this file: <br />
+          <!-- version tag follows, do not edit -->
+          $Id$</small></small>
+       </P></td>
+</tr>
+</table>
+
+<A HREF="#DataSources">DATA SOURCES</A> /
+<A HREF="#Programs">PROGRAMS</A> /
+<A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#References">REFERENCES</A> /
+<A HREF="#Errors">ERRORS</A> /
+<A HREF="#FuturePlans">PLANS</A> /
+<A HREF="#Legalese">TERMS OF USE</A>
+
+<H1>Overview</H1>
+
+<H4>World-wide Vertical Total Electron Content ASCII File to DART Observation Converter</H4>
+
+<P>
+The 
+<a href="http://madrigal.haystack.mit.edu/">CEDAR Archival Madrigal Database</a> 
+<br />can be converted to DART observation sequence files with 
+<em class=program>TEC_text_to_obs</em>.
+</P>
+
+<!--==================================================================-->
+
+<A NAME="DataSources"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>DATA SOURCES</H2>
+
+<P>
+The TEC can be downloaded from
+<a href="http://madrigal.haystack.mit.edu/">CEDAR Archival Madrigal Database</a> 
+after a trivial registration. It is then important to be able to navigate to the proper
+set of data. There are several methods of data download (Python, Matlab) - this document will simply outline the web interface method to download the data for a single day.
+</P>
+<OL><li>From the Madrigal home page, choose the "<em class=mono>Simple Local Data Access</em>" option.</li>
+    <li>Choose "<em class=mono>Distributed Ground Based Satellite Receivers</em>" from the instrument types.</li>
+    <li>Choose "<em class=mono>World-wide GPS Receiver Network [1998-2016]</em>"</li>
+    <li>Pick your Year, Month, and Day from the subsequent calendar choices.</li>
+    <li>after a short wait, the <em class=mono>Select File:</em> menu will appear.</li>
+    <li>If you select "<em class=mono>Print data</em>", your screen should look something like:</li>
+</OL>
+<div>
+<img src="Madrigal.png" alt="Madrigal download screenshot" />
+</div>
+
+<P>
+The remaining instructions assume you have downloaded an ASCII file and put it in the
+<em class=file>Madrigal/downloads</em> directory.
+</P>
+<div class=unix>
+<pre>
+cd Madrigal/data
+tar -zxvf ../downloads/Density_3deg_2002.ascii.tar.gz
+chmod 444 2002/*.ascii
+</pre>
+</div>
+<P>
+This should expand into a <em class=file>Madrigal/data/2002</em> directory with a
+file for each day.  These are the input for the converter. The first line has
+the version and origin information, the second line has the format for the rest
+of the lines in the file - i.e. an explanation of the columns. The first two
+lines are actually ignored by the converter.
+Lines 3-N constitute the data.
+</P>
+
+<!--==================================================================-->
+
+<A NAME="Programs"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>PROGRAMS</H2>
+
+<H3>CHAMP_density_text_to_obs</H3>
+<P>
+The <em class=file>CHAMP_density_text_to_obs.f90</em> file is the source code
+for the main converter program.
+<em class=program>CHAMP_density_text_to_obs</em>
+reads each text line into a character buffer
+and then reads from that buffer to parse up the data items.
+</P>
+
+<P>The data format supported by the converter is:</P>
+<table>
+<TR><TH align=left>column&nbsp;&nbsp;&nbsp;</TH><TH align=left>content</TH></TR>
+    <tr><td> 1 </td><td> Two-digit Year (years)</td></tr>
+    <tr><td> 2 </td><td> Day of the Year (days)</td></tr>
+    <tr><td> 3 </td><td> Second of the Day (GPS time,sec)</td></tr>
+    <tr><td> 4 </td><td> Center Latitude of 3-degree Bin (deg)</td></tr>
+    <tr><td> 5 </td><td> Satellite Geodetic Latitude (deg)</td></tr>
+    <tr><td> 6 </td><td> Satellite Longitude (deg)</td></tr>
+    <tr><td> 7 </td><td> Satellite Height (km)</td></tr>
+    <tr><td> 8 </td><td> Satellite Local Time (hours)</td></tr>
+    <tr><td> 9 </td><td> Satellite Quasi-Dipole Latitude (deg)</td></tr>
+    <tr><td>10 </td><td> Satellite Magnetic Longitude (deg)</td></tr>
+    <tr><td>11 </td><td> Satellite Magnetic Local Time (hours)</td></tr>
+    <tr><td>12 </td><td> Neutral Density (kg/m^3)</td></tr>
+    <tr><td>13 </td><td> Neutral Density Normalized to 400km using NRLMSISe00</td></tr>
+    <tr><td>14 </td><td> Neutral Density Normalized to 410km using NRLMSISe00</td></tr>
+    <tr><td>15 </td><td> NRLMSISe00 Neutral Density at Satellite Height</td></tr>
+    <tr><td>15 </td><td> Uncertainty in Neutral Density (kg/m^3)</td></tr>
+    <tr><td>17 </td><td> Number of Data Points in Current Averaging Bin</td></tr>
+    <tr><td>18 </td><td> Number of Points in Current Averaging Bin that Required Interpolation</td></tr>
+    <tr><td>19 </td><td> Average Coefficient of Drag Used in Current Averaging Bin</td></tr>
+</table>
+
+<H3>obs_sequence_tool</H3>
+<P>
+The <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence/obs_sequence_tool.f90</a> may be used to combine multiple observation sequence files into a single file, etc.
+See the <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool.html</a> for details.
+</P>
+
+<H3>advance_time</H3>
+<P>
+The <a href="../../time_manager/advance_time.html">time_manager/advance_time.f90</a> may also be 
+useful when scripting to set the time ranges.
+See the <a href="../../time_manager/advance_time.html">advance_time.html</a> for details.
+</P>
+
+<H2>Compiling and Testing</H2>
+<P>
+To compile and test, go into the <em class=file>CHAMP/work</em> subdirectory and
+run the <em class=program>quickbuild.csh</em>
+script to build the converter and a couple of general purpose utilities.
+The <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool</a>
+manipulates (i.e. combines, subsets) DART observation files once they have been created.
+The default observations supported are those defined in
+<a href="../../obs_def/obs_def_upper_atm_mod.f90">DART/obs_def/obs_def_upper_atm_mod.f90</a>.
+If you need additional observation types, you will have to add the
+appropriate <em class=file>obs_def_XXX_mod.f90</em> file to the
+<em class=file>input.nml</em>&nbsp;<em class=code>&amp;preprocess_nml:input_files</em>
+variable and run <em class=program>quickbuild.csh</em> again.
+It rebuilds the table of supported observation types before
+compiling the source code.
+</P>
+
+<P>&nbsp;</P><!-- needed to make 'top' align correctly -->
+
+<!--==================================================================-->
+<!--=================== DESCRIPTION OF A NAMELIST  ===================-->
+<!--==================================================================-->
+
+<A NAME="Namelist"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>NAMELIST</H2>
+<P>
+This namelist is read from the file <em class=file>input.nml</em>.
+Namelists start with an ampersand
+'&amp;' and terminate with a slash '/'.
+Character strings that contain a '/' must be
+enclosed in quotes to prevent them from
+prematurely terminating the namelist.
+</P>
+
+<div class=namelist>
+<pre>
+&amp;CHAMP_density_text_to_obs_nml
+   text_input_file         = "../data/2002/Density_3deg_02_338.ascii"
+   obs_out_file            = "obs_seq.out"
+   observation_type        = "CHAMP_DENSITY"
+   append_to_existing_file = .false.
+   debug                   = .false.
+  /
+</pre>
+</div>
+
+<br />
+
+<div>
+
+<TABLE border=0 cellpadding=3 width=100% summary='CHAMP namelist description'>
+<THEAD align=left>
+<TR><TH>Contents    </TH>
+    <TH>Type        </TH>
+    <TH>Description </TH></TR>
+</THEAD>
+
+<TBODY valign=top>
+<TR>
+<TR>
+ <TD>text_input_file</TD>
+ <TD>character(len=256)</TD>
+ <TD>The text file containing the raw observations for each site.
+</TD></TR>
+
+<TR>
+ <TD>obs_out_file</TD>
+ <TD>character(len=256)</TD>
+ <TD>The output observation sequence file for DART.
+</TD></TR>
+
+<TR>
+ <TD>observation_type</TD>
+ <TD>character(len=32)</TD>
+ <TD>The output observation <em class=mono>TYPE</em>. 
+     Possible choices are 
+     "<em class=mono>CHAMP_DENSITY</em>",
+     "<em class=mono>GRACEA_DENSITY</em> ",
+     "<em class=mono>GRACEB_DENSITY</em>",
+     "<em class=mono>SAT_RHO</em>"
+     Distinguishing between the satellites allows for a more thorough analysis later.
+</TD></TR>
+
+<TR>
+ <TD>append_to_existing_file</TD>
+ <TD>logical</TD>
+ <TD>A switch to specify whether or not you want to append the new observations
+     onto an existing observation sequence file.
+ <br /><em class=code>.true.</em> append to the existing observation sequence file.
+ <br /><em class=code>.false.</em> create a new file, wiping out any existing file.
+</TD></TR>
+
+<TR>
+ <TD>debug</TD>
+ <TD>logical</TD>
+ <TD>A switch to specify the amount of run-time output.
+ <br /><em class=code>.true.</em> the most amount of output.
+ <br /><em class=code>.false.</em> the least amount of output.
+</TD></TR>
+
+
+</TBODY>
+</TABLE>
+
+</div>
+
+<P>&nbsp;</P><!-- needed to make 'top' align correctly -->
+
+<!--==================================================================-->
+<!-- References.                                                      -->
+<!--==================================================================-->
+
+<A NAME="References"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>References</H2>
+<!-- ul>
+<li><a href="http://CHAMP.hwr.arizona.edu">The CHAMP web page.</a></li>
+
+<li>Franz, T.E, M. Zreda, R. Rosolem, T.P.A. Ferre, 2012:
+    Field validation of cosmic-ray soil moisture probe using a distributed sensor network.
+    <span style="font-style: italic;">Vadose Zone Journal</span> (in press),
+    <a href="http://dx.doi.org/10.2136/vzj2012.0046">doi:10.2136/vzj2012.0046</a>
+    </li>
+</ul -->
+
+<!--==================================================================-->
+<!-- Describe the bugs.                                               -->
+<!--==================================================================-->
+
+<A NAME="KnownBugs"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>KNOWN BUGS</H2>
+<P>
+none
+</P>
+
+<!--==================================================================-->
+<!-- Describe Future Plans.                                           -->
+<!--==================================================================-->
+
+<A NAME="FuturePlans"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>FUTURE PLANS</H2>
+<P>
+none
+</P>
+
+<!--==================================================================-->
+<!-- Legalese & Metadata                                              -->
+<!--==================================================================-->
+
+<A NAME="Legalese"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>Terms of Use</H2>
+
+<P>
+DART software - Copyright 2004 - 2013 UCAR.<br />
+This open source software is provided by UCAR, "as is",<br />
+without charge, subject to all terms of use at<br />
+<a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
+http://www.image.ucar.edu/DAReS/DART/DART_download</a>
+</P>
+
+<TABLE border=0 cellpadding=0 width=100% summary="">
+<TR><TD valign=top>Contact:       </TD><TD> Tim Hoar </TD></TR>
+<TR><TD valign=top>Revision:      </TD><TD> $Revision$ </TD></TR>
+<TR><TD valign=top>Source:        </TD><TD> $URL$ </TD></TR>
+<TR><TD valign=top>Change Date:   </TD><TD> $Date$ </TD></TR>
+<TR><TD valign=top>Change&nbsp;history:&nbsp;</TD><TD> try "svn&nbsp;log" or "svn&nbsp;diff" </TD></TR>
+</TABLE>
+
+<!--==================================================================-->
+
+</BODY>
+</HTML>
