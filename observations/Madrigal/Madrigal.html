@@ -38,10 +38,28 @@
 <H4>World-wide Vertical Total Electron Content ASCII File to DART Observation Converter</H4>
 
 <P>
-The 
+The World-wide GPS Receiver Network Total Electron Content (TEC) observations from the
 <a href="http://madrigal.haystack.mit.edu/">CEDAR Archival Madrigal Database</a> 
 <br />can be converted to DART observation sequence files with 
-<em class=program>TEC_text_to_obs</em>.
+<em class=program>TEC_text_to_obs</em>. A DART observation 'KIND' of GPS_VTEC_EXTRAP
+will be assigned to the observations.
+</P>
+<P>I am a big fan of giving credit where credit is due. Please read this quote from
+the Madrigal home page:
+<blockquote> <em class=italic>
+Use of the CEDAR Archival Madrigal Database is generally subject to the 
+CEDAR Rules-of-the-Road. Prior permission to access the data is not required. 
+However, the user is required to establish early contact with any organization 
+whose data are involved in the project to discuss the intended usage. Data are 
+often subject to limitations which are not immediately evident to new users. 
+Before they are formally submitted, draft copies of all reports and publications 
+must be sent to the contact scientist at all data-supplying organizations along 
+with an offer of co-authorship to scientists who have provided data. This offer 
+may be declined. The Database and the organizations that contributed data must 
+be acknowledged in all reports and publications, and whenever this data is 
+made available through another database. If you have any questions about 
+appropriate use of these data, contact brideout@haystack.mit.edu</em>
+</blockquote> 
 </P>
 
 <!--==================================================================-->
@@ -65,14 +83,12 @@ set of data. There are several methods of data download (Python, Matlab) - this 
 </OL>
 <div>
 <img src="Madrigal.png" alt="Madrigal download screenshot" />
+<hr />
 </div>
 
-<P>
-The remaining instructions assume you have downloaded an ASCII file and put it in the
-<em class=file>Madrigal/downloads</em> directory.
-</P>
+<P>This was the result of the "<em class=mono>View info</em>" menu:</P>
 
-<div>This was the result of the "<em class=mono>View info</em>" menu:
+<div>
 <pre>
 Catalog/Header information for gps050124g.002
 
@@ -142,14 +158,7 @@ CANDATE  2009-06-17 10:17:37.836526
 </pre>
 </div>
 
-<P>
-This should expand into a <em class=file>Madrigal/data/2002</em> directory with a
-file for each day.  These are the input for the converter. The first line has
-the version and origin information, the second line has the format for the rest
-of the lines in the file - i.e. an explanation of the columns. The first two
-lines are actually ignored by the converter.
-Lines 3-N constitute the data.
-</P>
+<P>&nbsp;</P><!-- needed to make 'top' align correctly -->
 
 <!--==================================================================-->
 
@@ -157,38 +166,42 @@ Lines 3-N constitute the data.
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>PROGRAMS</H2>
 
-<H3>CHAMP_density_text_to_obs</H3>
+<H3>TEC_text_to_obs.f90</H3>
 <P>
-The <em class=file>CHAMP_density_text_to_obs.f90</em> file is the source code
+The <em class=file>TEC_text_to_obs.f90.f90</em> file is the source code
 for the main converter program.
-<em class=program>CHAMP_density_text_to_obs</em>
+<em class=program>TEC_text_to_obs</em>
 reads each text line into a character buffer
 and then reads from that buffer to parse up the data items.
 </P>
 
-<P>The data format supported by the converter is:</P>
+<P>The data format (apparently version 2) supported by the converter is:</P>
 <table>
 <TR><TH align=left>column&nbsp;&nbsp;&nbsp;</TH><TH align=left>content</TH></TR>
-    <tr><td> 1 </td><td> Two-digit Year (years)</td></tr>
-    <tr><td> 2 </td><td> Day of the Year (days)</td></tr>
-    <tr><td> 3 </td><td> Second of the Day (GPS time,sec)</td></tr>
-    <tr><td> 4 </td><td> Center Latitude of 3-degree Bin (deg)</td></tr>
-    <tr><td> 5 </td><td> Satellite Geodetic Latitude (deg)</td></tr>
-    <tr><td> 6 </td><td> Satellite Longitude (deg)</td></tr>
-    <tr><td> 7 </td><td> Satellite Height (km)</td></tr>
-    <tr><td> 8 </td><td> Satellite Local Time (hours)</td></tr>
-    <tr><td> 9 </td><td> Satellite Quasi-Dipole Latitude (deg)</td></tr>
-    <tr><td>10 </td><td> Satellite Magnetic Longitude (deg)</td></tr>
-    <tr><td>11 </td><td> Satellite Magnetic Local Time (hours)</td></tr>
-    <tr><td>12 </td><td> Neutral Density (kg/m^3)</td></tr>
-    <tr><td>13 </td><td> Neutral Density Normalized to 400km using NRLMSISe00</td></tr>
-    <tr><td>14 </td><td> Neutral Density Normalized to 410km using NRLMSISe00</td></tr>
-    <tr><td>15 </td><td> NRLMSISe00 Neutral Density at Satellite Height</td></tr>
-    <tr><td>15 </td><td> Uncertainty in Neutral Density (kg/m^3)</td></tr>
-    <tr><td>17 </td><td> Number of Data Points in Current Averaging Bin</td></tr>
-    <tr><td>18 </td><td> Number of Points in Current Averaging Bin that Required Interpolation</td></tr>
-    <tr><td>19 </td><td> Average Coefficient of Drag Used in Current Averaging Bin</td></tr>
+    <tr><td> 1 </td><td> YEAR   </td></tr>
+    <tr><td> 2 </td><td> MONTH  </td></tr>
+    <tr><td> 3 </td><td> DAY    </td></tr>
+    <tr><td> 4 </td><td> HOUR   </td></tr>
+    <tr><td> 5 </td><td> MINUTE </td></tr>
+    <tr><td> 6 </td><td> SECOND </td></tr>
+    <tr><td> 7 </td><td> UT1_UNIX (which DART ignores) </td></tr>
+    <tr><td> 8 </td><td> UT2_UNIX (which DART ignores) </td></tr>
+    <tr><td> 9 </td><td> RECNO    (which DART ignores) </td></tr>
+    <tr><td>10 </td><td> Geodetic latitude of measurement - Units: deg </td></tr>
+    <tr><td>11 </td><td> Geographic longitude of measurement - Units: deg </td></tr>
+    <tr><td>12 </td><td> Vertically integrated electron density - Units: tec </td></tr>
+    <tr><td>13 </td><td> Error in Vertically integrated electron density - Units: tec</td></tr>
 </table>
+<P>1 TEC unit = 1E16 electrons per square meter.
+<br />
+<br />
+Since the provided Error (column 13) does not include "error of representativeness" (the mismatch between the instrument footprint and the model resolution), an assumption of an observation error variance of 25 has been used as in
+(<a href="#References">Chartier, 2016</a>). Furthermore, a vertical location of 350km has been assigned to the observations to enable vertical localization if desired.
+The observations will be DART KIND <strong>GPS_VTEC_EXTRAP</strong>. To assimilate 
+or evaluate these observations, <strong>GPS_VTEC_EXTRAP</strong> must appear in the
+<em class=file>input.nml</em>&nbsp;<em class=code>&amp;obs_kind_nml</em>namelist section
+when running <em class=program>filter</em> or <em class=program>perfect_model_obs</em>.
+</P>
 
 <H3>obs_sequence_tool</H3>
 <P>
@@ -205,7 +218,7 @@ See the <a href="../../time_manager/advance_time.html">advance_time.html</a> for
 
 <H2>Compiling and Testing</H2>
 <P>
-To compile and test, go into the <em class=file>CHAMP/work</em> subdirectory and
+To compile and test, go into the <em class=file>Madrigal/work</em> subdirectory and
 run the <em class=program>quickbuild.csh</em>
 script to build the converter and a couple of general purpose utilities.
 The <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool</a>
@@ -218,6 +231,15 @@ appropriate <em class=file>obs_def_XXX_mod.f90</em> file to the
 variable and run <em class=program>quickbuild.csh</em> again.
 It rebuilds the table of supported observation types before
 compiling the source code.
+</P>
+
+<P>
+These instructions assume you have downloaded an ASCII file and put it 
+in the <em class=file>Madrigal/downloads</em> directory. Running
+<a href="shell_scripts/convert_day_by_day.csh">shell_scripts/convert_day_by_day.csh</a>
+will automatically converting all the files in the 
+<em class=file>downloads</em> directory to an equal number of DART observation 
+sequence files that have the YYYY_MM_DD as a suffix.
 </P>
 
 <P>&nbsp;</P><!-- needed to make 'top' align correctly -->
@@ -240,12 +262,9 @@ prematurely terminating the namelist.
 
 <div class=namelist>
 <pre>
-&amp;CHAMP_density_text_to_obs_nml
-   text_input_file         = "../data/2002/Density_3deg_02_338.ascii"
-   obs_out_file            = "obs_seq.out"
-   observation_type        = "CHAMP_DENSITY"
-   append_to_existing_file = .false.
-   debug                   = .false.
+&amp;TEC_text_to_obs_nml
+   text_input_file  = "../downloads/gps050122g.002.txt"
+   obs_out_base     = "obs_seq.out"
   /
 </pre>
 </div>
@@ -254,7 +273,7 @@ prematurely terminating the namelist.
 
 <div>
 
-<TABLE border=0 cellpadding=3 width=100% summary='CHAMP namelist description'>
+<TABLE border=0 cellpadding=3 width=100% summary='TEC namelist description'>
 <THEAD align=left>
 <TR><TH>Contents    </TH>
     <TH>Type        </TH>
@@ -270,40 +289,13 @@ prematurely terminating the namelist.
 </TD></TR>
 
 <TR>
- <TD>obs_out_file</TD>
+ <TD>obs_out_base</TD>
  <TD>character(len=256)</TD>
- <TD>The output observation sequence file for DART.
+ <TD>The base portion of the output observation sequence file for DART.
+     This base will be appended with a ".YYYY_MM_DD" string that contains
+     the year, month, and day of the observations in the file. Since each
+     input file is a single day, this is easy.
 </TD></TR>
-
-<TR>
- <TD>observation_type</TD>
- <TD>character(len=32)</TD>
- <TD>The output observation <em class=mono>TYPE</em>. 
-     Possible choices are 
-     "<em class=mono>CHAMP_DENSITY</em>",
-     "<em class=mono>GRACEA_DENSITY</em> ",
-     "<em class=mono>GRACEB_DENSITY</em>",
-     "<em class=mono>SAT_RHO</em>"
-     Distinguishing between the satellites allows for a more thorough analysis later.
-</TD></TR>
-
-<TR>
- <TD>append_to_existing_file</TD>
- <TD>logical</TD>
- <TD>A switch to specify whether or not you want to append the new observations
-     onto an existing observation sequence file.
- <br /><em class=code>.true.</em> append to the existing observation sequence file.
- <br /><em class=code>.false.</em> create a new file, wiping out any existing file.
-</TD></TR>
-
-<TR>
- <TD>debug</TD>
- <TD>logical</TD>
- <TD>A switch to specify the amount of run-time output.
- <br /><em class=code>.true.</em> the most amount of output.
- <br /><em class=code>.false.</em> the least amount of output.
-</TD></TR>
-
 
 </TBODY>
 </TABLE>
@@ -319,15 +311,15 @@ prematurely terminating the namelist.
 <A NAME="References"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>References</H2>
-<!-- ul>
-<li><a href="http://CHAMP.hwr.arizona.edu">The CHAMP web page.</a></li>
-
-<li>Franz, T.E, M. Zreda, R. Rosolem, T.P.A. Ferre, 2012:
-    Field validation of cosmic-ray soil moisture probe using a distributed sensor network.
-    <span style="font-style: italic;">Vadose Zone Journal</span> (in press),
-    <a href="http://dx.doi.org/10.2136/vzj2012.0046">doi:10.2136/vzj2012.0046</a>
-    </li>
-</ul -->
+<ul>
+<li> Chartier,&nbsp;A., T.&nbsp;Matsuo, J.&nbsp;L.&nbsp;Anderson, G.&nbsp;Lu, 
+     T.&nbsp;Hoar, N.&nbsp;Collins, A.&nbsp;Coster, C.&nbsp;Mitchell, 
+     L.&nbsp;Paxton, G.&nbsp;Bust (2016),<br />
+Ionospheric Data Assimilation and Forecasting During Storms.<br />
+<i>Journal of Geophysical Research: Space Physics</i>, <b>121</b>, 764-778,
+<a href="http://dx.doi.org/doi:10.1002/2014JA020799">10.1002/2014JA020799</a>
+</li>
+</ul>
 
 <!--==================================================================-->
 <!-- Describe the bugs.                                               -->
