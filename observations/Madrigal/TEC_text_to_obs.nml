@@ -1,8 +1,6 @@
 
-# Valid "observation_type"s are: GPS_VTEC_EXTRAP
-
 &TEC_text_to_obs_nml
    text_input_file         = "../downloads/gps050122g.002.txt"
-   obs_out_file            = "obs_seq.out"
+   obs_out_base            = "obs_seq.out"
   /
 

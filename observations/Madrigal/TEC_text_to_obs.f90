@@ -24,7 +24,7 @@ use  time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                               set_date, set_time, get_time, print_date, &
                               operator(-), operator(+), operator(>=)
 
-use      location_mod, only : VERTISHEIGHT, VERTISLEVEL
+use      location_mod, only : VERTISHEIGHT
 
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                               static_init_obs_sequence, init_obs, write_obs_seq, &
@@ -43,17 +43,20 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-! things which can/should be in the text_to_obs_nml
+! namelist variables
 
-character(len=256) :: text_input_file            = 'gps050122g.002.txt'
-character(len=256) :: obs_out_file               = 'obs_seq.out'
+character(len=256) :: text_input_file = 'gps050122g.002.txt'
+character(len=256) :: obs_out_base    = 'obs_seq.out'
 
 namelist /TEC_text_to_obs_nml/  &
      text_input_file, &
-     obs_out_file
+     obs_out_base
+
+! everbody else
 
 character(len=obstypelength) :: observation_type = 'GPS_VTEC_EXTRAP'
 
+character(len=256)  :: obs_out_file
 character(len=512)  :: string1, string2
 character(len=1024) :: input_line
 
@@ -220,21 +223,26 @@ obsloop: do    ! no end limit - have the loop break when input ends
    call get_time(time_obs, osec, oday)
 
    ! make an obs derived type, and then add it to the sequence
-   ! The choice of sticking it at model level 20 is problematic
-   ! but allows vertical localization. This should be some
-   ! better vertisheight
+   ! putting the observation at 350 km allows for vertical localization
+   ! DART location units for VERTISHEIGHT are meters.
 
-   call create_3d_obs(lat, lon, 20.0_r8, VERTISLEVEL, tec, &
+   call create_3d_obs(lat, lon, 350000.0_r8, VERTISHEIGHT, tec, &
                observation_type_int, observation_error_variance, oday, osec, qc, obs)
    call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
 end do obsloop
 
 ! if we added any obs to the sequence, write it out to a file now.
+! Since the files are in daily chunks, I am going to append the year/month/day
+! to the output file base. Whatever is in the year/month/day variables should
+! be correct.
+
+write(string1,'(''.'',i4.4,''_'',i2.2,''_'',i2.2)')year,month,day
+write(obs_out_file,'(A)')trim(obs_out_base)//trim(string1)
+
 if ( get_num_obs(obs_seq) > 0 ) then
    write(string1, *)'obs_count = ', get_num_obs(obs_seq)
-   call error_handler(E_MSG, 'TEC_text_to_obs', string1, &
-              source, revision, revdate)
+   call error_handler(E_MSG, 'TEC_text_to_obs', string1)
    call write_obs_seq(obs_seq, obs_out_file)
 else
    call error_handler(E_MSG,'TEC_text_to_obs','no observations in sequence', &
