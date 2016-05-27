@@ -38,7 +38,7 @@
 <H4>CHAMP "Version 2.2" ASCII File to DART Observation Converter</H4>
 
 <P>
-The ASCII electron density files for both CHAMP and GRACE created by Erik Sutton at
+The ASCII neutral density files for both CHAMP and GRACE created by Erik Sutton at
 <br /><a href="http://sisko.colorado.edu/sutton/data/ver2.2/champ/density">
 http://sisko.colorado.edu/sutton/data/ver2.2/champ/density</a> 
 <br /><a href="http://sisko.colorado.edu/sutton/data/ver2.2/grace/density">
@@ -62,7 +62,7 @@ You are encouraged to read the comments inside <em class=program>convert.sh</em>
 <H2>DATA SOURCES</H2>
 
 <P>
-The CHAMP and GRACE electron densities can be found at
+The CHAMP and GRACE neutral densities can be found at
 <br /><a href="http://sisko.colorado.edu/sutton/data/ver2.2/champ/density">
 http://sisko.colorado.edu/sutton/data/ver2.2/champ/density</a>, and 
 <br /><a href="http://sisko.colorado.edu/sutton/data/ver2.2/grace/density">
@@ -184,7 +184,7 @@ prematurely terminating the namelist.
 &amp;CHAMP_density_text_to_obs_nml
    text_input_file         = "../data/2002/Density_3deg_02_338.ascii"
    obs_out_file            = "obs_seq.out"
-   observation_type        = "CHAMP_DENSITY"
+   observation_type        = "CHAMP_NEUTRAL_DENSITY"
    append_to_existing_file = .false.
    debug                   = .false.
   /
@@ -221,9 +221,9 @@ prematurely terminating the namelist.
  <TD>character(len=32)</TD>
  <TD>The output observation <em class=mono>TYPE</em>. 
      Possible choices are 
-     "<em class=mono>CHAMP_DENSITY</em>",
-     "<em class=mono>GRACEA_DENSITY</em> ",
-     "<em class=mono>GRACEB_DENSITY</em>",
+     "<em class=mono>CHAMP_NEUTRAL_DENSITY</em>",
+     "<em class=mono>GRACEA_NEUTRAL_DENSITY</em> ",
+     "<em class=mono>GRACEB_NEUTRAL_DENSITY</em>",
      "<em class=mono>SAT_RHO</em>"
      Distinguishing between the satellites allows for a more thorough analysis later.
 </TD></TR>

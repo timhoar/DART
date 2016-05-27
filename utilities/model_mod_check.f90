@@ -210,7 +210,7 @@ allocate(my_locs(x_size), my_kinds(x_size))
 allocate(close_indices(x_size), close_distances(x_size))
 
 loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
-base_type = 1   ! observation type, just use first in list (like CHAMP_DENSITY)
+base_type = 1   ! observation type, just use first in list (like CHAMP_NEUTRAL_DENSITY)
 
 do x_ind = 1,x_size
    call get_state_meta_data( x_ind, my_locs(x_ind), my_kinds(x_ind))

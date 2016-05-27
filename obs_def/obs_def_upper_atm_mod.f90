@@ -44,17 +44,27 @@
 ! SAT_VELOCITY_VERTICAL_N4S,       KIND_VELOCITY_VERTICAL_N4S,      COMMON_CODE
 ! SAT_VELOCITY_VERTICAL_NO,        KIND_VELOCITY_VERTICAL_NO,       COMMON_CODE
 ! SAT_F107,                        KIND_1D_PARAMETER,               COMMON_CODE
-! SAT_RHO,                         KIND_DENSITY
 ! GPS_PROFILE,                     KIND_ELECTRON_DENSITY,           COMMON_CODE
 ! MIDAS_TEC,                       KIND_VERTICAL_TEC,               COMMON_CODE
-! SSUSI_O_N2_RATIO,                KIND_O_N2_COLUMN_DENSITY_RATIO
-! GND_GPS_VTEC,                    KIND_GND_GPS_VTEC
 ! GPS_VTEC_EXTRAP,                 KIND_VERTICAL_TEC,               COMMON_CODE
-! CHAMP_DENSITY,                   KIND_DENSITY
-! GRACEA_DENSITY,                  KIND_DENSITY
-! GRACEB_DENSITY,                  KIND_DENSITY
+! GND_GPS_VTEC,                    KIND_GND_GPS_VTEC
 ! GROUND_SLANT_TEC,                KIND_SLANT_TEC
+! SSUSI_O_N2_RATIO,                KIND_O_N2_COLUMN_DENSITY_RATIO
+! SAT_RHO,                         KIND_DENSITY
+! CHAMP_ELECTRON_DENSITY,          KIND_DENSITY
+! GRACEA_ELECTRON_DENSITY,         KIND_DENSITY
+! GRACEB_ELECTRON_DENSITY,         KIND_DENSITY
+! CHAMP_NEUTRAL_DENSITY,           KIND_DENSITY
+! GRACEA_NEUTRAL_DENSITY,          KIND_DENSITY
+! GRACEB_NEUTRAL_DENSITY,          KIND_DENSITY
 ! END DART PREPROCESS KIND LIST
+
+! NOTE: GPS_VTEC_EXTRAP can come from the COMMON_CODE because the tiegcm model_mod.f90
+! creates a KIND_VERTICAL_TEC on-demand as it reads in the model state. Since not
+! all models can be expected to do this, there is a stub routine
+! get_expected_gps_vtec_extrap() that will need to be written. At that time, the
+! DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF block will need to be extended and the
+! COMMON_CODE removed from the table above.  TJH 17 May 2016
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !  use obs_def_upper_atm_mod, only : get_expected_upper_atm_density
@@ -68,11 +78,11 @@
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! NOTE:
-! CHAMP_DENSITY, GRACEA_DENSITY, and GRACEB_DENSITY observations can
-! also be created with observations/CHAMP/CHAMP_density_text_to_obs
+! CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, and GRACEB_NEUTRAL_DENSITY observations 
+! can be created with observations/CHAMP/CHAMP_density_text_to_obs
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-! case(SAT_RHO, CHAMP_DENSITY, GRACEA_DENSITY, GRACEB_DENSITY)
+! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY)
 !      call get_expected_upper_atm_density(state, location, obs_val, istatus)
 ! case(GND_GPS_VTEC)
 !      call get_expected_gnd_gps_vtec(state, location, obs_val, istatus)
@@ -83,21 +93,21 @@
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-! case(SAT_RHO, CHAMP_DENSITY, GRACEA_DENSITY, GRACEB_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
+! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
 !      continue
 ! case(GROUND_SLANT_TEC)
 !      call read_slant_tec_metadata(obs_def%key, key, ifile, fform)
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-! case(SAT_RHO, CHAMP_DENSITY, GRACEA_DENSITY, GRACEB_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
+! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
 !      continue
 ! case(GROUND_SLANT_TEC)
 !      call write_slant_tec_metadata(obs_def%key, ifile, fform)
 ! END DART PREPROCESS WRITE_OBS_DEF
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-! case(SAT_RHO, CHAMP_DENSITY, GRACEA_DENSITY, GRACEB_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
+! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
 !      continue
 ! case(GROUND_SLANT_TEC)
 !      call interactive_slant_tec_metadata(obs_def%key)
@@ -161,17 +171,20 @@ integer, PARAMETER :: labellength = 5
 character(len=labellength) :: RECEIVERSTRING = 'recvr'
 character(len=labellength) :: TRANSMITTERSTRING = 'trans'
 
-real(r8), PARAMETER :: N2_molar_mass = 28.0_r8
-real(r8), PARAMETER :: O_molar_mass  = 16.0_r8
-real(r8), PARAMETER :: O2_molar_mass = 32.0_r8
-real(r8), PARAMETER :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
+! constants required to convert to same units as observations
+
+real(r8), PARAMETER :: N2_molar_mass = 0.028_r8 ! [kg/mol]
+real(r8), PARAMETER :: O_molar_mass  = 0.016_r8 ! [kg/mol]
+real(r8), PARAMETER :: O2_molar_mass = 0.032_r8 ! [kg/mol]
+real(r8), PARAMETER :: universal_gas_constant = 8.314_r8 ! [J/K/mol]
+real(r8), PARAMETER :: k_constant = 1.381e-23_r8 ! [m^2 kg / s^2 / K]
 integer,  PARAMETER :: MAXLEVELS = 100 ! more than max levels expected in the model
 
 character(len=512) :: string1, string2, string3
 
 contains
 
-!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !>
 
 subroutine initialize_module
@@ -185,7 +198,7 @@ slant_tec_counter = 0
 end subroutine initialize_module
 
 
-!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Given DART state vector and a location,
 !> it computes thermospheric neutral density [Kg/m3]
 !> The istatus variable should be returned as 0 unless there is a problem
@@ -232,7 +245,7 @@ if (istatus /= 0) then
    return
 endif
 
-!density [Kg/m3] =  pressure [N/m2] * M [g/mol] / temperature [K] / R [N*m/K/kmol]
+! density [Kg/m3] =  pressure [N/m2] * M [g/mol] / temperature [K] / R [N*m/K/kmol]
 obs_val          =  pressure &
                  /(mmro1/O_molar_mass + mmro2/O2_molar_mass +(1-mmro1-mmro2)/N2_molar_mass) &
                  /temperature/universal_gas_constant
@@ -240,20 +253,20 @@ obs_val          =  pressure &
 end subroutine get_expected_upper_atm_density
 
 
-!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Given DART state vector and a location,
 !> it computes ground GPS vertical total electron content
 !> The istatus variable should be returned as 0 unless there is a problem
 
 subroutine get_expected_gnd_gps_vtec(state_vector, location, obs_val, istatus)
 
-real(r8),            intent(in) :: state_vector(:)
-type(location_type), intent(in) :: location
-real(r8),           intent(out) :: obs_val
-integer,            intent(out) :: istatus
+real(r8),            intent(in)  :: state_vector(:)
+type(location_type), intent(in)  :: location
+real(r8),            intent(out) :: obs_val
+integer,             intent(out) :: istatus
 
 integer  :: nAlts, iAlt
-real(r8), allocatable :: ALT(:), IDensityS_ie(:)
+real(r8) :: ALT(MAXLEVELS), IDensityS_ie(MAXLEVELS)
 real(r8) :: loc_vals(3)
 real(r8) :: tec
 type(location_type) :: probe
@@ -270,9 +283,6 @@ if ( .not. module_initialized ) call initialize_module
 istatus = 36 !initially bad return code
 obs_val = MISSING_R8
 
-! something larger than the expected number of vert levels in the model
-allocate(ALT(MAXLEVELS), IDensityS_ie(MAXLEVELS))
-
 loc_vals = get_location(location)
 
 nAlts = 0
@@ -283,7 +293,7 @@ LEVELS: do iAlt=1, size(ALT)+1
    if (iAlt > size(ALT)) then
       write(string1,'(''more than '',i4,'' levels in the model.'')') MAXLEVELS
       string2='increase MAXLEVELS in obs_def_upper_atm_mod.f90, rerun preprocess and recompile.'
-      string3='increase ALT, IDensityS_ie array sizes in code and recompile'
+      string3='increases ALT, IDensityS_ie array sizes in code and recompile'
       call error_handler(E_ERR, 'get_expected_gnd_gps_vtec', string1, &
            source, revision, revdate, text2=string2, text3=string3)
    endif
@@ -294,7 +304,7 @@ LEVELS: do iAlt=1, size(ALT)+1
    probe = set_location(loc_vals(1), loc_vals(2), real(iAlt, r8), VERTISLEVEL) !probe is where we have data
    call interpolate(state_vector, probe, KIND_DENSITY_ION_E, IDensityS_ie(iAlt), istatus)
    if (istatus /= 0) exit LEVELS
-   call interpolate(state_vector, probe, KIND_GEOPOTENTIAL_HEIGHT, ALT(iAlt), istatus)
+   call interpolate(state_vector, probe, KIND_GEOMETRIC_HEIGHT, ALT(iAlt), istatus)
    if (istatus /= 0) exit LEVELS
    nAlts = nAlts+1
 enddo LEVELS
@@ -309,18 +319,16 @@ do iAlt = 1, nAlts-1 !approximate the integral over the altitude as a sum of tra
 enddo
 obs_val = tec * 10.0**(-16) !units of TEC are "10^16" #electron/m^2 instead of just "1" #electron/m^2
 
-deallocate(ALT, IDensityS_ie)
-
 ! Good return code.
 istatus = 0
 
 end subroutine get_expected_gnd_gps_vtec
 
 
-!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Given DART state vector and a location,
 !> compute ground GPS vertical total electron content including an estimate of
-!> the contribution from above the model (the extrapolated part)
+!> the contribution from above the model (the 'extrap'olated part)
 !> The istatus variable should be returned as 0 unless there is a problem
 
 subroutine get_expected_gps_vtec_extrap(state_vector, location, obs_val, istatus)
@@ -344,7 +352,7 @@ call error_handler(E_ERR, 'get_expected_gps_vtec_extrap', 'routine not written',
 end subroutine get_expected_gps_vtec_extrap
 
 
-!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !>
 
 subroutine get_expected_O_N2_ratio(state_vector, location, obs_val, istatus)
@@ -378,7 +386,6 @@ real(r8), allocatable :: N2_number_density(:)
 real(r8), allocatable :: total_number_density(:)
 real(r8), allocatable :: O_number_density(:)
 
-real(r8), PARAMETER :: k_constant = 1.381e-23_r8 ! m^2 * kg / s^2 / K
 integer :: ilayer, nlevels, nilevels
 integer :: vstatus(4)
 real(r8) :: layerfraction
@@ -497,7 +504,7 @@ endif
 N2_total = 0.0_r8
  O_total = 0.0_r8
 
-TOPDOWN : do ilayer = nlevels,1,-1
+TOPDOWN : do ilayer = nlevels-1, 1, -1
 
    if (ilayer == 1) then
       write(string1,*)'Integrated all the way down to the surface.'
@@ -536,7 +543,7 @@ deallocate(N2_mmr, mbar, total_number_density, O_number_density, N2_number_densi
 end subroutine get_expected_O_N2_ratio
 
 
-!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Given DART state vector and a location,
 !> compute ground GPS vertical total electron content including an estimate of
 !> the contribution from above the model (the 'extra'polated part)
@@ -566,7 +573,7 @@ call get_slant_tec_metadata(key, recvr_location, trans_location )
 end subroutine get_expected_slant_tec
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> read_slant_tec_metadata reads the metadata for slant tec observations
 !> from an observation sequence file and fills a local array.
 
@@ -636,7 +643,7 @@ call set_slant_tec_metadata(key, recvr_location, trans_location)
 end subroutine read_slant_tec_metadata
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> writes the metadata for slant tec observations.
 
 subroutine write_slant_tec_metadata(key, ifile, fform)
@@ -677,7 +684,7 @@ call write_location(ifile, trans_location, fform)
 end subroutine write_slant_tec_metadata
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !>
 
 subroutine interactive_slant_tec_metadata(key)
@@ -705,7 +712,7 @@ call set_slant_tec_metadata(key, recvr_location, trans_location)
 end subroutine interactive_slant_tec_metadata
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Common code to increment the current key count, and set the private
 !> contents of this observation's auxiliary data.
 
@@ -730,7 +737,7 @@ slant_tec_metadata(key)%transmitter_location = trans_location
 end subroutine set_slant_tec_metadata
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Common code to increment the current key count, and set the private
 !> contents of this observation's auxiliary data.
 
@@ -752,7 +759,7 @@ trans_location = slant_tec_metadata(key)%transmitter_location
 end subroutine get_slant_tec_metadata
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !>
 
 subroutine check_iostat(istat, routine, varname, msgstring)
@@ -770,7 +777,7 @@ end if
 end subroutine check_iostat
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> Make sure we are addressing within the metadata arrays
 
 subroutine key_within_range(key, routine)
@@ -788,7 +795,7 @@ call error_handler(E_ERR,routine,string1,source,revision,revdate)
 end subroutine key_within_range
 
 
-!----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !> If the allocatable metadata arrays are not big enough ... try again
 
 subroutine grow_metadata(key, routine)

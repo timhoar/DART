@@ -129,7 +129,7 @@
    tiegcm_namelist_file_name   = 'tiegcm.nml'
    assimilation_period_seconds = 3600
    estimate_f10_7              = .false.
-   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
+   variables = 'NE',    'KIND_DENSITY_ION_E',             '1000.0',  'NA',      'restart',    'UPDATE'
                'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
                'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
                'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
@@ -168,8 +168,12 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'CHAMP_DENSITY','GPS_VTEC_EXTRAP','SSUSI_O_N2_RATIO'
-   evaluate_these_obs_types   = 'GPS_PROFILE','GND_GPS_VTEC'
+   assimilate_these_obs_types = 'CHAMP_NEUTRAL_DENSITY',
+                                'GPS_VTEC_EXTRAP', 
+                                'SSUSI_O_N2_RATIO'
+   evaluate_these_obs_types   = 'GPS_PROFILE', 
+                                'GND_GPS_VTEC', 
+                                'GRACEA_NEUTRAL_DENSITY'
    /
 
 &assim_model_nml
