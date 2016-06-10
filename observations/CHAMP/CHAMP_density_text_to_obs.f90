@@ -41,7 +41,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 
 use obs_utilities_mod, only : create_3d_obs, add_obs_to_seq
 
-use      obs_kind_mod, only : CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, SAT_RHO
+use      obs_kind_mod, only : CHAMP_MASS_DENSITY, SAT_RHO
 
 implicit none
 
@@ -55,7 +55,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=256) :: text_input_file            = 'Density_3deg_05_020.ascii'
 character(len=256) :: obs_out_file               = 'obs_seq.out'
-character(len=obstypelength) :: observation_type = 'CHAMP_NEUTRAL_DENSITY'
+character(len=obstypelength) :: observation_type = 'CHAMP_MASS_DENSITY'
 logical            :: append_to_existing_file    = .false.
 logical            :: debug                      = .true.
 
@@ -288,17 +288,13 @@ character(len=obstypelength) :: observation_string
 observation_string = observation_type
 call to_upper(observation_string)
 
-if     (trim(observation_string) ==  'CHAMP_NEUTRAL_DENSITY') then
-              observation_type_int =  CHAMP_NEUTRAL_DENSITY
-elseif (trim(observation_string) == 'GRACEA_NEUTRAL_DENSITY') then
-              observation_type_int = GRACEA_NEUTRAL_DENSITY
-elseif (trim(observation_string) == 'GRACEB_NEUTRAL_DENSITY') then
-              observation_type_int = GRACEB_NEUTRAL_DENSITY
+if     (trim(observation_string) ==  'CHAMP_MASS_DENSITY') then
+              observation_type_int =  CHAMP_MASS_DENSITY
 elseif (trim(observation_string) == 'SAT_RHO') then
               observation_type_int = SAT_RHO
 else 
    write(string1,*)'Unable to interpret observation string "'//trim(observation_type)//'"'
-   write(string2,*)'valid strings are "CHAMP_NEUTRAL_DENSITY", "GRACEA_NEUTRAL_DENSITY", "GRACEB_NEUTRAL_DENSITY", "SAT_RHO"'
+   write(string2,*)'valid strings are "CHAMP_MASS_DENSITY" or "SAT_RHO"'
    call error_handler(E_ERR, 'CHAMP_density_text_to_obs', string1, &
                       source, revision, revdate, text2=string2)
 endif  

@@ -8,9 +8,8 @@ program TEC_text_to_obs
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-!   TEC_text_to_obs - reads fixed-format ASCII files from
-!   httpsiskocoloradoedu/sutton/data/ver2.2/champ/density/2002/ascii/
-!   work/Density_3deg_02_335.ascii is an example of an input file
+!   TEC_text_to_obs - reads fixed-format ASCII files from Madrigal
+!   http://madrigal.haystack.mit.edu/
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

@@ -7,12 +7,12 @@
    input_files              = '../../../obs_def/obs_def_upper_atm_mod.f90'
    /
 
-# Valid "observation_type"s are: CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, SAT_RHO
+# Valid "observation_type"s are: CHAMP_MASS_DENSITY or SAT_RHO
 
 &CHAMP_density_text_to_obs_nml
    text_input_file         = "../data/2005/Density_3deg_05_020.ascii"
    obs_out_file            = "obs_seq.out"
-   observation_type        = "CHAMP_NEUTRAL_DENSITY"
+   observation_type        = "CHAMP_MASS_DENSITY"
    append_to_existing_file = .true.
    debug                   = .false.
    /

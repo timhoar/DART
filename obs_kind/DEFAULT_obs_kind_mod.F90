@@ -340,7 +340,8 @@ integer, parameter, public :: &
   KIND_VELOCITY_VERTICAL_NO          = 284, &
   KIND_GND_GPS_VTEC                  = 285, &
   KIND_DENSITY_ION_OP                = 286, &
-  KIND_TOTAL_ELECTRON_CONTENT        = 287
+  KIND_TOTAL_ELECTRON_CONTENT        = 287, &
+  KIND_MASS_DENSITY                  = 288
  
 ! more land kinds
 integer, parameter, public :: &
@@ -667,6 +668,7 @@ obs_kind_names(284) = obs_kind_type(KIND_VELOCITY_VERTICAL_NO  ,'KIND_VELOCITY_V
 obs_kind_names(285) = obs_kind_type(KIND_GND_GPS_VTEC          ,'KIND_GND_GPS_VTEC')
 obs_kind_names(286) = obs_kind_type(KIND_DENSITY_ION_OP        ,'KIND_DENSITY_ION_OP')
 obs_kind_names(287) = obs_kind_type(KIND_TOTAL_ELECTRON_CONTENT,'KIND_TOTAL_ELECTRON_CONTENT')
+obs_kind_names(288) = obs_kind_type(KIND_MASS_DENSITY          ,'KIND_MASS_DENSITY')
 
 obs_kind_names(300) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
 obs_kind_names(301) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')

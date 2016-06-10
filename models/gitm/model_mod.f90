@@ -38,7 +38,7 @@ use    utilities_mod, only : register_module, error_handler,                   &
 use     obs_kind_mod, only : paramname_length,        &
                              get_raw_obs_kind_index,  &
                              get_raw_obs_kind_name,   &
-                             KIND_GEOPOTENTIAL_HEIGHT
+                             KIND_GEOMETRIC_HEIGHT
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -396,7 +396,7 @@ endif
 ! return values have already been set, just give it a more specific error
 ! code and return here.
 
-if (obs_type == KIND_GEOPOTENTIAL_HEIGHT ) then
+if (obs_type == KIND_GEOMETRIC_HEIGHT ) then
    ! ok to continue.  offsets unused in this case, but
    ! set them to something > 0 to indicate its ok.
    base_offset = 1
@@ -463,7 +463,7 @@ if(ier /= 0) then
 endif
 
 ! if we're asking about height, we have the alt arrays directly.
-if (obs_type == KIND_GEOPOTENTIAL_HEIGHT) then
+if (obs_type == KIND_GEOMETRIC_HEIGHT) then
 
    ! Interpolate to the given altitude - lat/lon doesn't matter here.
    interp_val = (1 - alt_fract) * ALT(balt(1)) + alt_fract * ALT(balt(2))

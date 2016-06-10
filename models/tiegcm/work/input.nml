@@ -168,12 +168,10 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'CHAMP_NEUTRAL_DENSITY',
+   assimilate_these_obs_types = 'CHAMP_MASS_DENSITY',
                                 'GPS_VTEC_EXTRAP', 
                                 'SSUSI_O_N2_RATIO'
    evaluate_these_obs_types   = 'GPS_PROFILE', 
-                                'GND_GPS_VTEC', 
-                                'GRACEA_NEUTRAL_DENSITY'
    /
 
 &assim_model_nml

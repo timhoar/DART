@@ -45,18 +45,12 @@
 ! SAT_VELOCITY_VERTICAL_NO,        KIND_VELOCITY_VERTICAL_NO,       COMMON_CODE
 ! SAT_F107,                        KIND_1D_PARAMETER,               COMMON_CODE
 ! GPS_PROFILE,                     KIND_ELECTRON_DENSITY,           COMMON_CODE
-! MIDAS_TEC,                       KIND_VERTICAL_TEC,               COMMON_CODE
 ! GPS_VTEC_EXTRAP,                 KIND_VERTICAL_TEC,               COMMON_CODE
 ! GND_GPS_VTEC,                    KIND_GND_GPS_VTEC
 ! GROUND_SLANT_TEC,                KIND_SLANT_TEC
 ! SSUSI_O_N2_RATIO,                KIND_O_N2_COLUMN_DENSITY_RATIO
-! SAT_RHO,                         KIND_DENSITY
-! CHAMP_ELECTRON_DENSITY,          KIND_DENSITY
-! GRACEA_ELECTRON_DENSITY,         KIND_DENSITY
-! GRACEB_ELECTRON_DENSITY,         KIND_DENSITY
-! CHAMP_NEUTRAL_DENSITY,           KIND_DENSITY
-! GRACEA_NEUTRAL_DENSITY,          KIND_DENSITY
-! GRACEB_NEUTRAL_DENSITY,          KIND_DENSITY
+! SAT_RHO,                         KIND_MASS_DENSITY
+! CHAMP_MASS_DENSITY,              KIND_MASS_DENSITY
 ! END DART PREPROCESS KIND LIST
 
 ! NOTE: GPS_VTEC_EXTRAP can come from the COMMON_CODE because the tiegcm model_mod.f90
@@ -78,11 +72,10 @@
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! NOTE:
-! CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, and GRACEB_NEUTRAL_DENSITY observations 
-! can be created with observations/CHAMP/CHAMP_density_text_to_obs
+! CHAMP_MASS_DENSITY  can be created with observations/CHAMP/CHAMP_density_text_to_obs
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY)
+! case(SAT_RHO, CHAMP_MASS_DENSITY)
 !      call get_expected_upper_atm_density(state, location, obs_val, istatus)
 ! case(GND_GPS_VTEC)
 !      call get_expected_gnd_gps_vtec(state, location, obs_val, istatus)
@@ -93,21 +86,21 @@
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
+! case(SAT_RHO, CHAMP_MASS_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
 !      continue
 ! case(GROUND_SLANT_TEC)
 !      call read_slant_tec_metadata(obs_def%key, key, ifile, fform)
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
+! case(SAT_RHO, CHAMP_MASS_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
 !      continue
 ! case(GROUND_SLANT_TEC)
 !      call write_slant_tec_metadata(obs_def%key, ifile, fform)
 ! END DART PREPROCESS WRITE_OBS_DEF
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-! case(SAT_RHO, CHAMP_NEUTRAL_DENSITY, GRACEA_NEUTRAL_DENSITY, GRACEB_NEUTRAL_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
+! case(SAT_RHO, CHAMP_MASS_DENSITY, GND_GPS_VTEC, SSUSI_O_N2_RATIO)
 !      continue
 ! case(GROUND_SLANT_TEC)
 !      call interactive_slant_tec_metadata(obs_def%key)
@@ -173,9 +166,12 @@ character(len=labellength) :: TRANSMITTERSTRING = 'trans'
 
 ! constants required to convert to same units as observations
 
-real(r8), PARAMETER :: N2_molar_mass = 0.028_r8 ! [kg/mol]
-real(r8), PARAMETER :: O_molar_mass  = 0.016_r8 ! [kg/mol]
-real(r8), PARAMETER :: O2_molar_mass = 0.032_r8 ! [kg/mol]
+real(r8), PARAMETER :: N2_molar_mass = 28.0_r8 ! [g/mol]
+real(r8), PARAMETER ::  O_molar_mass = 16.0_r8 ! [g/mol]
+real(r8), PARAMETER :: O2_molar_mass = 32.0_r8 ! [g/mol]
+real(r8), PARAMETER :: N2_molar_mass_kg = N2_molar_mass/1000.0_r8 ! [kg/mol]
+real(r8), PARAMETER ::  O_molar_mass_kg =  O_molar_mass/1000.0_r8 ! [kg/mol]
+real(r8), PARAMETER :: O2_molar_mass_kg = O2_molar_mass/1000.0_r8 ! [kg/mol]
 real(r8), PARAMETER :: universal_gas_constant = 8.314_r8 ! [J/K/mol]
 real(r8), PARAMETER :: k_constant = 1.381e-23_r8 ! [m^2 kg / s^2 / K]
 integer,  PARAMETER :: MAXLEVELS = 100 ! more than max levels expected in the model
@@ -247,7 +243,7 @@ endif
 
 ! density [Kg/m3] =  pressure [N/m2] * M [g/mol] / temperature [K] / R [N*m/K/kmol]
 obs_val          =  pressure &
-                 /(mmro1/O_molar_mass + mmro2/O2_molar_mass +(1-mmro1-mmro2)/N2_molar_mass) &
+                 /(mmro1/O_molar_mass_kg + mmro2/O2_molar_mass_kg +(1-mmro1-mmro2)/N2_molar_mass_kg) &
                  /temperature/universal_gas_constant
 
 end subroutine get_expected_upper_atm_density
@@ -478,17 +474,17 @@ allocate(N2_mmr(nlevels), mbar(nlevels), total_number_density(nlevels), &
               O_number_density(nlevels),    N2_number_density(nlevels))
 
 N2_mmr = 1.0_r8 - O_mmr(1:nlevels) - O2_mmr(1:nlevels)
-  mbar = 1.0_r8/( O2_mmr(1:nlevels)/O2_molar_mass + &
-                   O_mmr(1:nlevels)/ O_molar_mass + &
-                  N2_mmr(1:nlevels)/N2_molar_mass )
+  mbar = 1.0_r8/( O2_mmr(1:nlevels)/O2_molar_mass_kg + &
+                   O_mmr(1:nlevels)/ O_molar_mass_kg + &
+                  N2_mmr(1:nlevels)/N2_molar_mass_kg )
 
 ! O_mmr and N2_mmr defined at midpoints, heights defined at interfaces, so the
 ! calculated thicknesses apply directly to the O and N2 densities.
 
 total_number_density = pressure(1:nlevels) / (k_constant * temperature(1:nlevels))
 
- O_number_density =  O_mmr(1:nlevels) * mbar /  O_molar_mass * total_number_density
-N2_number_density = N2_mmr(1:nlevels) * mbar / N2_molar_mass * total_number_density
+ O_number_density =  O_mmr(1:nlevels) * mbar /  O_molar_mass_kg * total_number_density
+N2_number_density = N2_mmr(1:nlevels) * mbar / N2_molar_mass_kg * total_number_density
 
 if ( 1 == 2 ) then ! DEBUG BLOCK NOT IN USE
    write(*,*)
