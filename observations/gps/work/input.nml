@@ -71,6 +71,32 @@
 !               7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 11.0, 12.0,
 !               13.0, 14.0, 15.0, 16.0, 17.0 
 
+!-----------------------------------------------------------------------
+! for convert_cosmic_iono_cdf.f90
+
+&convert_cosmic_iono_nml
+   gpsro_netcdf_file     = '' 
+   gpsro_netcdf_filelist = 'filelist' 
+   gpsro_out_file        = 'obs_seq.out' 
+   obs_window            = 0.5 
+   obs_levels            = 160.0, 170.0, 180.0, 190.0, 200.0,
+                           210.0, 220.0, 230.0, 240.0, 250.0,
+                           260.0, 270.0, 280.0, 290.0, 300.0,
+                           310.0, 320.0, 330.0, 340.0, 350.0,
+                           360.0, 370.0, 380.0, 390.0, 400.0,
+                           410.0, 420.0, 430.0, 440.0, 450.0
+  /
+
+!-----------------------------------------------------------------------
+! for convert_cosmic_ionosphere.f90
+
+&convert_cosmic_ion_nml
+  obs_levels          = 100., 200., 300., 400., 500., 600., 700., 800.
+  ion_netcdf_file     = 'cosmic_ion_input.nc'
+  ion_netcdf_filelist = ''
+  ion_out_file        = 'obs_seq.iondens'
+/
+
 
 &preprocess_nml
     input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
@@ -78,6 +104,7 @@
      input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
     output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
    input_files              = '../../../obs_def/obs_def_gps_mod.f90',
+                              '../../../obs_def/obs_def_upper_atm_mod.f90'
  /
 
 &obs_kind_nml
@@ -114,10 +141,3 @@
 ! min_lon =
 ! max_lon =
 
-
-&convert_cosmic_ion_nml
-  obs_levels          = 100., 200., 300., 400., 500., 600., 700., 800.
-  ion_netcdf_file     = 'cosmic_ion_input.nc'
-  ion_netcdf_filelist = ''
-  ion_out_file        = 'obs_seq.iondens'
-/

@@ -108,7 +108,7 @@ character(len=128) :: gpsro_netcdf_file     = 'cosmic_gps_input.nc'
 character(len=128) :: gpsro_netcdf_filelist = 'cosmic_gps_input_list'
 character(len=128) :: gpsro_out_file        = 'obs_seq.gpsro'
 
-namelist /convert_cosmic_gps_nml/ obs_levels, local_operator, obs_window, &
+namelist /convert_cosmic_iono_nml/ obs_levels, local_operator, obs_window, &
                                   gpsro_netcdf_file,    &
                                   gpsro_netcdf_filelist, gpsro_out_file 
 
@@ -140,14 +140,14 @@ call get_time(time_anal, asec, aday)
 !  read the necessary parameters from input.nml
 call initialize_utilities()
 
-!call find_namelist_in_file("work/input.nml", "convert_cosmic_gps_nml", iunit)
-call find_namelist_in_file("input.nml", "convert_cosmic_gps_nml", iunit)
-read(iunit, nml = convert_cosmic_gps_nml, iostat = io)
-call check_namelist_read(iunit, io, "convert_cosmic_gps_nml")
+!call find_namelist_in_file("work/input.nml", "convert_cosmic_iono_nml", iunit)
+call find_namelist_in_file("input.nml", "convert_cosmic_iono_nml", iunit)
+read(iunit, nml = convert_cosmic_iono_nml, iostat = io)
+call check_namelist_read(iunit, io, "convert_cosmic_iono_nml")
 
 ! Record the namelist values used for the run 
-if (do_nml_file()) write(nmlfileunit, nml=convert_cosmic_gps_nml)
-if (do_nml_term()) write(     *     , nml=convert_cosmic_gps_nml)
+if (do_nml_file()) write(nmlfileunit, nml=convert_cosmic_iono_nml)
+if (do_nml_term()) write(     *     , nml=convert_cosmic_iono_nml)
 
 ! namelist checks for sanity
 

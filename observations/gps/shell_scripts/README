@@ -69,3 +69,20 @@ the autodelete option on before doing a long run.
 
 
 
+
+Here are some examples of how to use the CDAAC Data Download Interface with wget via command line: 
+wget -q --http-user=xxxx --http-passwd=xxxx http://cdaac-www.cosmic.ucar.edu/cdaac/rest/tarservice/data/mission/filetype/YYYY.DDD
+
+Where:
+mission is the CDAAC mission i.e. cosmic
+filetype is the file type i.e. wetPrf
+YYYY.DDD is the day of year i.e: 2012.305
+
+i.e:
+wget -q --http-user=xxxx --http-passwd=xxxx http://cdaac-www.cosmic.ucar.edu/cdaac/rest/tarservice/data/cosmic/atmPrf/2012.304 -O cosmic_atmPrf_2012.304.tar
+
+wget -q --http-user=xxxx --http-passwd=xxxx http://cdaac-www.cosmic.ucar.edu/cdaac/rest/tarservice/data/cosmic/wetPrf/2012.301 -O cosmic_wetPrf_2012.301.tar
+
+For more flexibility with file types and/or dateranges, please use our data download batch system delivery by going to our CDAAC High-Level Interface and choosing "Batch Delivery Data Download"
+
+cosmic2013/ionPrf/2009.204/ionPrf_C006.2009.204.22.51.G23_2013.3520_nc
