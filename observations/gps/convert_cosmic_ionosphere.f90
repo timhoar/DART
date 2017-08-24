@@ -59,16 +59,14 @@ integer, parameter ::   num_copies = 1,   &   ! number of copies in sequence
                         num_qc     = 1        ! number of QC entries
 
 character (len=512) :: msgstring, msgstring2, next_infile
-character (len=NF90_MAX_NAME)  :: name
-character (len=6)   :: subset
+character (len=NF90_MAX_NAME)  :: dimname
 integer :: ncid, varid, nlevels, k, nfiles, num_new_obs, oday, osec, &
-           iyear, imonth, iday, ihour, imin, isec, glat, glon, zloc, obs_num, &
+           iyear, imonth, iday, ihour, imin, isec, zloc, obs_num, &
            io, iunit, nobs, filenum, dummy, numrejected
-character (len=1) :: badqc
 logical :: file_exist, first_obs, from_list = .false.
-real(r8) :: hght_miss, refr_miss, azim_miss, elecd_miss, oerr,   & 
-            qc, lato, lono, hghto, refro, azimo, wght, nx, ny,   & 
-            nz, rfict, obsval, phs, obs_val(1), qc_val(1)
+real(r8) :: hght_miss, elecd_miss, oerr,   & 
+            qc, lato, lono, hghto, wght, & 
+            obsval, obs_val(1), qc_val(1)
 
 real(r8), allocatable :: lat(:), lon(:), hght(:), elecd(:)
 
@@ -197,11 +195,13 @@ fileloop: do      ! until out of files
    time_obs = set_date(iyear, imonth, iday, ihour, imin, isec)
    call get_time(time_obs,  osec, oday)
    
-   call nc_check( nf90_inq_dimid(ncid, "MSL_alt", varid),          'inq dimid MSL_alt', next_infile)
-   call nc_check( nf90_inquire_dimension(ncid, varid, name, nobs), 'inq dim MSL_alt',   next_infile)
+   call nc_check( nf90_inq_dimid(ncid, "MSL_alt", varid), 'inq dimid MSL_alt', next_infile)
+   call nc_check( nf90_inquire_dimension(ncid, varid, dimname, nobs), 'inquire dimension MSL_alt', next_infile)
    
-   allocate(  lat(nobs)) ;  allocate(  lon(nobs))
-   allocate( hght(nobs)) ;  allocate(elecd(nobs))
+   allocate(  lat(nobs))
+   allocate(  lon(nobs))
+   allocate( hght(nobs))
+   allocate(elecd(nobs))
    
    ! read the latitude array
    call nc_check( nf90_inq_varid(ncid, "GEO_lat", varid) ,'inq varid GEO_lat', next_infile)
@@ -215,15 +215,17 @@ fileloop: do      ! until out of files
    call nc_check( nf90_inq_varid(ncid, "MSL_alt", varid) ,'inq varid MSL_alt', next_infile)
    call nc_check( nf90_get_var(ncid, varid, hght)        ,'get_var   MSL_alt', next_infile)
    call nc_check( nf90_get_att(ncid, varid, '_FillValue', hght_miss) ,'get_att _FillValue MSL_alt', next_infile)
+   !>@todo handle _FillValue
    
    ! read the electron density
    call nc_check( nf90_inq_varid(ncid, "ELEC_dens", varid) ,'inq varid ELEC_dens', next_infile)
    call nc_check( nf90_get_var(ncid, varid, elecd)         ,'get var   ELEC_dens', next_infile)
    call nc_check( nf90_get_att(ncid, varid, '_FillValue', elecd_miss) ,'get_att _FillValue elecd', next_infile)
+   !>@todo handle _FillValue
    
    call nc_check( nf90_close(ncid) , 'close file', next_infile)
    
-   !> @todo debug only
+   !>@todo debug only
    ! if(any(hght(:) < -998)) then
    !    write(*,*) 'height array contains missing values:'
    !    do k=1, nobs
@@ -267,9 +269,6 @@ fileloop: do      ! until out of files
      qc_val(1)  = qc
      call set_qc(obs, qc_val)
 
-     !> @todo remove debug when working
-     !print *, 'k, val: ', k, obs_val(1)
-
      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
      obs_num = obs_num+1
@@ -291,11 +290,11 @@ call destroy_obs_sequence(obs_seq)
 call destroy_obs(obs)   ! do not destroy prev_obs, which is same as obs
 
 write(msgstring, *) 'processed ', filenum-1, ' total profiles'
-call error_handler(E_MSG, 'convert_cosmic_ion_obs', msgstring, source, revision, revdate)
+call error_handler(E_MSG, 'convert_cosmic_ionosphere', msgstring, source, revision, revdate)
 
 if (numrejected > 0) then
    write(msgstring,  *) numrejected, ' profiles rejected for bad incoming quality control'
-   call error_handler(E_MSG, 'convert_cosmic_ion_obs', msgstring, source, revision, revdate)
+   call error_handler(E_MSG, 'convert_cosmic_ionosphere', msgstring, source, revision, revdate)
 endif
 
 call finalize_utilities()
@@ -450,7 +449,6 @@ function electron_density_error(H, lat, is_it_global, factor)
  real(r8)              :: electron_density_error
 
  real(r8) :: zkm, rerr
- integer  :: kk
  
  zkm = H
 

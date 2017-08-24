@@ -6,8 +6,6 @@
 
 !> a version of the netcdf -> dart obs_seq converter for ionosphere profiles
 !> the file type from the CDAAC data site is 'ionPrf'.
-!>
-!> i don't know where the obs errors are going to come from. 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -68,19 +66,19 @@ character(len=128), parameter :: revdate  = "$Date$"
 integer, parameter ::   num_copies = 1,   &   ! number of copies in sequence
                         num_qc     = 1        ! number of QC entries
 
-character (len=metadatalength) :: meta_data
-character (len=129) :: msgstring, next_infile
+character (len=512) :: msgstring
+character (len=256) :: next_infile
 character (len=80)  :: name
 character (len=19)  :: datestr
 character (len=6)   :: subset
-integer :: rcode, ncid, varid, nlevels, k, nfiles, num_new_obs,  &
+integer :: ncid, varid, nlevels, k, nfiles, num_new_obs,  &
            aday, asec, dday, dsec, oday, osec,                   &
            iyear, imonth, iday, ihour, imin, isec,               &
-           glat, glon, zloc, obs_num, io, iunit, nobs, filenum, dummy
+           zloc, obs_num, io, iunit, nobs, filenum, dummy
 logical :: file_exist, first_obs, did_obs, from_list = .false.
 real(r8) :: hght_miss,  elec_miss, err, oerr,               & 
-            qc, lato, lono, hghto, eleco, wght, nx, ny,   & 
-            nz, ds, htop, rfict, obsval, phs, obs_val(1), qc_val(1)
+            qc, lato, lono, hghto, eleco, wght, & 
+            obsval, obs_val(1), qc_val(1)
             
 
 real(r8), allocatable :: lat(:), lon(:), hght(:), elec(:), & 
@@ -97,21 +95,20 @@ type(time_type)         :: time_obs, time_anal
 !  Declare namelist parameters
 !------------------------------------------------------------------------
 
-integer, parameter :: nmaxlevels = 20000   !  max number of observation levels
+integer, parameter :: NMAXLEVELS = 20000   !  max number of observation levels
 
-logical  :: local_operator = .true.   ! see html file for more on non/local
+!>@todo change overwrite_time default to .false.
 logical  :: overwrite_time = .true.   !false.  ! careful - see note below
-real(r8) :: obs_levels(nmaxlevels) = -1.0_r8
+real(r8) :: obs_levels(NMAXLEVELS) = -1.0_r8
 !real(r8) :: obs_window = 0.250      ! accept obs within +/- hours from anal time
 real(r8) :: obs_window = 0.5
-character(len=128) :: gpsro_netcdf_file     = 'cosmic_gps_input.nc'
-character(len=128) :: gpsro_netcdf_filelist = 'cosmic_gps_input_list'
-character(len=128) :: gpsro_out_file        = 'obs_seq.gpsro'
+character(len=256) :: input_file      = ''
+character(len=256) :: input_file_list = 'file_list.txt'
+character(len=256) :: output_file     = 'obs_seq.out'
 
-namelist /convert_cosmic_iono_nml/ obs_levels, local_operator, obs_window, &
-                                  gpsro_netcdf_file,    &
-                                  gpsro_netcdf_filelist, gpsro_out_file 
-
+namelist /convert_cosmic_iono_nml/ obs_levels, obs_window, &
+                                   input_file,    &
+                                   input_file_list, output_file 
 
 ! 'overwrite_time' replaces the actual observation times with the
 ! analysis time for all obs.  this is intentionally not in the namelist
@@ -132,6 +129,7 @@ read(datestr(1:4),   fmt='(i4)') iyear
 read(datestr(6:7),   fmt='(i2)') imonth
 read(datestr(9:10),  fmt='(i2)') iday
 read(datestr(12:13), fmt='(i2)') ihour
+
 read(datestr(15:16), fmt='(i2)') imin
 read(datestr(18:19), fmt='(i2)') isec
 time_anal = set_date(iyear, imonth, iday, ihour, imin, isec)
@@ -153,13 +151,13 @@ if (do_nml_term()) write(     *     , nml=convert_cosmic_iono_nml)
 
 !  count observation levels, make sure observation levels increase from 0
 nlevels = 0
-do k = 1, nmaxlevels
+do k = 1, NMAXLEVELS
   if ( obs_levels(k) == -1.0_r8 )  exit
   nlevels = k
 end do
 do k = 2, nlevels
   if ( obs_levels(k-1) >= obs_levels(k) ) then
-    call error_handler(E_ERR, 'convert_cosmic_gps_cdf',       &
+    call error_handler(E_ERR, 'convert_cosmic_iono_cdf',       &
                        'Observation levels should increase',  &
                        source, revision, revdate)
   end if
@@ -167,7 +165,7 @@ end do
 
 !  should error check the window some
 if (obs_window <= 0.0_r8 .or. obs_window > 24.0_r8) then
-    call error_handler(E_ERR, 'convert_cosmic_gps_cdf',       &
+    call error_handler(E_ERR, 'convert_cosmic_iono_cdf',       &
                        'Bad value for obs_window (hours)',    &
                        source, revision, revdate)
 else
@@ -178,16 +176,16 @@ endif
 
 ! cannot have both a single filename and a list; the namelist must
 ! shut one off.
-if (gpsro_netcdf_file /= '' .and. gpsro_netcdf_filelist /= '') then
-  call error_handler(E_ERR, 'convert_cosmic_gps_cdf',                     &
-                     'One of gpsro_netcdf_file or filelist must be NULL', &
+if (input_file /= '' .and. input_file_list /= '') then
+  call error_handler(E_ERR, 'convert_cosmic_iono_cdf',                     &
+                     'One of input_file or input_file_list must be NULL', &
                      source, revision, revdate)
 endif
-if (gpsro_netcdf_filelist /= '') from_list = .true.
+if (input_file_list /= '') from_list = .true.
 
 ! need to know a reasonable max number of obs that could be added here.
 if (from_list) then
-   call find_textfile_dims(gpsro_netcdf_filelist, nfiles, dummy)
+   call find_textfile_dims(input_file_list, nfiles, dummy)
    num_new_obs = nlevels * nfiles
 else
    num_new_obs = nlevels
@@ -197,15 +195,15 @@ endif
 call static_init_obs_sequence()
 call init_obs(obs, num_copies, num_qc)
 call init_obs(prev_obs, num_copies, num_qc)
-inquire(file=gpsro_out_file, exist=file_exist)
+inquire(file=output_file, exist=file_exist)
 if ( file_exist ) then
 
-print *, "found existing obs_seq file, appending to ", trim(gpsro_out_file)
-   call read_obs_seq(gpsro_out_file, 0, 0, num_new_obs, obs_seq)
+print *, "found existing obs_seq file, appending to ", trim(output_file)
+   call read_obs_seq(output_file, 0, 0, num_new_obs, obs_seq)
 
 else
 
-  print *, "no existing obs_seq file, creating ", trim(gpsro_out_file)
+  print *, "no existing obs_seq file, creating ", trim(output_file)
   print *, "max entries = ", num_new_obs
   call init_obs_sequence(obs_seq, num_copies, num_qc, num_new_obs)
   do k = 1, num_copies
@@ -222,7 +220,6 @@ end if
 !read(16,*) f3coerr
 open(16,FILE='obserr.dat',STATUS='old',FORM='FORMATTED')
 read(16,*) f3coerr
-!!
 
 allocate(hghtp(nlevels))  ;  
 did_obs = .false.
@@ -234,9 +231,9 @@ fileloop: do      ! until out of files
 
    ! get the single name, or the next name from a list
    if (from_list) then 
-      next_infile = get_next_filename(gpsro_netcdf_filelist, filenum)
+      next_infile = get_next_filename(input_file_list, filenum)
    else
-      next_infile = gpsro_netcdf_file
+      next_infile = input_file
       if (filenum > 1) next_infile = ''
    endif
    if (next_infile == '') exit fileloop
@@ -256,10 +253,10 @@ fileloop: do      ! until out of files
    !time1-time2 is always positive no matter the relative magnitudes
    call get_time(time_anal-time_obs,dsec,dday)
    if ( real(dsec+dday*86400) > obs_window ) then
-     call error_handler(E_MSG, 'convert_cosmic_gps_cdf: ',         &
+     call error_handler(E_MSG, 'convert_cosmic_iono_cdf: ',         &
                        'Input file '//trim(next_infile), &
                          source, revision, revdate)
-     write(msgstring, '(A,F8.4,A)') 'Ignoed because obs time > ', &
+     write(msgstring, '(A,F8.4,A)') 'Ignored because obs time > ', &
                        obs_window / 3600.0, ' hours from analysis time'
      call error_handler(E_MSG, '', msgstring,        &
                         source, revision, revdate)
@@ -295,9 +292,11 @@ fileloop: do      ! until out of files
    call nc_check( nf90_get_var(ncid, varid, elec)          ,'get var   ELEC_dens')
    call nc_check( nf90_get_att(ncid, varid, '_FillValue', elec_miss) ,'get_att _FillValue Elec')
 
+   !>todo support the _FillValue
+
    ! check for the data quality
    if (maxval(elec) > 10000000) then
-     call error_handler(E_MSG, 'Bad convert_cosmic_gps_cdf: ',         &
+     call error_handler(E_MSG, 'Bad convert_cosmic_iono_cdf: ',         &
                        'Input file '//trim(next_infile), &
                          source, revision, revdate)
      deallocate( lat, lon, hght, elec )
@@ -384,7 +383,6 @@ fileloop: do      ! until out of files
 
      if (.not. did_obs) did_obs = .true.
 
-
    end do obsloop2
 
   ! clean up and loop if there is another input file
@@ -396,18 +394,18 @@ end do fileloop
 
 ! done with main loop.  if we added any obs to the sequence, write it out.
 if (did_obs) then
-!print *, 'ready to write, nobs = ', get_num_obs(obs_seq)
+
    if (get_num_obs(obs_seq) > 0) &
-      call write_obs_seq(obs_seq, gpsro_out_file)
+      call write_obs_seq(obs_seq, output_file)
 
    ! minor stab at cleanup, in the off chance this will someday get turned
    ! into a subroutine in a module.  probably not all that needs to be done,
    ! but a start.
-!print *, 'calling destroy_obs'
+
    call destroy_obs(obs)
    call destroy_obs(prev_obs)
-print *, 'skipping destroy_seq'
-   ! get core dumps here, not sure why?
+
+   !>@todo get core dumps here, not sure why?
    !if (get_num_obs(obs_seq) > 0) call destroy_obs_sequence(obs_seq)
 endif
 
@@ -433,6 +431,7 @@ contains
 !     created June 2008, Ryan Torn NCAR/MMM
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 subroutine interp_height_wght(hght, level, iz, zgrid, wght)
 
 use        types_mod, only : r8
@@ -473,6 +472,7 @@ else
 endif
 
 return
+
 end subroutine interp_height_wght
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -489,22 +489,20 @@ end subroutine interp_height_wght
 !    created by I-TE LEE NCAR/HAO & NCU, 01/26/2010
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 function ionprf_obserr_percent(lone,late,hghte,houre,mine,oerr)
 
 use   types_mod, only : r8
 
 implicit none
 
-!integer, parameter :: nobs_level = 22  !  maximum number of obs levels
+real(r8), intent(in) :: lone,late,hghte
+integer , intent(in) :: houre, mine 
+real(r8), intent(in) :: oerr(15,37,25)
 
-real(r8), intent(in)  :: lone,late,hghte
-integer , intent(in)  :: houre, mine 
-real(r8)              :: mag_eq(73), slt, ionprf_obserr_percent, &
-                         lonc, mq, nlat
-real(r8)              :: err_top1, err_bottom1, err_obs1, &
-                         err_top2, err_bottom2, err_obs2, err_obs
-integer               :: altc, latc, ltc
-real(r8), intent(in), dimension(15,37,25)   :: oerr
+real(r8) :: mag_eq(73), slt, ionprf_obserr_percent, lonc, mq, nlat
+real(r8) :: err_top1, err_bottom1, err_obs1, err_top2, err_bottom2, err_obs2, err_obs
+integer  :: altc, latc, ltc
 
 
 !Convert longitude to solar local time (simple method: longitude difference)

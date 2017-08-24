@@ -1014,7 +1014,6 @@ function gsi_refractivity_error(H, lat, is_it_global, factor)
  real(r8)              :: gsi_refractivity_error
 
  real(r8) :: zkm, rerr
- integer  :: kk
  
  zkm = H * 0.001       ! height in km
  rerr = 1.0_r8
