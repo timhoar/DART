@@ -5201,7 +5201,7 @@ integer,  intent(in)  :: i,j,k,id,var_type
 real(r8), intent(in)  :: x(:)
 real(r8)              :: model_pressure
 
-integer  :: off
+integer  :: off, type_x
 real(r8) :: pres1, pres2
 
 model_pressure = missing_r8
@@ -5210,13 +5210,19 @@ model_pressure = missing_r8
 !   we are at the upper or lower boundary in which case we will extrapolate.
 if( (var_type == wrf%dom(id)%type_w) .or. (var_type == wrf%dom(id)%type_gz) ) then
 
+   if (var_type == wrf%dom(id)%type_w) then
+      type_x = wrf%dom(id)%type_w
+   else
+      type_x = wrf%dom(id)%type_gz
+   endif
+
    if( k == 1 ) then
 
       pres1 = model_pressure_t(i,j,k,  id,x)
       pres2 = model_pressure_t(i,j,k+1,id,x)
       model_pressure = interp_pressure(pres1, pres2, extrapolate=.true.)
 
-   elseif( k == wrf%dom(id)%var_size(3,wrf%dom(id)%type_w) ) then
+   elseif( k == wrf%dom(id)%var_size(3,type_x) ) then
 
       pres1 = model_pressure_t(i,j,k-1,id,x)
       pres2 = model_pressure_t(i,j,k-2,id,x)

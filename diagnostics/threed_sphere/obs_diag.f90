@@ -431,7 +431,7 @@ U_obs_loc = set_location_missing()
 ! Open file for histogram of innovations, as a function of standard deviation.
 !----------------------------------------------------------------------
 
-nsigmaUnit = open_file('LargeInnov.txt',form='formatted',action='rewind')
+nsigmaUnit = open_file('LargeInnov.txt',form='formatted',action='write')
 write(nsigmaUnit,'(a)')'Any observations flagged as bad are dumped into the last bin.'
 write(nsigmaUnit,'(a)') '   day   secs    lon      lat    level         obs    prior   zscore   key   kind'
 
@@ -1697,8 +1697,6 @@ real(r8), dimension(:), intent(inout) :: layerMiddles
 real(r8), dimension(:), intent(inout) :: layerEdges
 integer,                intent(  out) :: nLayers
 
-! FIXME ... do these NEED to be sorted ...
-
 if (any(layerMiddles /= MISSING_R8) .and. any(layerEdges /= MISSING_R8)) then
 
    ! user has specified both ... do we want to support that ... no.
@@ -1755,8 +1753,6 @@ subroutine setModelLevels(layerMiddles, layerEdges, nLayers)
 real(r8), dimension(:), intent(inout) :: layerMiddles
 real(r8), dimension(:), intent(inout) :: layerEdges
 integer,                intent(  out) :: nLayers
-
-! FIXME ... do these NEED to be sorted ...
 
 if (any(layerMiddles /= MISSING_R8) .and. any(layerEdges /= MISSING_R8)) then
 

@@ -48,6 +48,8 @@ fig1ax1 = axes('Parent',figure1,'OuterPosition',[0 0 1 0.90]);
 view(fig1ax1,[-37.5 30]);
 grid(fig1ax1,'on');
 
+myworldmap(obs); hold on;
+
 xstring = sprintf('obsmat(:,%d)',obs.lonindex);
 ystring = sprintf('obsmat(:,%d)',obs.latindex);
 zstring = sprintf('obsmat(:,%d)',obs.zindex  );
@@ -63,8 +65,6 @@ scatter3(obsmat(:,obs.lonindex), obsmat(:,obs.latindex), obsmat(:,obs.zindex), .
              'ZDataSource',zstring);
 
 set(fig1ax1,'FontSize',18);
-
-myworldmap(obs);
 
 xlabel(obs.colnames{obs.lonindex});
 ylabel(obs.colnames{obs.latindex});
@@ -152,30 +152,6 @@ linkdata on
 
 figure3 = figure(3); clf(figure3); orient tall; wysiwyg
 
-%% Create axes for ObsVal vs. DART QC scatterplot
-fig3ax1 = axes('Parent',figure3,'Position',[0.15 0.675 0.7 0.25]);
-box(fig3ax1,'on');
-
-xstring = sprintf('obsmat(:,%d)',obs.obsindex);
-ystring = sprintf('obsmat(:,%d)',obs.qcindex);
-
-h1 = scatter(obsmat(:,obs.obsindex),obsmat(:,obs.qcindex), ...
-    'Parent',fig3ax1, ...
-    'DisplayName','obs vs qc', ...
-    'XDataSource',xstring, ...
-    'YDataSource',ystring);
-
-set(fig3ax1,'FontSize',14);
-
-xlabel(obs.colnames{obs.obsindex});
-ylabel(obs.colnames{obs.qcindex});
-h = title(obs.ObsTypeString);
-set(h,'Interpreter','none');
-axis([-Inf Inf 0 8])
-grid(fig3ax1,'on');
-
-fprintf('QC summary follows:\n')
-LabelQC(obs.colnames{obs.qcindex}, obs.qc)
 
 %% Create axes for observation vs ensemble
 % This figure is most useful when all the 'bad' obs have been
@@ -204,6 +180,8 @@ axlims = [min(axis) max(axis) min(axis) max(axis)];
 axis(axlims)
 line([min(axis) max(axis)],[min(axis) max(axis)],'LineWidth',1.5,'Color','k')
 grid(fig3ax2,'on');
+xmin = axlims(1);
+xmax = axlims(2);
 
 if (sum(isfinite(get(h2,'YData')))) == 0
     Print_Empty_Banner(obs.colnames{obs.copyindex});
@@ -212,7 +190,31 @@ end
 refreshdata
 linkdata on
 
+%% Create axes for ObsVal vs. DART QC scatterplot
+fig3ax1 = axes('Parent',figure3,'Position',[0.15 0.675 0.7 0.25]);
+box(fig3ax1,'on');
 
+xstring = sprintf('obsmat(:,%d)',obs.obsindex);
+ystring = sprintf('obsmat(:,%d)',obs.qcindex);
+
+h1 = scatter(obsmat(:,obs.obsindex),obsmat(:,obs.qcindex), ...
+    'Parent',fig3ax1, ...
+    'DisplayName','obs vs qc', ...
+    'XDataSource',xstring, ...
+    'YDataSource',ystring);
+
+set(fig3ax1,'FontSize',14);
+
+xlabel(obs.colnames{obs.obsindex});
+ylabel(obs.colnames{obs.qcindex});
+h = title(obs.ObsTypeString);
+set(h,'Interpreter','none');
+axis([xmin xmax 0 8]);   % use same horizontal scale as fig3ax2
+grid(fig3ax1,'on');
+
+
+fprintf('QC summary follows:\n')
+LabelQC(obs.colnames{obs.qcindex}, obs.qc)
 
 function LabelQC(QCString, qcarray)
 %% Create legend for (DART) QC values.
