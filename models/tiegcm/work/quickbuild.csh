@@ -60,7 +60,8 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-\rm -f *.o *.mod
+\rm -f *.o *.mod Makefile
+\rm -f input.nml.*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then
   echo "Success: All single task DART programs compiled."  
@@ -109,14 +110,11 @@ echo "build number $n is mkmf_wakeup_filter"
 csh  mkmf_wakeup_filter -mpi
 make || exit $n
 
-\rm -f *.o *.mod
+\rm -f *.o *.mod Makefile
+\rm -f input.nml.*_default
 
 echo
-echo 'time to run filter here:'
-echo ' for lsf run "bsub < runme_filter"'
-echo ' for pbs run "qsub runme_filter"'
-echo ' for lam-mpi run "lamboot" once, then "runme_filter"'
-echo ' for mpich run "mpd" once, then "runme_filter"'
+echo 'filter must be run in an MPI environment.'
 
 exit 0
 
