@@ -1,10 +1,8 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
-#
-# DART $Id$
 #
 # Top level script to generate observations and a TRUE state.
 #
@@ -107,7 +105,7 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # EXPERIMENT   The (safe) location for the results of this run.
 #-----------------------------------------------------------------------------
 
-set     DARTDIR = /glade/u/home/${USER}/work/DART/tiegcm/models/tiegcm
+set     DARTDIR = /glade/u/home/${USER}/DART/tiegcm/models/tiegcm
 set   TIEGCMDIR = /glade/p/image/RDA_strawman/TIEGCM_files
 set ENSEMBLEDIR = /glade/p/image/RDA_strawman/TIEGCM_files/ensembles
 set  EXPERIMENT = /glade/p/work/${USER}/${JOBNAME}
@@ -229,9 +227,4 @@ echo "These are the files in the run directory at completion:"
 ls -lrt
 
 exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

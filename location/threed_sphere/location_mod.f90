@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 !> Implements location interfaces for a three dimensional spherical shell 
 !> with a choice of vertical coordinates.
@@ -48,10 +46,9 @@ public :: location_type, get_location, set_location, &
           VERTISHEIGHT, VERTISSCALEHEIGHT, print_get_close_type, horiz_dist_only
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'threed_sphere/location_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 ! The possible numeric values for the location_type%which_vert component.
 ! The numeric values are PRIVATE to this module. The parameter names are PUBLIC.
@@ -814,10 +811,9 @@ write(string1, '(A,F12.8,1X,F12.8,1X,A)') 'Lon/Lat(deg): ',  loc%lon*RAD2DEG, &
 ! case the caller is listing out locations with different vert units.
 ! concatinate the vertical on the end of the horizontal and put it all
 ! into the return string. 
-
 select case  (loc%which_vert)
    case (VERTISUNDEF)
-      write(charstring, '(A,16x,A)')    trim(string1), ' Undefined'
+      write(charstring, '(A,16x,A)')      trim(string1), ' Undefined'
    case (VERTISSURFACE)
       write(charstring, '(A,1x,F15.7,A)') trim(string1), loc%vloc, ' surface (m)'
    case (VERTISLEVEL)
@@ -832,6 +828,7 @@ select case  (loc%which_vert)
       write(msgstring, *) 'unrecognized key for vertical type: ', loc%which_vert
       call error_handler(E_ERR, 'write_location', msgstring, source, revision, revdate)
 end select
+
 
 end subroutine write_location
 
@@ -1725,7 +1722,7 @@ if(COMPARE_TO_CORRECT) then
       call error_handler(E_ERR, 'get_close_obs', msgstring, source, revision, revdate, &
                          text2='optional arg "dist" not present; we are returning a superset of close locations', &
                          text3='the exhaustive search should find an equal or lesser number of locations')
-   endif
+endif
 endif
 !--------------------End of verify by comparing to exhaustive search --------------
 
@@ -2521,8 +2518,3 @@ end subroutine print_get_close_type
 
 end module location_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

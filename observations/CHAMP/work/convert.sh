@@ -26,10 +26,20 @@ nd=4
 for (( i = 1 ; i <= $nd; i++ ))
 do
     echo $i
+<<<<<<< HEAD
     sed -i '.tmp' 's#text_input_file.*#text_input_file = "../data/2002/Density_3deg_02_'$[$d1+$i-1]'.ascii"#' input.nml
     ./CHAMP_density_text_to_obs
 done
 
+=======
+    sed -i '.tmp' 's/text_input_file.*/text_input_file = "Density_3deg_02_'$[$d1+$i-1]'.ascii"/' input.nml
+    ./text_to_obs > temp
+done
+
+#shows how many observations are there total
+tail temp
+
+>>>>>>> upstream/Classic
 # <next few lines under version control, do not edit>
 # $URL$
 # $Revision$

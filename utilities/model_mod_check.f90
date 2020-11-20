@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program model_mod_check
 
@@ -41,10 +39,9 @@ use        model_mod, only : static_init_model, get_model_size, get_state_meta_d
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'model_mod_check.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 !------------------------------------------------------------------
 ! The namelist variables
@@ -186,14 +183,8 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 !  Q( 1306369 : 1741824)
 ! PS( 1741825 : 1752193)    (only 144x72)
 !----------------------------------------------------------------------
-write(*,*)
-write(*,*)'Checking metadata routines.'
 
 if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
-
-! do x_ind = 1,x_size
-!    call check_meta_data(x_ind)
-! enddo
 
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
@@ -259,9 +250,13 @@ type(location_type) :: loc
 integer             :: var_type
 character(len=129)  :: string1
 
+write(*,*)
+write(*,*)'Checking metadata routines.'
+
 call get_state_meta_data( iloc, loc, var_type)
+
 call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,'(''indx '',i8,'' is type '',i4,1x,A)') iloc,var_type,trim(string1)
+write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
 
 end subroutine check_meta_data
 
@@ -331,7 +326,7 @@ enddo
 closest = minval(thisdist)
 
 if (.not. matched) then
-   write(*,*)'No state vector elements of kind '//trim(kind_of_interest)
+   write(*,*)'No state vector elements of '//trim(kind_of_interest)
    return
 endif
 
@@ -367,8 +362,3 @@ end subroutine find_closest_gridpoint
 
 end program model_mod_check
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

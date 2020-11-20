@@ -8,6 +8,7 @@ program CHAMP_density_text_to_obs
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
+<<<<<<< HEAD
 !   CHAMP_density_text_to_obs - reads fixed-format ASCII files from
 !   http://sisko.colorado.edu/sutton/data/ver2.2/champ/density/2002/ascii/
 !   work/Density_3deg_02_335.ascii is an example of an input file
@@ -31,6 +32,37 @@ use     utilities_mod, only : initialize_utilities, finalize_utilities, to_upper
 use  time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                               set_date, set_time, get_time, print_date, &
                               operator(-), operator(+), operator(>=)
+=======
+!   CHAMP_density_text_to_obs - a program that only needs minor customization to read
+!      in a text-based dataset - either white-space separated values or
+!      fixed-width column data.
+!
+!     created 29 Mar 2010   nancy collins NCAR/IMAGe
+!
+!+ modified 15 Aug 2012 Alexey Morozov (Univ. of Michigan), alexeymor at google mail
+!
+!+ It is designed to read CHAMP ascii files
+!+ For example of input files, see Density_3deg_02_335.ascii in work folder, which is taken from
+!  http://sisko.colorado.edu/sutton/data/ver2.2/champ/density/2002/ascii/
+!+ This program reads the name of the text file, obs_seq file, and "debug" from input.nml
+!+ APPENDS new observations to existing obs_seq.out - see line 130ish
+!+ (but not if you change the obs_out_file in input.nml)
+!+ For added convenience, see convert.sh in work folder, which runs this program repeatedly
+!+ to convert+append many CHAMP files
+!+ Implemented the suggestion about times starting from weird points (like 335th day in 2002)
+!+ - see lines 190ish
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+use         types_mod, only : r8, PI, DEG2RAD
+
+use     utilities_mod, only : initialize_utilities, finalize_utilities, &
+                              open_file, close_file, find_namelist_in_file, check_namelist_read
+
+use  time_manager_mod, only : time_type, set_calendar_type, set_date, &
+                              operator(>=), increment_time, get_time, set_time, &
+                              operator(-), GREGORIAN, operator(+), print_date
+>>>>>>> upstream/Classic
 
 use      location_mod, only : VERTISHEIGHT
 
@@ -41,6 +73,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 
 use obs_utilities_mod, only : create_3d_obs, add_obs_to_seq
 
+<<<<<<< HEAD
 use      obs_kind_mod, only : CHAMP_MASS_DENSITY, SAT_RHO
 
 implicit none
@@ -58,10 +91,22 @@ character(len=256) :: obs_out_file               = 'obs_seq.out'
 character(len=obstypelength) :: observation_type = 'CHAMP_MASS_DENSITY'
 logical            :: append_to_existing_file    = .false.
 logical            :: debug                      = .true.
+=======
+use      obs_kind_mod, only : SAT_RHO !this is density
+
+implicit none
+
+! things which can/should be in the text_to_obs_nml
+
+character(len=64)  :: text_input_file = 'Density_3deg_02_335_2p2.ascii'
+character(len=64)  :: obs_out_file    = 'obs_seq.out'
+logical            :: debug = .true.
+>>>>>>> upstream/Classic
 
 namelist /CHAMP_density_text_to_obs_nml/  &
      text_input_file, &
      obs_out_file,    &
+<<<<<<< HEAD
      observation_type,  &
      append_to_existing_file,  &
      debug
@@ -74,6 +119,16 @@ integer :: oday, osec, rcio, iunit
 integer :: year, day, second
 integer :: num_copies, num_qc, max_obs, linenum
 integer :: observation_type_int
+=======
+     debug
+
+
+character (len=200) :: input_line !162 is the width of CHAMPdens2.2 files, but to be safe do 200
+
+integer :: oday, osec, rcio, iunit
+integer :: year, day, second
+integer :: num_copies, num_qc, max_obs
+>>>>>>> upstream/Classic
 
 logical  :: file_exist, first_obs
 
@@ -99,6 +154,7 @@ call find_namelist_in_file('input.nml', 'CHAMP_density_text_to_obs_nml', iunit)
 read(iunit, nml = CHAMP_density_text_to_obs_nml, iostat = rcio)
 call check_namelist_read(iunit, rcio, 'CHAMP_density_text_to_obs_nml')
 
+<<<<<<< HEAD
 call set_observation_type()
 
 ! time setup
@@ -111,6 +167,17 @@ write(string2,*) 'converting them as observation type '//trim(observation_type)
 
 call error_handler(E_MSG, 'CHAMP_density_text_to_obs', string1, &
            source, revision, revdate, text2=string2)
+=======
+! time setup
+call set_calendar_type(GREGORIAN)
+
+
+! open input text file
+
+iunit = open_file(text_input_file, 'formatted', 'read')
+if (debug) print *, 'opened input file ' // trim(text_input_file)
+
+>>>>>>> upstream/Classic
 
 ! each observation in this series will have a single observation value
 ! and a quality control flag.  the max possible number of obs needs to
@@ -134,11 +201,16 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 call set_copy_meta_data(obs_seq, 1, 'observation')
 call set_qc_meta_data(obs_seq, 1, 'Data QC')
 
+<<<<<<< HEAD
 ! If you want to append to existing files (e.g. you have a lot of
+=======
+! if you want to append to existing files (e.g. you have a lot of
+>>>>>>> upstream/Classic
 ! small text files you want to combine), you can do it this way,
 ! or you can use the obs_sequence_tool to merge a list of files
 ! once they are in DART obs_seq format.
 
+<<<<<<< HEAD
 if (append_to_existing_file) then
    inquire(file=obs_out_file, exist=file_exist)
    if ( file_exist ) then
@@ -146,12 +218,19 @@ if (append_to_existing_file) then
      call error_handler(E_MSG,'CHAMP_density_text_to_obs',string1)
      call read_obs_seq(obs_out_file, 0, 0, max_obs, obs_seq)
    endif
+=======
+! existing file found, append to it
+inquire(file=obs_out_file, exist=file_exist)
+if ( file_exist ) then
+  call read_obs_seq(obs_out_file, 0, 0, max_obs, obs_seq)
+>>>>>>> upstream/Classic
 endif
 
 ! Set the DART data quality control.   0 is good data.
 ! increasingly larger QC values are more questionable quality data.
 qc = 0.0_r8
 
+<<<<<<< HEAD
 ! The first  line is the version and origin information.
 ! The second line is a description of the columns and units.
 ! As long as these are constant, we can skip them.
@@ -179,6 +258,11 @@ read(iunit,"(A)") input_line
 read(iunit,"(A)") input_line
 
 linenum = 2
+=======
+! first two lines are just text (description), so just skip them
+read(iunit, "(A)", iostat=rcio) input_line
+read(iunit, "(A)", iostat=rcio) input_line
+>>>>>>> upstream/Classic
 
 obsloop: do    ! no end limit - have the loop break when input ends
 
@@ -189,6 +273,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    !  error: very important - the instrument error plus representativeness error
    !        (see html file for more info)
 
+<<<<<<< HEAD
    ! read the whole line into a buffer and parse it later
    read(iunit, "(A)", iostat=rcio) input_line
 
@@ -209,6 +294,16 @@ obsloop: do    ! no end limit - have the loop break when input ends
    linenum = linenum + 1
 
    ! here is a line from sisko.colorado.edu/sutton/data/ver2.2/champ/density/2002/ascii/,
+=======
+   ! read the whole line into a buffer
+   read(iunit, "(A)", iostat=rcio) input_line
+   if (rcio /= 0) then
+      if (debug) print *, 'got bad read code from input file, rcio = ', rcio
+      exit obsloop
+   endif
+
+   ! assume here is a line from sisko.colorado.edu/sutton/data/ver2.2/champ/density/2002/ascii/,
+>>>>>>> upstream/Classic
    !data format is:
    !+ 1)year(2I), 2)day(3I), 3)second(8.3F), 4)round(lat), 5)lat(d,-90 90), 6)lon(d,-180 180), 7)alt(km),
    !+ 8)LT, 9)Mlat, 10)Mlon, 11)MLT, 12)Rho(Density!), 13)MSISRho400, 14)MSISRho410, 15)MSISRhoSat
@@ -221,6 +316,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
         terr, ignore_i, &
         ignore_i, ignore_r
 
+<<<<<<< HEAD
    if (rcio /= 0) then
       write(string1,*) 'unable to parse line ',linenum
       write(string2,*) 'of ',trim(text_input_file)
@@ -231,10 +327,21 @@ obsloop: do    ! no end limit - have the loop break when input ends
    vert = vert * 1000.0_r8 ! DART needs alt in meters, CHAMP has km
 
    if (debug) print *, 'this observation located at lat, lon, vert = ', lat, lon, vert
+=======
+   vert=vert*1000 !DART needs alt in m, whereas in champ files it's in km
+
+   if (rcio /= 0) then
+      if (debug) print *, 'got bad read code getting rest of temp obs, rcio = ', rcio
+      exit obsloop
+   endif
+
+   if (debug) print *, 'this observation located at lat, lon = ', lat, lon
+>>>>>>> upstream/Classic
 
    ! if lon comes in between -180 and 180, use these lines instead:
    if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
    if ( lon > 180.0_r8 .or. lon < -180.0_r8 ) cycle obsloop
+<<<<<<< HEAD
    if ( lon <   0.0_r8 ) lon = lon + 360.0_r8 ! changes into 0-360
 
    ! put date into a dart time format
@@ -242,6 +349,19 @@ obsloop: do    ! no end limit - have the loop break when input ends
    year      = 2000 + year !because year in file is (2I) - 2 digits
    comp_day0 = set_date(year, 1, 1, 0, 0, 0)  ! always Jan 1 of whatever year.
    second    = nint(second_r)
+=======
+   if ( lon < 0.0_r8 )  lon = lon + 360.0_r8 ! changes into 0-360
+
+   ! put date into a dart time format
+
+   year = 2000 + year !because year in file is (2I) - 2 digits
+   second = nint(second_r)
+
+   !! some times are supplied as number of seconds since some reference
+   !! date.  This is an example of how to support that.
+   !! put the reference date into DART format
+   comp_day0 = set_date(year, 1, 1, 0, 0, 0)
+>>>>>>> upstream/Classic
    time_obs  = comp_day0 + set_time(second, day-1)
 
    ! extract time of observation into gregorian day, sec.
@@ -249,6 +369,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
 
    if (debug) call print_date(time_obs, 'this obs time is')
 
+<<<<<<< HEAD
    ! make an obs derived type, and then add it to the sequence
 
    call create_3d_obs(lat, lon, vert, VERTISHEIGHT, temp, &
@@ -256,6 +377,16 @@ obsloop: do    ! no end limit - have the loop break when input ends
    call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
    if (debug) print *, 'added '//trim(observation_type)//' obs to output seq'
+=======
+   ! height is in kilometers (yardstick)
+   ! make an obs derived type, and then add it to the sequence
+
+   call create_3d_obs(lat, lon, vert, VERTISHEIGHT, temp, &
+        SAT_RHO, terr, oday, osec, qc, obs)
+   call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+
+   if (debug) print *, 'added RHO obs to output seq'
+>>>>>>> upstream/Classic
 
 end do obsloop
 
@@ -264,14 +395,18 @@ if ( get_num_obs(obs_seq) > 0 ) then
    !if (debug) print *, 'writing obs_seq, obs_count = ', get_num_obs(obs_seq)
    print *, 'writing obs_seq, obs_count = ', get_num_obs(obs_seq)
    call write_obs_seq(obs_seq, obs_out_file)
+<<<<<<< HEAD
 else
    call error_handler(E_MSG,'CHAMP_density_text_to_obs','no observations in sequence', &
                       source, revision, revdate)
+=======
+>>>>>>> upstream/Classic
 endif
 
 ! end of main program
 call finalize_utilities()
 
+<<<<<<< HEAD
 contains
 
 !-----------------------------------------------------------------------
@@ -303,6 +438,8 @@ end subroutine set_observation_type
 
 
 
+=======
+>>>>>>> upstream/Classic
 end program CHAMP_density_text_to_obs
 
 ! <next few lines under version control, do not edit>

@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module obs_utilities_mod
 
@@ -52,10 +50,9 @@ public :: create_3d_obs,    &
 character(len=NF90_MAX_NAME) :: missing_name = ''
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'obs_utilities_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 contains
 
@@ -429,6 +426,7 @@ call nc_check( nf90_get_var(ncid, varid, shortarray), &
 
 darray = real(shortarray,r8)
 
+
 if (fill_exists == NF90_NOERR) then ! FillValue exists
 
    if ( (offset_exists == NF90_NOERR) .and. (scaling_exists == NF90_NOERR) ) then
@@ -450,6 +448,8 @@ else
    elseif (scaling_exists == NF90_NOERR) then
       darray = darray + add_offset
    endif
+
+   if (present(dmiss)) dmiss = MISSING_R8
 
 endif
 
@@ -513,6 +513,8 @@ else
    elseif (scaling_exists == NF90_NOERR) then
       darray = darray + add_offset
    endif
+
+   if (present(dmiss)) dmiss = MISSING_R8
 
 endif
 
@@ -885,7 +887,7 @@ subroutine getvar_real_1d_1val(ncid, varname, start, dout, dmiss)
  real(r8),           intent(out)  :: dout
  real(r8), optional, intent(out)  :: dmiss
 
-integer :: varid
+integer :: varid, ret
 
 ! read the data for the requested array, and get the fill value
 call nc_check( nf90_inq_varid(ncid, varname, varid), &
@@ -893,9 +895,10 @@ call nc_check( nf90_inq_varid(ncid, varname, varid), &
 call nc_check( nf90_get_var(ncid, varid, dout, start = (/ start /) ), &
                'getvar_real_1d_val', 'getting var '// trim(varname))
 
-if (present(dmiss)) &
-   call nc_check( nf90_get_att(ncid, varid, '_FillValue', dmiss), &
-               'getvar_real_1d_val', 'getting attr "_FillValue" for '//trim(varname))
+if (present(dmiss)) then 
+   ret = nf90_get_att(ncid, varid, '_FillValue', dmiss)
+   if (ret /= NF90_NOERR) dmiss = MISSING_R8
+endif
 
 end subroutine getvar_real_1d_1val
 
@@ -921,7 +924,7 @@ subroutine getvar_int_1d_1val(ncid, varname, start, dout, dmiss)
  integer,            intent(out)  :: dout
  integer,  optional, intent(out)  :: dmiss
 
-integer :: varid
+integer :: varid, ret
 
 ! read the data for the requested array, and get the fill value
 call nc_check( nf90_inq_varid(ncid, varname, varid), &
@@ -929,9 +932,10 @@ call nc_check( nf90_inq_varid(ncid, varname, varid), &
 call nc_check( nf90_get_var(ncid, varid, dout, start = (/ start /) ), &
                'getvar_int_1d_1val', 'getting var '// trim(varname))
 
-if (present(dmiss)) &
-   call nc_check( nf90_get_att(ncid, varid, '_FillValue', dmiss), &
-               'getvar_int_1d_1val', 'getting attr "_FillValue" for '//trim(varname))
+if (present(dmiss)) then
+   ret = nf90_get_att(ncid, varid, '_FillValue', dmiss)
+   if (ret /= NF90_NOERR) dmiss = MISSING_I
+endif
 
 end subroutine getvar_int_1d_1val
 
@@ -961,7 +965,7 @@ subroutine getvar_real_2d_slice(ncid, varname, start, count, darray, dmiss)
  real(r8),           intent(out)  :: darray(:)
  real(r8), optional, intent(out)  :: dmiss
 
-integer :: varid
+integer :: varid, ret
 
 ! read the data for the requested array, and get the fill value
 call nc_check( nf90_inq_varid(ncid, varname, varid), &
@@ -970,9 +974,10 @@ call nc_check( nf90_get_var(ncid, varid, darray, &
                 start=(/ 1, start /), count=(/ count, 1 /) ), &
                'getvar_real_2d_slice', 'getting var '// trim(varname))
 
-if (present(dmiss)) &
-   call nc_check( nf90_get_att(ncid, varid, '_FillValue', dmiss), &
-               'getvar_real_2d_slice', 'getting attr "_FillValue" for '//trim(varname))
+if (present(dmiss)) then
+   ret = nf90_get_att(ncid, varid, '_FillValue', dmiss)
+   if (ret /= NF90_NOERR) dmiss = MISSING_R8
+endif
 
 end subroutine getvar_real_2d_slice
 

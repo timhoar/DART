@@ -129,7 +129,7 @@
    tiegcm_namelist_file_name   = 'tiegcm.nml'
    assimilation_period_seconds = 3600
    estimate_f10_7              = .false.
-   variables = 'NE',    'KIND_DENSITY_ION_E',             '1000.0',  'NA',      'restart',    'UPDATE'
+   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
                'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
                'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
                'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
@@ -140,7 +140,6 @@
                'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
                'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
    /
-
 
 &model_to_dart_nml
    file_out      = 'dart_ics'
@@ -168,10 +167,8 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'CHAMP_MASS_DENSITY',
-                                'GPS_VTEC_EXTRAP', 
-                                'SSUSI_O_N2_RATIO'
-   evaluate_these_obs_types   = 'GPS_PROFILE', 
+   assimilate_these_obs_types = 'GPS_PROFILE', 'COSMIC_ELECTRON_DENSITY'
+   evaluate_these_obs_types   = 'GND_GPS_VTEC', 'CHAMP_DENSITY', 'GPS_VTEC_EXTRAP'
    /
 
 &assim_model_nml
@@ -239,11 +236,11 @@
 &obs_diag_nml
    obs_sequence_name = 'obs_seq.final'
    obs_sequence_list = ''
-   first_bin_center =  2003, 1, 1, 0, 0, 0 
-   last_bin_center  =  2003, 1, 2, 0, 0, 0 
-   bin_separation   =     0, 0, 0, 6, 0, 0 
-   bin_width        =     0, 0, 0, 6, 0, 0 
-   time_to_skip     =     0, 0, 0, 6, 0, 0 
+   first_bin_center =  2005, 9,  9, 0, 0, 0
+   last_bin_center  =  2005, 9, 10, 0, 0, 0
+   bin_separation   =     0, 0,  0, 1, 0, 0
+   bin_width        =     0, 0,  0, 1, 0, 0
+   time_to_skip     =     0, 0,  0, 1, 0, 0
    max_num_bins     = 1000
    trusted_obs      = 'null'
    Nregions   = 4

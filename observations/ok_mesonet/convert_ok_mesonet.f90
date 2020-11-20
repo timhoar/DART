@@ -401,8 +401,15 @@ n10 = n9 + index(line(n9+1:nend), ',')
   close(iunit)
 end subroutine get_geo
 
+<<<<<<< HEAD
 # <next few lines under version control, do not edit>
 # $URL$
 # $Revision$
 # $Date$
+=======
+! <next few lines under version control, do not edit>
+! $URL$
+! $Revision$
+! $Date$
+>>>>>>> upstream/Classic
 

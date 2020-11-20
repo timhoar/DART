@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 !> Change observation sequence files by adding or removing observations
 !> based on type, location, values, time.  Long list of options based on 
@@ -42,10 +40,9 @@ use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq, &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'obs_sequence_tool.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 type(obs_sequence_type) :: seq_in, seq_out
 type(obs_type) :: obs_in, next_obs_in
@@ -1053,7 +1050,7 @@ subroutine trim_seq(seq, trim_first, first_time, trim_last, last_time, &
       if(all_gone) then
          if (print_msg) then
             msgstring1 = 'Skipping: no obs in ' // trim(seqfilename) // &
-                        ' are above the given height'
+                        ' are within the given min/max location bounding box'
             call error_handler(E_MSG,'obs_sequence_tool',msgstring1)
          endif
          remaining_obs_count = 0
@@ -1602,8 +1599,3 @@ end subroutine set_new_data
 !---------------------------------------------------------------------
 end program obs_sequence_tool
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

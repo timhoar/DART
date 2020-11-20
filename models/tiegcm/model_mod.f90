@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module model_mod
 
@@ -81,10 +79,9 @@ public :: tiegcm_to_dart_vector, &
           test_interpolate
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   '$URL$'
-character(len=32 ), parameter :: revision = '$Revision$'
-character(len=128), parameter :: revdate  = '$Date$'
+character(len=*), parameter :: source   = 'tiegcm/model_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 !-------------------------------------------------------------------------------
 ! namelist with default values
@@ -2110,7 +2107,7 @@ character(len=*), intent(in):: file_name
 integer :: ncid
 integer :: TimeDimID, time_dimlen, VarID
 
-real(r8) :: spvalR8
+real(r8) :: spvalR8, spvalR4
 
 if( .not. file_exist(file_name)) then
   write(string1,*) trim(file_name),' not available.'
@@ -3955,8 +3952,3 @@ end subroutine apply_attributes_4D
 !===============================================================================
 end module model_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
