@@ -1,7 +1,7 @@
 &perfect_model_obs_nml
    start_from_restart    = .true.
    output_restart        = .true.
-   async                 = 2
+   async                 = 4
    init_time_days        = -1
    init_time_seconds     = -1
    first_obs_days        = -1
@@ -22,7 +22,7 @@
    /
 
 &filter_nml
-   async                    = 2
+   async                    = 4
    adv_ens_command          = "./advance_model.csh"
    ens_size                 = 80
    start_from_restart       = .true.
@@ -123,22 +123,22 @@
 
 &model_nml
    debug                       = 1
-   output_state_vector         = .false.
    tiegcm_restart_file_name    = 'tiegcm_restart_p.nc'
    tiegcm_secondary_file_name  = 'tiegcm_s.nc'
    tiegcm_namelist_file_name   = 'tiegcm.nml'
    assimilation_period_seconds = 3600
    estimate_f10_7              = .false.
-   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
-               'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
-               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
-               'OP_NM', 'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
-               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
-               'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
-               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
-               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
+   variables = 'NE',    'KIND_ELECTRON_DENSITY',           '1000.0',  '1.0e20',  'restart',    'UPDATE'
+               'OP',    'KIND_DENSITY_ION_OP',             '1.0',     '1.0e20',  'restart',    'UPDATE',
+               'TI',    'KIND_TEMPERATURE_ION',            '100.0',   '10000.0', 'restart',    'UPDATE',
+               'TE',    'KIND_TEMPERATURE_ELECTRON',       '100.0',   '10000.0', 'restart',    'UPDATE',
+               'OP_NM', 'KIND_DENSITY_ION_OP',             '100.0',   '10000.0', 'restart',    'UPDATE',
+	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
+               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO',  '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
+               'TN',    'KIND_TEMPERATURE',                '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
+               'ZG',    'KIND_GEOMETRIC_HEIGHT',           '100.0',   '1.0e8',   'secondary',  'NO_COPY_BACK',
+               'DEN',   'KIND_DENSITY',                    '0.0',     '1.0',     'secondary',  'NO_COPY_BACK',
+               'VTEC',  'KIND_VERTICAL_TEC',               '0.0',     '1.0e18',  'calculate',  'NO_COPY_BACK'
    /
 
 &model_to_dart_nml
@@ -308,5 +308,14 @@
    verbose              = .true.
    x_ind                = 36288
    loc_of_interest      = 240.0, 12.49, 200000.0
+   quantity_of_interest  = 'QTY_ELECTRON_DENSITY'
+   interp_test_dlon      = 0.1
+   interp_test_dlat      = 0.1
+   interp_test_dvert     = 50000.0
+   interp_test_lonrange  = 205.0,  226.0
+   interp_test_latrange  = 30.0,   47.0
+   interp_test_vertrange = 200000.0, 300000.0
+   interp_test_vertcoord = 'VERTISHEIGHT'
+   verbose               = .false.
    /
 

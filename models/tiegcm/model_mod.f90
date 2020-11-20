@@ -38,11 +38,13 @@ use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,           &
                              KIND_TEMPERATURE,                &! neutral temperature obs
                              KIND_PRESSURE,                   &! neutral pressure obs
                              KIND_MOLEC_OXYGEN_MIXING_RATIO,  &! neutral composition obs
+                             KIND_ATOMIC_OXYGEN_MIXING_RATIO, &! added in case needed
                              KIND_1D_PARAMETER,               &
                              KIND_GEOPOTENTIAL_HEIGHT,        &
                              KIND_GEOMETRIC_HEIGHT,           &
                              KIND_VERTICAL_TEC,               &! total electron content
-                             get_raw_obs_kind_index, get_raw_obs_kind_name
+                             get_raw_obs_kind_index,          &
+                             get_raw_obs_kind_name
 
 use   random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
@@ -1827,6 +1829,11 @@ real :: &
      &  f107a = MISSING_R4,           &! 10.7 cm average (81-day) solar flux
      &  colfac,          &! collision factor
      &  amie_ibkg         ! AMIE_IBKG (not sure...)
+      ! Add TIE-GCM 2.0 inputs
+      integer ::         &
+     &  current_pg,      &! current due to plasma pressure gradient
+     &  current_kq,      &! height integrated current density
+     &  calc_helium       ! switch for calculation of Helium
 !
 ! Input parameters that can be either constant or time-dependent:
 real :: &
@@ -1933,7 +1940,8 @@ namelist/tgcm_input/                                        &
      &  ctpoten_time,power_time,bximf_time,byimf_time,bzimf_time, &
      &  kp_time,al_time,swden_time,swvel_time,indices_interp,     &
      &  imf_ncfile,saber_ncfile,tidi_ncfile,sech_nbyte, amie_ibkg, &
-     &  seeflux, amienh, amiesh 
+     &  seeflux, amienh, amiesh, &
+     &  current_pg,current_kq,calc_helium ! Add TIE-GCM 2.0 inputs
 
 
 !-------------------------------------------------------------------------------
