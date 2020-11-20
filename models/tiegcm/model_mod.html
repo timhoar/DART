@@ -66,11 +66,7 @@ and only the last timestep in the TIEGCM primary file is ever modified by DART.
 The TIEGCM variables to be included in a DART state vector, and possibly updated by the assimilation, 
 are specified in the DART namelist. (Some of the TIEGCM variables used to compute observation
 priors need not to be updated.) It is required to associate the TIEGCM variable name with 
-<<<<<<< HEAD
-a 'generic' DART counterpart (e.g., <em class=code>NE</em> is <em class=code>KIND_DENSITY_ION_E</em>). 
-=======
 a 'generic' DART counterpart (e.g., <em class=code>NE</em> is <em class=code>KIND_ELECTRON_DENSITY</em>). 
->>>>>>> upstream/Classic
 The composition of the DART state vector and which variables get updated in the TIEGCM primary file 
 are under complete user control.
 
@@ -142,7 +138,6 @@ executables, initial ensemble, etc.
        <li>Steps 1-5 are repeated until the input DART observation sequence file
       
 </OL>
-<<<<<<< HEAD
   
 <H3>Observation types and their converter programs:</H3>
 <OL>
@@ -163,9 +158,6 @@ executables, initial ensemble, etc.
     </li>
 </OL>
 
-=======
-   
->>>>>>> upstream/Classic
 <H3>What to check when things go wrong.</H3>
 <P>The scripts are designed to send email to the user that contains the run-time
 output from the script. Check that first. If that does not provide the 
@@ -202,11 +194,7 @@ prematurely terminating the namelist.
    assimilation_period_seconds = 3600
    estimate_f10_7              = .false.
    debug                       = 1
-<<<<<<< HEAD
-   variables = 'NE',    'KIND_DENSITY_ION_E',             '1000.0',  'NA',      'restart',    'UPDATE'
-=======
    variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
->>>>>>> upstream/Classic
                'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
                'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
                'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
@@ -501,11 +489,7 @@ integer, optional,   intent(out) :: <em class=optionalcode> var_kind </em>
 Given an integer index into the state vector structure, returns the
 associated location. A second intent(out) optional argument 
 returns the generic kind of this item, e.g. KIND_MOLEC_OXYGEN_MIXING_RATIO,
-<<<<<<< HEAD
-KIND_DENSITY_ION_E, ...
-=======
 KIND_ELECTRON_DENSITY, ...
->>>>>>> upstream/Classic
 This interface is required to be functional for all applications.
 </P>
 
@@ -1179,11 +1163,7 @@ and can be modified to suit your needs.
 <TR><TD><em class=file>tiegcm_restart_p.nc</em></TD>
     <TD>both read and modified by the TIEGCM model_mod</TD></TR>
 <TR><TD><em class=file>tiegcm_s.nc</em></TD>
-<<<<<<< HEAD
     <TD>read by the TIEGCM model_mod for metadata purposes.</TD></TR>
-=======
-    <TD>read by the GCOM model_mod for metadata purposes.</TD></TR>
->>>>>>> upstream/Classic
 <TR><TD><em class=file>namelist_update</em></TD>
     <TD>DART file containing information useful for starting and stopping TIEGCM.
         <em class=program>advance_model.csh</em> uses this to update the 
@@ -1253,17 +1233,11 @@ Effects of inferring unobserved thermospheric and ionospheric state variables by
 
 <li style="list-style: none"><!-- whitespace --><br /></li>
 
-<<<<<<< HEAD
 <li> Chartier, A., T. Matsuo, J. L. Anderson, G. Lu, T. Hoar, N. Collins, A. Coster, C. Mitchell, L. Paxton, G. Bust (2016),<br />
 Ionospheric Data Assimilation and Forecasting During Storms.<br />
 <i>Journal of Geophysical Research: Space Physics</i>, <b>121</b>, 764-778,
 <a href="http://dx.doi.org/doi:10.1002/2014JA020799">10.1002/2014JA020799</a>
 </li>
-=======
-<li> Chartier, A., T. Matsuo, J. L. Anderson, G. Lu, T. Hoar, N. Collins, A. Coster, C. Mitchell, L. Paxton, G. Bust (2015),<br />
-Ionospheric Data Assimilation and Forecasting During Storms,<br />
-<i>Journal of Geophysical Research</i>, under review </li>
->>>>>>> upstream/Classic
 </ol>
 
 <P><!-- make sure the 'top' is aligned correctly --></P>
