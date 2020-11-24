@@ -178,7 +178,7 @@
    /
 
 &assim_model_nml
-   write_binary_restart_files = .true.
+   write_binary_restart_files = .false.
    netCDF_large_file_support  = .true.
    /
 
@@ -220,7 +220,7 @@
    ens_size                     =  1
    single_restart_file_in       = .true.
    single_restart_file_out      = .true.
-   write_binary_restart_files   = .true.
+   write_binary_restart_files   = .false.
    overwrite_data_time          = .false.
    new_data_days                =  -1
    new_data_secs                =  -1
@@ -315,7 +315,7 @@
    verbose              = .true.
    x_ind                = 36288
    loc_of_interest      = 240.0, 12.49, 200000.0
-   quantity_of_interest  = 'QTY_ELECTRON_DENSITY'
+   quantity_of_interest  = 'KIND_ELECTRON_DENSITY'
    interp_test_dlon      = 0.1
    interp_test_dlat      = 0.1
    interp_test_dvert     = 50000.0
