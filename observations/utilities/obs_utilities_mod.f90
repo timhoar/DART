@@ -38,6 +38,8 @@ public :: create_3d_obs,    &
           get_or_fill_QC,   &
           getvar_real_2d,   &
           getvar_int_2d,    &
+          getvar_real_3d,   &
+          getvar_int_3d,    &
           getvar_real_1d_1val,     &
           getvar_int_1d_1val,      &
           getvar_real_2d_slice,    &
@@ -864,6 +866,163 @@ if (present(dmiss)) then
 endif
   
 end subroutine getvar_int_2d
+
+
+!--------------------------------------------------------------------
+!
+!>   getvar_real_3d - subroutine that inquires, gets the variable, and fills 
+!>            in the missing value attribute if that arg is present.
+!>            gets the entire array, no start or count specified.
+!>            this version assumes you are reading an entire 2d array.
+!>            see the slice versions for reading 1d from a 2d array.
+!>
+!>      ncid - open netcdf file handle
+!>      varname - string name of netcdf variable
+!>      darray - 2d output array.  real(r8)
+!>      dmiss - value that signals a missing value   real(r8), optional
+!>
+!>     created 11 Mar 2010,  nancy collins,  ncar/image
+!>     modified 13 Jul 2020, George Bowden, UNSW Canberra
+
+subroutine getvar_real_3d(ncid, varname, darray, dmiss)
+ integer,            intent(in)   :: ncid
+ character(len = *), intent(in)   :: varname
+ real(r8),           intent(out)  :: darray(:,:,:)
+ real(r8), optional, intent(out)  :: dmiss
+
+integer  :: varid, nfrc
+real(r8) :: fill, miss
+logical  :: found_miss
+
+! read the data for the requested array, and optionally get the fill value
+call nc_check( nf90_inq_varid(ncid, varname, varid), &
+               'getvar_real_3d', 'inquire var '// trim(varname))
+call nc_check( nf90_get_var(ncid, varid, darray), &
+               'getvar_real_3d', 'getting var '// trim(varname))
+
+! the logic here is: 
+!  if the user hasn't asked about the fill value, don't look for any of
+!  these attributes and just return.
+
+!  if the user has told us another attribute name to look for, try that first.
+!  it's currently NOT an error if it's not there.   then second, look for the
+!  official '_FillValue' attr.  if it's found, return it as the missing value.
+! 
+!  if there are both, overwrite the missing value with the fill value and return
+!  the fill value as the 'dmiss' argument.
+!
+!  if neither are there, set dmiss to the DART missing value.  this could also
+!  be an error, but default to being permissive for now.
+
+if (present(dmiss)) then
+   dmiss = MISSING_R8
+   found_miss = .false.
+
+   ! if user defined another attribute name for missing vals
+   ! look for it first, and make it an error if it's not there?
+   if (missing_name /= '') then
+      nfrc = nf90_get_att(ncid, varid, missing_name, miss)
+      if (nfrc == NF90_NOERR) then 
+         found_miss = .true.
+         dmiss = miss
+      endif
+   endif
+
+      ! this would make it a fatal error if not found
+      !call nc_check( nf90_get_att(ncid, varid, missing_name', miss), &
+      !   'getvar_real_3d', 'getting attr "//trim(missing_name)//" for '//trim(varname))
+
+   ! the predefined netcdf fill value.
+   nfrc = nf90_get_att(ncid, varid, '_FillValue', fill)
+   if (nfrc == NF90_NOERR) then
+      if (.not. found_miss) then  
+         found_miss = .true.
+         dmiss = fill
+      else
+         ! found both, set all to fill value
+         where(darray .eq. miss) darray = fill 
+         dmiss = fill
+      endif
+   endif
+
+   ! if you wanted an error if you specified dmiss and neither attr are
+   ! there, you'd test found_miss here.  if it's still false, none were there.
+
+endif
+
+end subroutine getvar_real_3d
+
+
+!--------------------------------------------------------------------
+!>
+!>   getvar_int_3d - subroutine that inquires, gets the variable, and fills 
+!>            in the missing value attribute if that arg is present.
+!>            gets the entire array, no start or count specified.
+!>            this version assumes you are reading an entire 3d array.
+!>            see the slice versions for reading 1d from a 3d array.
+!>
+!>      ncid - open netcdf file handle
+!>      varname - string name of netcdf variable
+!>      darray - 3d output array.  integer
+!>      dmiss - value that signals a missing value   integer, optional
+!>
+!>     created 11 Mar 2010,  nancy collins,  ncar/image
+!>     modified 13 Jul 2020, George Bowden, UNSW Canberra
+
+subroutine getvar_int_3d(ncid, varname, darray, dmiss)
+ integer,            intent(in)   :: ncid
+ character(len = *), intent(in)   :: varname
+ integer,            intent(out)  :: darray(:,:,:)
+ integer,  optional, intent(out)  :: dmiss
+
+integer  :: varid, nfrc
+real(r8) :: fill, miss
+logical  :: found_miss
+
+! read the data for the requested array, and get the fill value
+call nc_check( nf90_inq_varid(ncid, varname, varid), &
+               'getvar_int_3d', 'inquire var '// trim(varname))
+call nc_check( nf90_get_var(ncid, varid, darray), &
+               'getvar_int_3d', 'getting var '// trim(varname))
+
+! see long comment in getvar_real() about the logic here.
+if (present(dmiss)) then
+   dmiss = MISSING_I
+   found_miss = .false.
+
+   ! if user defined another attribute name for missing vals
+   ! look for it first, and make it an error if it's not there?
+   if (missing_name /= '') then
+      nfrc = nf90_get_att(ncid, varid, missing_name, miss)
+      if (nfrc == NF90_NOERR) then 
+         found_miss = .true.
+         dmiss = miss
+      endif
+   endif
+
+      ! this would make it a fatal error if not found
+      !call nc_check( nf90_get_att(ncid, varid, missing_name', miss), &
+      !         'getvar_int_3d', 'getting attr "//trim(missing_name)//" for '//trim(varname))
+
+   ! the predefined netcdf fill value.
+   nfrc = nf90_get_att(ncid, varid, '_FillValue', fill)
+   if (nfrc == NF90_NOERR) then
+      if (.not. found_miss) then  
+         found_miss = .true.
+         dmiss = fill
+      else
+         ! found both, set all to fill value
+         where(darray .eq. miss) darray = fill 
+         dmiss = fill
+      endif
+   endif
+
+   ! if you wanted an error if you specified dmiss and neither attr are
+   ! there, you'd test found_miss here.  if it's still false, none were there.
+
+endif
+  
+end subroutine getvar_int_3d
 
 
 !--------------------------------------------------------------------

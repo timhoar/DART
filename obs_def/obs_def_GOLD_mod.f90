@@ -56,7 +56,7 @@ use     obs_kind_mod, only : KIND_NEMAX_DISK, &
                              KIND_ON2_DISK, &
                              KIND_TEMPERATURE, &
                              KIND_ELECTRON_DENSITY, &
-                             KIND_GEOPOTENTIAL_HEIGHT, &
+                             KIND_GEOMETRIC_HEIGHT, &
                              KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
                              KIND_MOLEC_OXYGEN_MIXING_RATIO, &
                              KIND_PRESSURE, &
@@ -89,7 +89,7 @@ end subroutine initialize_module
 
 !-----------------------------------------------------------------------------
 !> Given DART state vector and a location, 
-!> compute ionospheric maximum electron density [/m3] 
+!> retrieve ionospheric maximum electron density in column [/m3] 
 !> The istatus variable should be returned as 0 unless there is a problem
 
 subroutine get_expected_nemax(x, location, obs_val, istatus)
@@ -111,10 +111,6 @@ type(location_type) :: probe
 
 if ( .not. module_initialized ) call initialize_module
 
-call error_handler(E_ERR, 'get_expected_nemax', 'Tim has questions', &
-           source, revision, revdate, &
-           text2='seems like routine is unfinished')
-
 istatus = 36 !initially bad return code
 obs_val = MISSING_R8
 
@@ -133,7 +129,7 @@ LEVELS: do iAlt=1, size(ALT)+1
    ! this model must have more levels than we expected.  increase array sizes,
    ! recompile, and try again.
    if (iAlt > size(ALT)) then
-      call error_handler(E_ERR, 'get_expected_nemax', 'more than 500 levels in model', &
+      call error_handler(E_MSG, 'get_expected_nemax', 'more than 500 levels in model', &
            source, revision, revdate, &
            text2='increase ALT, IDensityS_ie array sizes in code and recompile')
    endif
@@ -145,15 +141,12 @@ LEVELS: do iAlt=1, size(ALT)+1
    call interpolate(x, probe, KIND_ELECTRON_DENSITY, IDensityS_ie(iAlt), istatus) 
    if (istatus /= 0) exit LEVELS
 
-   call interpolate(x, probe, KIND_GEOPOTENTIAL_HEIGHT, ALT(iAlt), istatus) 
-   if (istatus /= 0) exit LEVELS
-
    nAlts = nAlts+1
 enddo LEVELS
 
 if (nAlts == 0) return
 
-nemax = maxval(IDensityS_ie)
+nemax = maxval(IDensityS_ie(1:nAlts))
 obs_val = nemax
 
 end subroutine get_expected_nemax
@@ -219,7 +212,7 @@ LEVELS: do iAlt=1, size(ALT)+1
    if (istatus /= 0) exit LEVELS
    call interpolate(x, probe, KIND_MOLEC_OXYGEN_MIXING_RATIO, o2_ratio, istatus) 
    if (istatus /= 0) exit LEVELS
-   call interpolate(x, probe, KIND_GEOPOTENTIAL_HEIGHT, ALT(iAlt), istatus) 
+   call interpolate(x, probe, KIND_GEOMETRIC_HEIGHT, ALT(iAlt), istatus)
    if (istatus /= 0) exit LEVELS
    call interpolate(x, probe, KIND_PRESSURE, press, istatus) 
    if (istatus /= 0) exit LEVELS
