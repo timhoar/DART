@@ -129,7 +129,7 @@ LEVELS: do iAlt=1, size(ALT)+1
    ! this model must have more levels than we expected.  increase array sizes,
    ! recompile, and try again.
    if (iAlt > size(ALT)) then
-      call error_handler(E_MSG, 'get_expected_nemax', 'more than 500 levels in model', &
+      call error_handler(E_ERR, 'get_expected_nemax', 'more than 500 levels in model', &
            source, revision, revdate, &
            text2='increase ALT, IDensityS_ie array sizes in code and recompile')
    endif
