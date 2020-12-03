@@ -60,7 +60,7 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-#\rm -f *.o *.mod Makefile
+\rm -f *.o *.mod Makefile
 \rm -f input.nml.*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then
@@ -110,7 +110,7 @@ echo "build number $n is mkmf_wakeup_filter"
 csh  mkmf_wakeup_filter -mpi
 make || exit $n
 
-#\rm -f *.o *.mod Makefile
+\rm -f *.o *.mod Makefile
 \rm -f input.nml.*_default
 
 echo

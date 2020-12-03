@@ -167,14 +167,10 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'GPS_PROFILE', 
-                                'COSMIC_ELECTRON_DENSITY',
-                                'GND_GPS_VTEC',
-                                'CHAMP_DENSITY',
-                                'GOLD_TEMPERATURE',
+   assimilate_these_obs_types = 'GOLD_TEMPERATURE',
                                 'GOLD_NEMAX',
                                 'GOLD_ON2COLUMN',
-   evaluate_these_obs_types   = 'GPS_VTEC_EXTRAP'
+   evaluate_these_obs_types   = 'null'
    /
 
 &assim_model_nml
