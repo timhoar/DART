@@ -224,10 +224,12 @@ LEVELS: do iAlt=1, size(ALT)+1
    nAlts = nAlts+1
 enddo LEVELS
 
+if (nAlts == 0) then
+
 if (nAlts == 0) return
 
-n2_sum = 0.0
-o1_sum = 0.0
+n2_sum = 0.0_r8
+o1_sum = 0.0_r8
 
 TRAPZ: do iAlt = nAlts-1,1,-1 !approximate the integral over the altitude as a sum of trapezoids
    !area of a trapezoid: A = (h2-h1) * (f2+f1)/2
@@ -244,6 +246,7 @@ TRAPZ: do iAlt = nAlts-1,1,-1 !approximate the integral over the altitude as a s
 enddo TRAPZ
 
 ! TJH is it possible that n2_sum (or n2_inc) is zero ...
+istatus = 0
 
 obs_val = o1_sum / n2_sum
 

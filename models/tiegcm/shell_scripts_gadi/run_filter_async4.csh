@@ -23,7 +23,7 @@
 ##                     them both. (ppn == Processors Per Node)
 ##
 #PBS -P n23
-#PBS -l walltime=3:00:00
+#PBS -l walltime=1:00:00
 #PBS -l wd
 #PBS -l ncpus=16
 #PBS -l mem=32GB
