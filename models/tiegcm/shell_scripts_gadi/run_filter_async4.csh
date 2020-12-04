@@ -23,7 +23,7 @@
 ##                     them both. (ppn == Processors Per Node)
 ##
 #PBS -P n23
-#PBS -l walltime=1:00:00
+#PBS -l walltime=2:00:00
 #PBS -l wd
 #PBS -l ncpus=16
 #PBS -l mem=32GB
@@ -128,10 +128,10 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 set    DARTDIR = /scratch/n23/gwb112/swm_project/DART/dart_tiegcm/models/tiegcm
 set  TIEGCMDIR = /scratch/n23/gwb112/swm_project/TIEGCM
 set TIEGCMDATA = ${TIEGCMDIR}/tiegcm_res5.0_data
-#set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test
-#set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test/initial
-set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test_restart
-set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test_restart/initial
+set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test
+set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test/initial
+#set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test_restart
+#set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test_restart/initial
 
 # Need to set TGCMDATA environment variable
 setenv TGCMDATA $TIEGCMDATA

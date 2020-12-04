@@ -38,7 +38,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 
 use      obs_kind_mod, only : GOLD_ON2COLUMN
 use obs_utilities_mod, only : getvar_real, get_or_fill_QC, add_obs_to_seq, &
-                              getvar_real_3d, &
+                              getvar_real_3d, getvar_real_2d, &
                               create_3d_obs, getvar_int, getdimlen, set_missing_name
 
 use netcdf
@@ -76,7 +76,7 @@ real(r8) :: pres, height, qc, qerr, oerr, on2_miss
 integer :: year_obs, month_obs, day_obs, hour_obs, minute_obs, second_obs
 
 character, allocatable  :: tobs(:,:,:,:)
-real(r8), allocatable   :: lat(:,:,:), lon(:,:,:)
+real(r8), allocatable   :: lat(:,:), lon(:,:)
 real(r8), allocatable   :: on2(:,:,:), on2_unc_ran(:,:,:), &
                            on2_unc_sys(:,:,:), on2_unc_mod(:,:,:)
 
@@ -114,8 +114,8 @@ call set_missing_name("missing_value")
 nobs = nlat * nlon * nscan
 nvars = 1
 
-allocate( lat(nlon,nlat,nscan))
-allocate( lon(nlon,nlat,nscan))
+allocate( lat(nlon,nlat))
+allocate( lon(nlon,nlat))
 allocate( on2(nlon,nlat,nscan))
 allocate( on2_unc_ran(nlon,nlat,nscan))
 allocate( on2_unc_sys(nlon,nlat,nscan))
@@ -124,8 +124,8 @@ allocate( on2_unc_mod(nlon,nlat,nscan))
 allocate( tobs(24,nlon,nlat,nscan))
 
 ! read in the data arrays
-call getvar_real_3d(ncid, "latitude",     lat) ! latitudes
-call getvar_real_3d(ncid, "longitude",    lon) ! longitudes
+call getvar_real_2d(ncid, "latitude",     lat) ! latitudes
+call getvar_real_2d(ncid, "longitude",    lon) ! longitudes
 call getvar_real_3d(ncid, "on2",         on2,         on2_miss) ! maximum electron concentration
 call getvar_real_3d(ncid, "on2_unc_ran", on2_unc_ran, on2_miss) ! maximum electron concentration
 call getvar_real_3d(ncid, "on2_unc_sys", on2_unc_sys, on2_miss) ! maximum electron concentration
@@ -198,10 +198,10 @@ scanloop: do k = 1, nscan
 
          time_obs = set_date(year_obs, month_obs, day_obs, hour_obs, minute_obs, second_obs)
          
-         if (.not. (lon(l,m,k) < 180.0_r8 .and. lon(l,m,k) > -180.0_r8)) cycle latloop
-         if (.not. (lat(l,m,k) <  90.0_r8 .and. lat(l,m,k) >  -90.0_r8)) cycle latloop
+         if (.not. (lon(l,m) < 180.0_r8 .and. lon(l,m) > -180.0_r8)) cycle latloop
+         if (.not. (lat(l,m) <  90.0_r8 .and. lat(l,m) >  -90.0_r8)) cycle latloop
 
-         if ( lon(l,m,k) < 0.0_r8 )  lon(l,m,k) = lon(l,m,k) + 360.0_r8
+         if ( lon(l,m) < 0.0_r8 )  lon(l,m) = lon(l,m) + 360.0_r8
          
          ! extract actual time of observation in file into oday, osec.
          call get_time(time_obs, osec, oday)
@@ -218,7 +218,7 @@ scanloop: do k = 1, nscan
          if ((not(isnan(on2(l,m,k)))) .and. (not(isnan(oerr)))) then 
             !call create_3d_obs(lat(l,m,k), lon(l,m,k), pres, VERTISPRESSURE, on2(l,m,k), &
             !     GOLD_ON2COLUMN, oerr, oday, osec, qc, obs)
-            call create_3d_obs(lat(l,m,k), lon(l,m,k), height, VERTISUNDEF, on2(l,m,k), &
+            call create_3d_obs(lat(l,m), lon(l,m), height, VERTISUNDEF, on2(l,m,k), &
                  GOLD_ON2COLUMN, oerr, oday, osec, qc, obs)
             call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
          endif
