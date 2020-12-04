@@ -224,7 +224,7 @@ LEVELS: do iAlt=1, size(ALT)+1
    nAlts = nAlts+1
 enddo LEVELS
 
-if (nAlts == 0) return
+if (nAlts == 0) then
    istatus = 36
    return
 endif
