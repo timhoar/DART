@@ -224,9 +224,10 @@ LEVELS: do iAlt=1, size(ALT)+1
    nAlts = nAlts+1
 enddo LEVELS
 
-if (nAlts == 0) then
-
 if (nAlts == 0) return
+   istatus = 36
+   return
+endif
 
 n2_sum = 0.0_r8
 o1_sum = 0.0_r8
@@ -248,6 +249,7 @@ enddo TRAPZ
 ! TJH is it possible that n2_sum (or n2_inc) is zero ...
 istatus = 0
 
+istatus = 0
 obs_val = o1_sum / n2_sum
 
 end subroutine get_expected_on2
