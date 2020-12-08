@@ -209,8 +209,8 @@ scanloop: do k = 1, nscan
       
       latloop: do m = 1, nlat
          
-         if (.not. (lon(l,m,k) < 180.0_r8 .and. lon(l,m,k) > -180.0_r8)) cycle latloop
-         if (.not. (lat(l,m,k) <  90.0_r8 .and. lat(l,m,k) >  -90.0_r8)) cycle latloop
+         !if (.not. (lon(l,m,k) < 180.0_r8 .and. lon(l,m,k) > -180.0_r8)) cycle latloop
+         !if (.not. (lat(l,m,k) <  90.0_r8 .and. lat(l,m,k) >  -90.0_r8)) cycle latloop
 
          if ( lon(l,m,k) < 0.0_r8 )  lon(l,m,k) = lon(l,m,k) + 360.0_r8
          

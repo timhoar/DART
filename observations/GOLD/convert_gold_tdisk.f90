@@ -126,10 +126,10 @@ allocate( tobs(24,nlon,nlat,nscan))
 ! read in the data arrays
 call getvar_real_2d(ncid, "latitude",      lat) ! latitudes
 call getvar_real_2d(ncid, "longitude",     lon) ! longitudes
-call getvar_real_3d(ncid, "tdisk",         tdisk,         tdisk_miss) ! maximum electron concentration
-call getvar_real_3d(ncid, "tdisk_unc_ran", tdisk_unc_ran, tdisk_miss) ! maximum electron concentration
-call getvar_real_3d(ncid, "tdisk_unc_sys", tdisk_unc_sys, tdisk_miss) ! maximum electron concentration
-call getvar_real_3d(ncid, "tdisk_unc_mod", tdisk_unc_mod, tdisk_miss) ! maximum electron concentration
+call getvar_real_3d(ncid, "tdisk",         tdisk,         tdisk_miss) ! Disk temperature
+call getvar_real_3d(ncid, "tdisk_unc_ran", tdisk_unc_ran, tdisk_miss) ! Disk temperature random uncertainty
+call getvar_real_3d(ncid, "tdisk_unc_sys", tdisk_unc_sys, tdisk_miss) ! Disk temperature systematic uncertainty
+call getvar_real_3d(ncid, "tdisk_unc_mod", tdisk_unc_mod, tdisk_miss) ! Disk temperature model uncertainty
 
 ! read the data for the time array
 call nc_check( nf90_inq_varid(ncid, varname_time_utc, varid), &
@@ -198,8 +198,8 @@ scanloop: do k = 1, nscan
 
          time_obs = set_date(year_obs, month_obs, day_obs, hour_obs, minute_obs, second_obs)
          
-         if (.not. (lon(l,m) < 180.0_r8 .and. lon(l,m) > -180.0_r8)) cycle latloop
-         if (.not. (lat(l,m) <  90.0_r8 .and. lat(l,m) >  -90.0_r8)) cycle latloop
+         !if (.not. (lon(l,m) < 180.0_r8 .and. lon(l,m) > -180.0_r8)) cycle latloop
+         !if (.not. (lat(l,m) <  90.0_r8 .and. lat(l,m) >  -90.0_r8)) cycle latloop
 
          if ( lon(l,m) < 0.0_r8 )  lon(l,m) = lon(l,m) + 360.0_r8
          

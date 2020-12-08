@@ -8,7 +8,7 @@ program convert_gold_on2
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-!   convert_gold_nmax - program that reads a GOLD netCDF NMAX 
+!   convert_gold_nmax - program that reads a GOLD netCDF O/N2
 !                       observation file and writes a DART
 !                       obs_seq file using the DART library routines.
 !
@@ -126,10 +126,10 @@ allocate( tobs(24,nlon,nlat,nscan))
 ! read in the data arrays
 call getvar_real_2d(ncid, "latitude",     lat) ! latitudes
 call getvar_real_2d(ncid, "longitude",    lon) ! longitudes
-call getvar_real_3d(ncid, "on2",         on2,         on2_miss) ! maximum electron concentration
-call getvar_real_3d(ncid, "on2_unc_ran", on2_unc_ran, on2_miss) ! maximum electron concentration
-call getvar_real_3d(ncid, "on2_unc_sys", on2_unc_sys, on2_miss) ! maximum electron concentration
-call getvar_real_3d(ncid, "on2_unc_mod", on2_unc_mod, on2_miss) ! maximum electron concentration
+call getvar_real_3d(ncid, "on2",         on2,         on2_miss) ! Column O/N2
+call getvar_real_3d(ncid, "on2_unc_ran", on2_unc_ran, on2_miss) ! Column O/N2 random uncertainty
+call getvar_real_3d(ncid, "on2_unc_sys", on2_unc_sys, on2_miss) ! Column O/N2 systematic uncertainty
+call getvar_real_3d(ncid, "on2_unc_mod", on2_unc_mod, on2_miss) ! Column O/N2 model uncertainty
 
 ! read the data for the time array
 call nc_check( nf90_inq_varid(ncid, varname_time_utc, varid), &
@@ -198,8 +198,8 @@ scanloop: do k = 1, nscan
 
          time_obs = set_date(year_obs, month_obs, day_obs, hour_obs, minute_obs, second_obs)
          
-         if (.not. (lon(l,m) < 180.0_r8 .and. lon(l,m) > -180.0_r8)) cycle latloop
-         if (.not. (lat(l,m) <  90.0_r8 .and. lat(l,m) >  -90.0_r8)) cycle latloop
+         !if (.not. (lon(l,m) < 180.0_r8 .and. lon(l,m) > -180.0_r8)) cycle latloop
+         !if (.not. (lat(l,m) <  90.0_r8 .and. lat(l,m) >  -90.0_r8)) cycle latloop
 
          if ( lon(l,m) < 0.0_r8 )  lon(l,m) = lon(l,m) + 360.0_r8
          
