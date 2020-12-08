@@ -146,7 +146,12 @@ enddo LEVELS
 
 if (nAlts == 0) return
 
-nemax = maxval(IDensityS_ie(1:nAlts))
+! istatus is guaranteed to have a failure status (the only way to exit the
+! "LEVELS" loop). Since we got this far, we need to reset the status to
+! indicate a successful forward operator.
+
+istatus = 0
+nemax   = maxval(IDensityS_ie(1:nAlts))
 obs_val = nemax
 
 end subroutine get_expected_nemax
