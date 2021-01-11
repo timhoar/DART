@@ -194,6 +194,16 @@ if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
 if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
 !----------------------------------------------------------------------
+! Check the interpolation - print initially to STDOUT
+!----------------------------------------------------------------------
+! Use 500 mb ~ level 30 (in the 42-level version)
+
+write(*,*)
+write(*,*)'Testing the interpolation ...'
+
+call test_interpolate(statevector, loc_of_interest)
+
+!----------------------------------------------------------------------
 ! Check the get_close() routines.
 !----------------------------------------------------------------------
 
@@ -222,16 +232,6 @@ enddo
 
 deallocate(my_locs, my_kinds, close_indices, close_distances)
 call get_close_obs_destroy(gc_type)
-
-!----------------------------------------------------------------------
-! Check the interpolation - print initially to STDOUT
-!----------------------------------------------------------------------
-! Use 500 mb ~ level 30 (in the 42-level version)
-
-write(*,*)
-write(*,*)'Testing the interpolation ...'
-
-call test_interpolate(statevector, loc_of_interest)
 
 
 !----------------------------------------------------------------------
