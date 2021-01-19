@@ -1,5 +1,5 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! by UCAR, "as is", without charge, subject to all terms of use at
+! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 
 
@@ -55,7 +55,6 @@
 
 module obs_def_mopitt_mod
 
-use typeSizes
 use        types_mod, only : r8, MISSING_R8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, set_location, get_location, &

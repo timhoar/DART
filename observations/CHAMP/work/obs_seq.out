@@ -1,11 +1,7 @@
  obs_sequence
 obs_kind_definitions
            1
-<<<<<<< HEAD
-          37 CHAMP_NEUTRAL_DENSITY                         
-=======
-          37 SAT_RHO                         
->>>>>>> upstream/Classic
+          37 CHAMP_DENSITY                         
   num_copies:            1  num_qc:            1
   num_obs:            4  max_num_obs:            4
 observation                                                     
