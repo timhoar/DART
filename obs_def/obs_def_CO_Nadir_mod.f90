@@ -1,8 +1,6 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 
 ! BEGIN DART PREPROCESS KIND LIST
@@ -54,33 +52,16 @@
 
 
 ! BEGIN DART PREPROCESS MODULE CODE
-<<<<<<< HEAD
 
-module obs_def_mopitt_mod
-
-use        types_mod, only : r8, MISSING_R8
-
-use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
-
-use     location_mod, only : location_type, set_location, get_location, &
-                             VERTISPRESSURE, VERTISLEVEL, VERTISSURFACE
-
-use  assim_model_mod, only : interpolate
-
-use     obs_kind_mod, only : KIND_CO, KIND_PRESSURE, KIND_SURFACE_PRESSURE
-=======
 module obs_def_mopitt_mod
 
 use typeSizes
 use        types_mod, only : r8, MISSING_R8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
-use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, &
-                             VERTISLEVEL, VERTISSURFACE
-
+use     location_mod, only : location_type, set_location, get_location, &
+                             VERTISPRESSURE, VERTISLEVEL, VERTISSURFACE
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_CO, KIND_PRESSURE, KIND_SURFACE_PRESSURE
->>>>>>> upstream/Classic
-
+use     obs_kind_mod, only : KIND_CO, KIND_PRESSURE, KIND_SURFACE_PRESSURE
 
 implicit none
 
@@ -95,55 +76,39 @@ integer                          :: num_mopitt_co_obs = 0
 ! KDR replace 10 with mopitt_dim?
 ! real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
 real(r8), dimension(max_mopitt_co_obs,mopitt_dim) :: avg_kernel
-<<<<<<< HEAD
-real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
-                              95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
+real(r8) :: mopitt_pressure(mopitt_dim) = &
+            (/ 95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
 real(r8), dimension(max_mopitt_co_obs) :: mopitt_prior
 real(r8), dimension(max_mopitt_co_obs) :: mopitt_psurf
 integer,  dimension(max_mopitt_co_obs) :: mopitt_nlevels
-=======
-real(r8), dimension(max_mopitt_co_obs)	          :: mopitt_prior
-real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
-                              95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
-real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
-integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
->>>>>>> upstream/Classic
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'obs_def_NADIR_CO_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
-<<<<<<< HEAD
-=======
-
->>>>>>> upstream/Classic
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
 
 contains
 
-!----------------------------------------------------------------------
 
-<<<<<<< HEAD
+!-------------------------------------------------------------------------------
+!>
+
 subroutine initialize_module
-=======
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
->>>>>>> upstream/Classic
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
 end subroutine initialize_module
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine read_mopitt_co(key, ifile, fform)
 
@@ -157,24 +122,6 @@ real(r8) :: mopitt_prior_1
 real(r8) :: mopitt_psurf_1
 real(r8) :: avg_kernels_1(mopitt_dim)
 integer  :: keyin
-=======
-
-
- subroutine read_mopitt_co(key, ifile, fform)
-!----------------------------------------------------------------------
-!subroutine read_mopitt_co(key, ifile, fform)
-
-integer, intent(out)            :: key
-integer, intent(in)             :: ifile
-character(len=*), intent(in), optional    :: fform
-character(len=32) 		:: fileformat
-
-integer			:: mopitt_nlevels_1
-real(r8)			:: mopitt_prior_1
-real(r8)			:: mopitt_psurf_1
-real(r8), dimension(mopitt_dim)	:: avg_kernels_1
-integer 			:: keyin
->>>>>>> upstream/Classic
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -191,28 +138,16 @@ SELECT CASE (fileformat)
 
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    mopitt_nlevels_1 = read_mopitt_nlevels(ifile, fileformat)
-<<<<<<< HEAD
    mopitt_prior_1   = read_mopitt_prior(  ifile, fileformat)
    mopitt_psurf_1   = read_mopitt_psurf(  ifile, fileformat)
    avg_kernels_1(1:mopitt_nlevels_1) = read_mopitt_avg_kernels(ifile, mopitt_nlevels_1, fileformat)
-=======
-   mopitt_prior_1 = read_mopitt_prior(ifile, fileformat)
-   mopitt_psurf_1 = read_mopitt_psurf(ifile, fileformat)
-   avg_kernels_1(1:mopitt_nlevels_1)  = read_mopitt_avg_kernels(ifile, mopitt_nlevels_1, fileformat)
->>>>>>> upstream/Classic
    read(ifile) keyin
 
    CASE DEFAULT
    mopitt_nlevels_1 = read_mopitt_nlevels(ifile, fileformat)
-<<<<<<< HEAD
    mopitt_prior_1   = read_mopitt_prior(  ifile, fileformat)
    mopitt_psurf_1   = read_mopitt_psurf(  ifile, fileformat)
    avg_kernels_1(1:mopitt_nlevels_1) = read_mopitt_avg_kernels(ifile, mopitt_nlevels_1, fileformat)
-=======
-   mopitt_prior_1 = read_mopitt_prior(ifile, fileformat)
-   mopitt_psurf_1 = read_mopitt_psurf(ifile, fileformat)
-   avg_kernels_1(1:mopitt_nlevels_1)  = read_mopitt_avg_kernels(ifile, mopitt_nlevels_1, fileformat)
->>>>>>> upstream/Classic
    read(ifile, *) keyin
 END SELECT
 
@@ -223,8 +158,9 @@ call set_obs_def_mopitt_co(key, avg_kernels_1, mopitt_prior_1, mopitt_psurf_1, &
 
 end subroutine read_mopitt_co
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_co(key, ifile, fform)
 
@@ -234,19 +170,6 @@ character(len=*), intent(in), optional :: fform
 
 character(len=32) :: fileformat
 real(r8) :: avg_kernels_temp(mopitt_dim)
-=======
-
- subroutine write_mopitt_co(key, ifile, fform)
-!----------------------------------------------------------------------
-!subroutine write_mopitt_co(key, ifile, fform)
-
-integer, intent(in)             :: key
-integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
-
-character(len=32) 		:: fileformat
-real(r8), dimension(mopitt_dim) :: avg_kernels_temp
->>>>>>> upstream/Classic
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -278,20 +201,12 @@ END SELECT
 
 end subroutine write_mopitt_co
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!> Initializes the specialized part of a MOPITT observation
+!> Passes back up the key for this one
 
 subroutine interactive_mopitt_co(key)
-
-=======
-
- subroutine interactive_mopitt_co(key)
-!----------------------------------------------------------------------
-!subroutine interactive_mopitt_co(key)
-!
->>>>>>> upstream/Classic
-! Initializes the specialized part of a MOPITT observation
-! Passes back up the key for this one
 
 integer, intent(out) :: key
 
@@ -315,45 +230,36 @@ key = num_mopitt_co_obs
 ! Otherwise, prompt for input for the three required beasts
 write(*, *) 'Creating an interactive_mopitt_co observation'
 write(*, *) 'Input the MOPITT Prior '
-read(*, *) mopitt_prior
+read(*, *) mopitt_prior(key)
 write(*, *) 'Input MOPITT Surface Pressure '
-read(*, *) mopitt_psurf(num_mopitt_co_obs)
+read(*, *) mopitt_psurf(key)
 write(*, *) 'Input the 10 Averaging Kernel Weights '
-read(*, *) avg_kernel(num_mopitt_co_obs,:)
+read(*, *) avg_kernel(key,:)
 
 end subroutine interactive_mopitt_co
 
-<<<<<<< HEAD
-!---------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine get_expected_iasi_co(state, location, key, val, istatus)
+
 real(r8),            intent(in)  :: state(:)
 type(location_type), intent(in)  :: location
 integer,             intent(in)  :: key
 real(r8),            intent(out) :: val
 integer,             intent(out) :: istatus
 
-=======
-
- subroutine get_expected_iasi_co(state, location, key, val, istatus)
-!---------------------------------------------------------------------
-real(r8), intent(in)            :: state(:)
-type(location_type), intent(in) :: location
-integer, intent(in)             :: key
-real(r8), intent(out)           :: val
-integer, intent(out)            :: istatus
->>>>>>> upstream/Classic
 integer :: i,j
 integer :: num_levs, lev
-type(location_type) :: loc1,loc2,loc3,loc3p,loc3m,locS
-real(r8)            :: mloc(3), mloc1(3), mloc2(3)
-real(r8)            :: obs_val, pres, surf_pres, obs_val_int
+type(location_type) :: loc3,locS
+real(r8)            :: mloc(3)
+real(r8)            :: obs_val, obs_val_int
 real(r8)            :: top_pres, bot_pres, coef, mop_layer_wght
-real(r8)            :: i_top_pres, i_bot_pres, i_pres
+real(r8)            :: i_top_pres, i_bot_pres
 real(r8)            :: p_col(max_model_levs)
 real(r8)            :: mopitt_pres_local(mopitt_dim)
 integer             :: nlevels, start_i, end_i
-integer,  allocatable :: dim_sizes(:)
 
 if ( .not. module_initialized ) call initialize_module
 val = 0.0_r8
@@ -377,15 +283,17 @@ end_i = mopitt_dim
 ! Find the number of model levels and the pressures on them.
 istatus = 0
 p_col = MISSING_R8
-CAM_levs: do lev = 1,100  
+lev = 1
+model_levels: do
    locS = set_location(mloc(1),mloc(2),real(lev,r8),VERTISLEVEL)
    call interpolate(state, locS, KIND_PRESSURE, p_col(lev), istatus)
    if (istatus /= 0) then
       p_col(lev) = MISSING_R8
       num_levs = lev - 1
-      exit CAM_levs
+      exit model_levels
    endif
-enddo CAM_levs
+   lev = lev + 1
+enddo model_levels
 
 ! KDR: see comments in the same place in get_expected_mopitt_co.
 
@@ -402,7 +310,7 @@ do i=start_i, end_i
    obs_val=0.0_r8
 
    bot_pres=mopitt_pres_local(i)
-   if (i == 10) then
+   if (i == mopitt_dim) then
       top_pres=mopitt_pres_local(i)/2.0_r8
    else
       top_pres=mopitt_pres_local(i+1)
@@ -459,10 +367,11 @@ if (val < 0.0_r8) then
    istatus = 7
 endif
 
-<<<<<<< HEAD
 end subroutine get_expected_iasi_co
 
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 real(r8),            intent(in)  :: state(:)
@@ -470,40 +379,18 @@ type(location_type), intent(in)  :: location
 integer,             intent(in)  :: key
 real(r8),            intent(out) :: val
 integer,             intent(out) :: istatus
-=======
- end subroutine get_expected_iasi_co
-
- subroutine get_expected_mopitt_co(state, location, key, val, istatus)
-!----------------------------------------------------------------------
-real(r8), intent(in)            :: state(:)
-type(location_type), intent(in) :: location
-integer, intent(in)             :: key
-real(r8), intent(out)           :: val
-integer, intent(out)            :: istatus
->>>>>>> upstream/Classic
 
 integer :: i,j
-type(location_type) :: loc1,loc2,loc3,loc3p,loc3m,locS
-real(r8)            :: mloc(3), mloc1(3), mloc2(3)
-<<<<<<< HEAD
-real(r8)            :: obs_val, pres, obs_val_int
-integer             :: nlevels, start_i, end_i
-=======
-real(r8)	    :: obs_val, pres, obs_val_int
-
+type(location_type) :: loc3,locS
+real(r8)            :: mloc(3)
+real(r8)            :: obs_val, obs_val_int
 integer             :: nlevels, start_i, end_i
 
->>>>>>> upstream/Classic
 real(r8)            :: top_pres, bot_pres, coef, mop_layer_wght
-real(r8)            :: i_top_pres, i_bot_pres, i_pres
+real(r8)            :: i_top_pres, i_bot_pres
 integer             :: num_levs, lev
 real(r8)            :: p_col(max_model_levs)
 real(r8)            :: mopitt_pres_local(mopitt_dim)
-<<<<<<< HEAD
-integer, allocatable :: dim_sizes(:)
-=======
-integer,  allocatable :: dim_sizes(:)
->>>>>>> upstream/Classic
 
 if ( .not. module_initialized ) call initialize_module
 mloc = get_location(location)
@@ -541,15 +428,18 @@ end_i = mopitt_dim
 ! Find the number of model levels and the pressures on them.
 istatus = 0
 p_col = MISSING_R8
-CAM_levs: do lev = 1,100  !!FIND A WAY TO GET THE MODEL LEVELS
+lev = 1
+model_levels: do 
    locS = set_location(mloc(1),mloc(2),real(lev,r8),VERTISLEVEL)
    call interpolate(state, locS, KIND_PRESSURE, p_col(lev), istatus)
    if (istatus /= 0) then
       p_col(lev) = MISSING_R8
       num_levs = lev - 1
-      exit CAM_levs
+      exit model_levels
    endif
-enddo CAM_levs
+   lev = lev + 1
+enddo model_levels
+
 !Barre: here p_col is the pressure levels at the grid points, we will need to have in
 !the future the pressure values at the mid-points (need to create a new function
 !plevs_cam in model_mod using the the mid-levels hybrid coefs)
@@ -657,11 +547,11 @@ endif
 
 end subroutine get_expected_mopitt_co
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!> Allows passing of obs_def special information 
 
 subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
-! Allows passing of obs_def special information 
 
 integer,  intent(in) :: key, co_nlevels
 real(r8), intent(in) :: co_avgker(10)
@@ -669,18 +559,6 @@ real(r8), intent(in) :: co_prior
 real(r8), intent(in) :: co_psurf
 
 character(len=129) :: msgstring
-=======
-
- subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
-!----------------------------------------------------------------------
-! Allows passing of obs_def special information 
-
-integer,	 	intent(in)	:: key, co_nlevels
-real(r8),dimension(10),	intent(in)	:: co_avgker
-real(r8),			intent(in)	:: co_prior
-real(r8),			intent(in)	:: co_psurf
-character(len=129) 			:: msgstring
->>>>>>> upstream/Classic
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -692,39 +570,23 @@ if(num_mopitt_co_obs >= max_mopitt_co_obs) then
    call error_handler(E_ERR,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
 endif
 
-<<<<<<< HEAD
-avg_kernel(key,:) = co_avgker(:)
-mopitt_prior(key)= co_prior
-mopitt_psurf(key)= co_psurf
-=======
-avg_kernel(key,:) 	= co_avgker(:)
-mopitt_prior(key)	= co_prior
-mopitt_psurf(key)	= co_psurf
->>>>>>> upstream/Classic
-mopitt_nlevels(key)     = co_nlevels
-
+avg_kernel(key,:)   = co_avgker(:)
+mopitt_prior(key)   = co_prior
+mopitt_psurf(key)   = co_psurf
+mopitt_nlevels(key) = co_nlevels
 
 end subroutine set_obs_def_mopitt_co
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
-=======
->>>>>>> upstream/Classic
+
+!-------------------------------------------------------------------------------
+!>
 
 function read_mopitt_prior(ifile, fform)
 
 integer,                    intent(in) :: ifile
-<<<<<<< HEAD
 character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_prior
 
-=======
-real(r8)                               :: read_mopitt_prior
-character(len=*), intent(in), optional :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -741,8 +603,9 @@ END SELECT
 
 end function read_mopitt_prior
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 function read_mopitt_nlevels(ifile, fform)
 
@@ -750,16 +613,6 @@ integer,                    intent(in) :: ifile
 character(len=*), optional, intent(in) :: fform
 integer                                :: read_mopitt_nlevels
 
-=======
-function read_mopitt_nlevels(ifile, fform)
-
-integer,                    intent(in) :: ifile
-integer                               :: read_mopitt_nlevels
-character(len=*), intent(in), optional :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -776,8 +629,9 @@ END SELECT
 
 end function read_mopitt_nlevels
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
@@ -785,18 +639,6 @@ integer,          intent(in) :: ifile
 real(r8),         intent(in) :: mopitt_prior_temp
 character(len=*), intent(in) :: fform
 
-=======
-
-
-subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
-
-integer,                    intent(in) :: ifile
-real(r8), 		    intent(in) :: mopitt_prior_temp
-character(len=32),          intent(in) :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -812,8 +654,9 @@ END SELECT
 
 end subroutine write_mopitt_prior
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_nlevels(ifile, mopitt_nlevels_temp, fform)
 
@@ -821,16 +664,6 @@ integer,          intent(in) :: ifile
 integer,          intent(in) :: mopitt_nlevels_temp
 character(len=*), intent(in) :: fform
 
-=======
-subroutine write_mopitt_nlevels(ifile, mopitt_nlevels_temp, fform)
-
-integer,                    intent(in) :: ifile
-integer,                    intent(in) :: mopitt_nlevels_temp
-character(len=32),          intent(in) :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -846,26 +679,16 @@ END SELECT
 
 end subroutine write_mopitt_nlevels
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
-=======
 
->>>>>>> upstream/Classic
+!-------------------------------------------------------------------------------
+!>
 
 function read_mopitt_psurf(ifile, fform)
 
 integer,                    intent(in) :: ifile
-<<<<<<< HEAD
 character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_psurf
 
-=======
-real(r8)                               :: read_mopitt_psurf
-character(len=*), intent(in), optional :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -882,8 +705,9 @@ END SELECT
 
 end function read_mopitt_psurf
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
 
@@ -891,16 +715,6 @@ integer,          intent(in) :: ifile
 real(r8),         intent(in) :: mopitt_psurf_temp
 character(len=*), intent(in) :: fform
 
-=======
-subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
-
-integer,                    intent(in) :: ifile
-real(r8),		    intent(in) :: mopitt_psurf_temp
-character(len=32),          intent(in) :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -916,8 +730,9 @@ END SELECT
 
 end subroutine write_mopitt_psurf
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 function read_mopitt_avg_kernels(ifile, nlevels, fform)
 
@@ -925,16 +740,6 @@ integer,                    intent(in) :: ifile, nlevels
 character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_avg_kernels(10)
 
-=======
-function read_mopitt_avg_kernels(ifile, nlevels, fform)
-
-integer,                    intent(in) :: ifile, nlevels
-real(r8), dimension(10)        :: read_mopitt_avg_kernels
-character(len=*), intent(in), optional :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 read_mopitt_avg_kernels(:) = 0.0_r8
@@ -953,8 +758,9 @@ END SELECT
 
 end function read_mopitt_avg_kernels
 
-<<<<<<< HEAD
-!----------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
@@ -962,16 +768,6 @@ integer,          intent(in) :: ifile, nlevels_temp
 real(r8),         intent(in) :: avg_kernels_temp(10)
 character(len=*), intent(in) :: fform
 
-=======
-subroutine write_mopitt_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
-
-integer,                    intent(in) :: ifile, nlevels_temp
-real(r8), dimension(10), intent(in)  :: avg_kernels_temp
-character(len=32),          intent(in) :: fform
-
-character(len=5)   :: header
-character(len=129) :: errstring
->>>>>>> upstream/Classic
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -987,21 +783,8 @@ END SELECT
 
 end subroutine write_mopitt_avg_kernels
 
-<<<<<<< HEAD
 !----------------------------------------------------------------------
 
 end module obs_def_mopitt_mod
 
-=======
-
-
-end module obs_def_mopitt_mod
->>>>>>> upstream/Classic
 ! END DART PREPROCESS MODULE CODE
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
