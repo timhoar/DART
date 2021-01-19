@@ -126,7 +126,8 @@ NETCDF = /apps/netcdf/4.7.3
 INCS = -I$(NETCDF)/include
 #LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lcurl
-FFLAGS  = -O $(INCS)
+#FFLAGS  = -O $(INCS)
+FFLAGS  = -g -fpe0 -traceback $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:

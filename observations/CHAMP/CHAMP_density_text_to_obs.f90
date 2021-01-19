@@ -49,7 +49,7 @@ character(len=*), parameter :: source   = 'CHAMP_density_text_to_obs.f90'
 character(len=*), parameter :: revision = ''
 character(len=*), parameter :: revdate  = ''
 
-! things which can/should be in the text_to_obs_nml
+! things which can/should be in the namelist
 
 character(len=256) :: text_input_file            = 'Density_3deg_05_020.ascii'
 character(len=256) :: obs_out_file               = 'obs_seq.out'
@@ -240,6 +240,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    year      = 2000 + year !because year in file is (2I) - 2 digits
    comp_day0 = set_date(year, 1, 1, 0, 0, 0)  ! always Jan 1 of whatever year.
    second    = nint(second_r)
+
    time_obs  = comp_day0 + set_time(second, day-1)
 
    ! extract time of observation into gregorian day, sec.

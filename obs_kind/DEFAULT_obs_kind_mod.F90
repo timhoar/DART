@@ -343,6 +343,10 @@ integer, parameter, public :: &
   KIND_NEMAX_DISK                    = 289, &
   KIND_ON2_DISK                      = 290
 
+! kinds for TIEGCM state vector (George Bowden)
+integer, parameter, public :: &
+  KIND_MOLEC_NITROGEN_MIXING_RATIO   = 291
+
 ! more land kinds
 integer, parameter, public :: &
   KIND_BRIGHTNESS_TEMPERATURE        = 300, &
@@ -674,6 +678,7 @@ obs_kind_names(287) = obs_kind_type(KIND_TOTAL_ELECTRON_CONTENT,'KIND_TOTAL_ELEC
 obs_kind_names(288) = obs_kind_type(KIND_MASS_DENSITY          ,'KIND_MASS_DENSITY')
 obs_kind_names(289) = obs_kind_type(KIND_NEMAX_DISK            ,'KIND_NEMAX_DISK')
 obs_kind_names(290) = obs_kind_type(KIND_ON2_DISK              ,'KIND_ON2_DISK')
+obs_kind_names(291) = obs_kind_type(KIND_MOLEC_NITROGEN_MIXING_RATIO,'KIND_MOLEC_NITROGEN_MIXING_RATIO')
 
 obs_kind_names(300) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
 obs_kind_names(301) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')

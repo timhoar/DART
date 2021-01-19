@@ -43,6 +43,7 @@ use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,           &
                              KIND_GEOPOTENTIAL_HEIGHT,        &
                              KIND_GEOMETRIC_HEIGHT,           &
                              KIND_VERTICAL_TEC,               &! total electron content
+                             KIND_ELECTRON_DENSITY,           &
                              get_raw_obs_kind_index,          &
                              get_raw_obs_kind_name
 
@@ -1761,7 +1762,17 @@ location = set_location(locarray(1), locarray(2), locarray(3), VERTISHEIGHT)
 call model_interpolate(x, location, KIND_PRESSURE, obs_val, istatus)
 
 write(*,*)'test_interpolate: PRESSURE value at ',locarray, &
-          ' is ',obs_val,' status is ',istatus,' (0 is good)'
+     ' is ',obs_val,' status is ',istatus,' (0 is good)'
+
+call model_interpolate(x, location, KIND_TEMPERATURE, obs_val, istatus)
+
+write(*,*)'test_interpolate: TEMPERATURE value at ',locarray, &
+     ' is ',obs_val,' status is ',istatus,' (0 is good)'
+
+call model_interpolate(x, location, KIND_ELECTRON_DENSITY, obs_val, istatus)
+
+write(*,*)'test_interpolate: ELECTRON DENSITY value at ',locarray, &
+     ' is ',obs_val,' status is ',istatus,' (0 is good)'
 
 call model_interpolate(x, location, KIND_VERTICAL_TEC, obs_val, istatus)
 

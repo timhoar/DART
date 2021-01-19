@@ -59,6 +59,7 @@ use     obs_kind_mod, only : KIND_NEMAX_DISK, &
                              KIND_GEOMETRIC_HEIGHT, &
                              KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
                              KIND_MOLEC_OXYGEN_MIXING_RATIO, &
+                             KIND_MOLEC_NITROGEN_MIXING_RATIO, &
                              KIND_PRESSURE, &
                              KIND_TEMPERATURE
 
@@ -178,6 +179,7 @@ integer  :: nAlts, iAlt
 real(r8), allocatable :: ALT(:)
 real(r8) :: loc_vals(3)
 real(r8) :: o1_ratio, o2_ratio, press, temp, nd
+real(r8) :: n2_ratio
 real(r8), allocatable :: o1_number(:), n2_number(:)
 real(r8) :: o1_sum, n2_sum
 real(r8) :: o1_inc, n2_inc
@@ -215,7 +217,9 @@ LEVELS: do iAlt=1, size(ALT)+1
    probe = set_location(loc_vals(1), loc_vals(2), real(iAlt, r8), VERTISLEVEL) !probe is where we have data
    call interpolate(x, probe, KIND_ATOMIC_OXYGEN_MIXING_RATIO, o1_ratio, istatus) 
    if (istatus /= 0) exit LEVELS
-   call interpolate(x, probe, KIND_MOLEC_OXYGEN_MIXING_RATIO, o2_ratio, istatus) 
+   !call interpolate(x, probe, KIND_MOLEC_OXYGEN_MIXING_RATIO, o2_ratio, istatus) 
+   !if (istatus /= 0) exit LEVELS
+   call interpolate(x, probe, KIND_MOLEC_NITROGEN_MIXING_RATIO, n2_ratio, istatus) 
    if (istatus /= 0) exit LEVELS
    call interpolate(x, probe, KIND_GEOMETRIC_HEIGHT, ALT(iAlt), istatus)
    if (istatus /= 0) exit LEVELS
@@ -225,7 +229,8 @@ LEVELS: do iAlt=1, size(ALT)+1
    if (istatus /= 0) exit LEVELS
    nd = press / (boltzmann_constant * temp)
    o1_number(iAlt) = o1_ratio * nd
-   n2_number(iAlt) = (1 - o1_ratio - o2_ratio) * nd
+   !n2_number(iAlt) = (1 - o1_ratio - o2_ratio) * nd
+   n2_number(iAlt) = n2_ratio * nd
    nAlts = nAlts+1
 enddo LEVELS
 
@@ -252,9 +257,13 @@ TRAPZ: do iAlt = nAlts-1,1,-1 !approximate the integral over the altitude as a s
 enddo TRAPZ
 
 ! TJH is it possible that n2_sum (or n2_inc) is zero ...
-
 istatus = 0
-obs_val = o1_sum / n2_sum
+
+if (n2_sum .gt. 0.0_r8) then
+   obs_val = o1_sum / n2_sum
+else
+   obs_val = MISSING_R8
+endif
 
 end subroutine get_expected_on2
 

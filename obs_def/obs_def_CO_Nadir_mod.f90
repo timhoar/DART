@@ -75,6 +75,7 @@ integer                          :: num_mopitt_co_obs = 0
 ! KDR replace 10 with mopitt_dim?
 ! real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
 real(r8), dimension(max_mopitt_co_obs,mopitt_dim) :: avg_kernel
+
 real(r8) :: mopitt_pressure(mopitt_dim) = &
             (/ 95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
 real(r8), dimension(max_mopitt_co_obs) :: mopitt_prior
@@ -85,6 +86,7 @@ integer,  dimension(max_mopitt_co_obs) :: mopitt_nlevels
 logical :: already_read = .false., already_written = .false.
 
 ! version controlled file description for error handling, do not edit
+
 character(len=*), parameter :: source   = 'obs_def_NADIR_CO_mod.f90'
 character(len=*), parameter :: revision = ''
 character(len=*), parameter :: revdate  = ''

@@ -428,6 +428,10 @@ Get_Obs_Locations: do i = 1, obs_ens_handle%my_num_vars
    if (my_obs_type(i) > 0) then
       my_obs_kind(i) = get_obs_kind_var_type(my_obs_type(i))
    else
+!!$      if(my_obs_type(i) .eq. 0) print *, 'Get_Obs_Locations: i = ', i, &
+!!$           ',  my_obs_type(i) = ', my_obs_type(i), ', my_obs_kind(i) = ', my_obs_kind(i)
+!!$      if(my_obs_kind(i) .eq. 0) print *, 'Get_Obs_Locations: i = ', i, &
+!!$           ',  my_obs_type(i) = ', my_obs_type(i), ', my_obs_kind(i) = ', my_obs_kind(i)
       call get_state_meta_data(-1 * my_obs_type(i), dummyloc, my_obs_kind(i))    ! identity obs
    endif
    ! Need the time for regression diagnostics potentially; get from first observation
@@ -440,6 +444,10 @@ call get_my_vars(ens_handle, my_state_indx)
 
 ! Get the location and kind of all my state variables
 do i = 1, ens_handle%my_num_vars
+!!$   if(my_state_indx(i) .eq. 0) print *, 'Get location and kind: i = ', i, &
+!!$           ', my_state_indx(i) = ', my_state_indx(i), ', my_state_kind(i) = ', my_state_kind(i)
+!!$   if(my_state_kind(i) .eq. 0) print *, 'Get location and kind: i = ', i, &
+!!$           ', my_state_indx(i) = ', my_state_indx(i), ', my_state_kind(i) = ', my_state_kind(i)
    call get_state_meta_data(my_state_indx(i), my_state_loc(i), my_state_kind(i))
 end do
 
@@ -530,6 +538,10 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    if (base_obs_type > 0) then
       base_obs_kind = get_obs_kind_var_type(base_obs_type)
    else
+!!$      if(base_obs_type .eq. 0) print *, 'SEQUENTIAL_OBS: i = ', i, &
+!!$           ', base_obs_type = ', base_obs_type, ', base_obs_kind = ', base_obs_kind
+!!$      if(base_obs_kind .eq. 0) print *, 'SEQUENTIAL_OBS: i = ', i, &
+!!$           ', base_obs_type = ', base_obs_type, ', base_obs_kind = ', base_obs_kind
       call get_state_meta_data(-1 * base_obs_type, dummyloc, base_obs_kind)  ! identity obs
    endif
    ! Get the value of the observation

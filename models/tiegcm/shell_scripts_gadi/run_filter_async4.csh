@@ -128,10 +128,16 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 set    DARTDIR = /scratch/n23/gwb112/swm_project/DART/dart_tiegcm/models/tiegcm
 set  TIEGCMDIR = /scratch/n23/gwb112/swm_project/TIEGCM
 set TIEGCMDATA = ${TIEGCMDIR}/tiegcm_res5.0_data
-#set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test
+#set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test/initial
 #set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test/initial
-set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test_restart
-set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test_restart/initial
+#set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test_restart/initial
+#set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test_restart/initial
+#set EXPERIMENT = /scratch/n23/gwb112/swm_project/gold_test_large/initial
+#set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/gold_test_large/initial
+#set EXPERIMENT = /scratch/n23/gwb112/swm_project/DART/dart_tiegcm/run_tiegcm_assim_gadi/job_14647484.gadi-pbs
+#set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/DART/dart_tiegcm/run_tiegcm_assim_gadi/job_14647484.gadi-pbs
+set EXPERIMENT = /scratch/n23/gwb112/swm_project/DART/dart_tiegcm/run_tiegcm_assim_gadi/job_15037203.gadi-pbs 
+set ENSEMBLEDIR = /scratch/n23/gwb112/swm_project/DART/dart_tiegcm/run_tiegcm_assim_gadi/job_15037203.gadi-pbs
 
 # Need to set TGCMDATA environment variable
 setenv TGCMDATA $TIEGCMDATA
@@ -150,12 +156,12 @@ ${COPY} ${DARTDIR}/shell_scripts_gadi/advance_model.csh       . || exit 1
 ${COPY} ${DARTDIR}/work/wakeup_filter                . || exit 1
 
 #${COPY} ${EXPERIMENT}/observation/obs_seq.out        . || exit 1
-${COPY} ${EXPERIMENT}/initial/obs_seq.out            . || exit 1
-${COPY} ${EXPERIMENT}/initial/tiegcm_restart_p.nc    . || exit 1
-${COPY} ${EXPERIMENT}/initial/tiegcm_s.nc            . || exit 1
-${COPY} ${EXPERIMENT}/initial/tiegcm.nml   tiegcm.nml.original || exit 1
-${COPY} ${EXPERIMENT}/initial/gpi*.nc.*              . || exit 1
-${COPY} ${EXPERIMENT}/initial/imf*.nc.*              . || exit 1
+${COPY} ${EXPERIMENT}/obs_seq.out            . || exit 1
+${COPY} ${EXPERIMENT}/tiegcm_restart_p.nc    . || exit 1
+${COPY} ${EXPERIMENT}/tiegcm_s.nc            . || exit 1
+${COPY} ${EXPERIMENT}/tiegcm.nml   tiegcm.nml.original || exit 1
+${COPY} ${EXPERIMENT}/gpi*.nc.*              . || exit 1
+${COPY} ${EXPERIMENT}/imf*.nc.*              . || exit 1
 
 ${COPY} ${TIEGCMDIR}/tiegcm.exec/tiegcm2.0      tiegcm || exit 1
 ${COPY} ${TIEGCMDIR}/tiegcm.exec/machines.ini        . || exit 1
