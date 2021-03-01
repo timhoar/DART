@@ -1,9 +1,10 @@
+
 &perfect_model_obs_nml
    start_from_restart    = .true.
    output_restart        = .true.
    async                 = 4
-   init_time_days        = -1
-   init_time_seconds     = -1
+   init_time_days        = 152610
+   init_time_seconds     = 43200 
    first_obs_days        = -1
    first_obs_seconds     = -1
    last_obs_days         = -1
@@ -11,7 +12,7 @@
    output_interval       = 1
    restart_in_file_name  = "perfect_ics"
    restart_out_file_name = "perfect_restart"
-   obs_seq_in_file_name  = "obs_seq.in"
+   obs_seq_in_file_name  = "../bowden/18Dec2020/obs_seq.out.all"
    obs_seq_out_file_name = "obs_seq.out"
    adv_ens_command       = "./advance_model.csh"
    output_timestamps     = .false.
@@ -22,8 +23,8 @@
    /
 
 &filter_nml
-   async                    = 4
-   adv_ens_command          = "./advance_model.csh"
+   async                    = 0
+   adv_ens_command          = "unable_to_advance_model.csh"
    ens_size                 = 4
    start_from_restart       = .true.
    output_restart           = .true.
@@ -58,11 +59,11 @@
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart'
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag'
    inf_initial                 = 1.0,                     1.0
-   inf_sd_initial              = 0.0,                     0.0
-   inf_damping                 = 1.0,                     1.0
+   inf_sd_initial              = 0.6,                     0.0
+   inf_damping                 = 0.9,                     1.0
    inf_lower_bound             = 1.0,                     1.0
-   inf_upper_bound             = 1000000.0,               1000000.0
-   inf_sd_lower_bound          = 0.0,                     0.0
+   inf_upper_bound             = 100.0,               10000.0
+   inf_sd_lower_bound          = 0.6,                     0.0
    /
 
 &smoother_nml
@@ -122,7 +123,7 @@
 #              'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate'  'NO_COPY_BACK'
 
 &model_nml
-   debug                       = 4
+   debug                       = 0
    tiegcm_restart_file_name    = 'tiegcm_restart_p.nc'
    tiegcm_secondary_file_name  = 'tiegcm_s.nc'
    tiegcm_namelist_file_name   = 'tiegcm.nml'
@@ -149,7 +150,7 @@
 &dart_to_model_nml
    file_in              = 'dart_restart'
    file_namelist_out    = 'namelist_update'
-   advance_time_present = .false.
+   advance_time_present = .true.
    /
 
 &cov_cutoff_nml
@@ -197,6 +198,7 @@
      input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90'
     output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90'
    input_files              = '../../../obs_def/obs_def_upper_atm_mod.f90',
+                              '../../../obs_def/obs_def_CO_Nadir_mod.f90',
                               '../../../obs_def/obs_def_GOLD_mod.f90'
    /
 
@@ -215,8 +217,8 @@
    input_file_name              = "filter_restart"
    output_file_name             = "filter_updated_restart"
    ens_size                     =  1
-   single_restart_file_in       = .true.
-   single_restart_file_out      = .true.
+   single_restart_file_in       = .false.
+   single_restart_file_out      = .false.
    write_binary_restart_files   = .false.
    overwrite_data_time          = .false.
    new_data_days                =  -1
@@ -240,11 +242,11 @@
 &obs_diag_nml
    obs_sequence_name = 'obs_seq.final'
    obs_sequence_list = ''
-   first_bin_center =  2005, 9,  9, 0, 0, 0
-   last_bin_center  =  2005, 9, 10, 0, 0, 0
+   first_bin_center =  2018, 11, 1,  0, 0, 0
+   last_bin_center  =  2018, 11, 1, 23, 0, 0
    bin_separation   =     0, 0,  0, 1, 0, 0
    bin_width        =     0, 0,  0, 1, 0, 0
-   time_to_skip     =     0, 0,  0, 1, 0, 0
+   time_to_skip     =     0, 0,  0, 0, 0, 0
    max_num_bins     = 1000
    trusted_obs      = 'null'
    Nregions   = 4
@@ -292,10 +294,10 @@
    num_input_files   = 1
    filename_seq      = 'obs_seq.out'
    filename_out      = 'obs_seq.processed'
-   first_obs_days    = -1
-   first_obs_seconds = -1
-   last_obs_days     = -1
-   last_obs_seconds  = -1
+   first_obs_days    = 152610
+   first_obs_seconds = 21600 
+   last_obs_days     = 152610
+   last_obs_seconds  = 23000
    obs_types         = ''
    keep_types        = .false.
    print_only        = .false.
