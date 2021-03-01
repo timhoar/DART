@@ -155,30 +155,6 @@ ${COPY} ${DARTDIR}/work/obs_sequence_tool                        . || exit 1
 ${COPY} ${DARTDIR}/work/input.nml                                . || exit 1
 ${COPY} ${DARTDIR}/shell_scripts_gadi/submit_multiple_cycles.csh . || exit 1
 
-# Need to convey the location of the experiment to the following scripts.
-# Would not need to, but for a quirk of PBS.
-
-sed -e "s/CENTRALDIRSTRING/$CENTRALDIR/" \
-    ${DARTDIR}/shell_scripts_gadi/assimilate.csh      assimilate.csh     || exit 1
-sed -e "s/CENTRALDIRSTRING/$CENTRALDIR/" \
-    ${DARTDIR}/shell_scripts_gadi/advance_tiegcm.csh  advance_tiegcm.csh || exit 1
-
-#TJH ${COPY} ${EXPERIMENT}/obs_seq.out                                . || exit 1
-#TJH ${COPY} ${EXPERIMENT}/tiegcm_restart_p.nc                        . || exit 1
-#TJH ${COPY} ${EXPERIMENT}/tiegcm_s.nc                                . || exit 1
-#TJH ${COPY} ${EXPERIMENT}/tiegcm.nml               tiegcm.nml.original || exit 1
-#TJH ${COPY} ${EXPERIMENT}/gpi*.nc.*                                  . || exit 1
-#TJH ${COPY} ${EXPERIMENT}/imf*.nc.*                                  . || exit 1
-#TJH
-#TJH ${COPY} ${TIEGCMDIR}/tiegcm.exec/tiegcm2.0                  tiegcm || exit 1
-#TJH ${COPY} ${TIEGCMDIR}/tiegcm.exec/machines.ini                    . || exit 1
-#TJH ${COPY} ${TIEGCMDIR}/tiegcm.exec/mpirun.command                  . || exit 1
-#TJH
-#TJH ${COPY} ${TGCMDATA}/gswm*                                        . || exit 1
-#TJH ${COPY} ${TGCMDATA}/wei05sc.nc                                   . || exit 1
-
-#-----------------------------------------------------------------------------
-
 # Determine the number of ensemble members from input.nml,
 # it may exist in more than one place.
 # Parse out the filter_nml string and see which
@@ -193,6 +169,30 @@ endif
 set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
 set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
+# Need to convey the location of the experiment to the following scripts.
+# Would not need to, but for a quirk of PBS.
+
+sed -e "s/CENTRALDIRSTRING/$CENTRALDIR/" \
+    ${DARTDIR}/shell_scripts_gadi/assimilate.csh      assimilate.csh     || exit 1
+sed -e "s/CENTRALDIRSTRING/$CENTRALDIR/" \
+    -e "s/CENSEMBLESIZESTRING/$ens_size/" \
+    ${DARTDIR}/shell_scripts_gadi/advance_tiegcm.csh  advance_tiegcm.csh || exit 1
+
+${COPY} ${EXPERIMENT}/obs_seq.out                                . || exit 1
+${COPY} ${EXPERIMENT}/tiegcm_restart_p.nc                        . || exit 1
+${COPY} ${EXPERIMENT}/tiegcm_s.nc                                . || exit 1
+${COPY} ${EXPERIMENT}/tiegcm.nml               tiegcm.nml.original || exit 1
+${COPY} ${EXPERIMENT}/gpi*.nc.*                                  . || exit 1
+${COPY} ${EXPERIMENT}/imf*.nc.*                                  . || exit 1
+
+${COPY} ${TIEGCMDIR}/tiegcm.exec/tiegcm2.0                  tiegcm || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm.exec/machines.ini                    . || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm.exec/mpirun.command                  . || exit 1
+
+${COPY} ${TGCMDATA}/gswm*                                        . || exit 1
+${COPY} ${TGCMDATA}/wei05sc.nc                                   . || exit 1
+
+#-----------------------------------------------------------------------------
 # Make a unique directory for each model instance ... populate that
 # directory with everything a TIE-GCM instance needs to run. If there
 # are readonly resources, they can be 'linked' into the directory.
