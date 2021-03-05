@@ -73,7 +73,7 @@ switch (lower(flavor))
       %% FIRST, update the inflation 
       % Approximate with Taylor series for likelihood term
       new_cov_inflate = linear_bayes(dist_2, sigma_p_2, sigma_o_2, ...
-                                     lambda_mean, lambda_sd_2, gamma_corr);
+                                     lambda_mean, lambda_sd, gamma_corr);
 
       %% SECOND, update the inflation variance
       % Bail out to save cost when lower bound is reached on lambda standard deviation
