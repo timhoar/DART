@@ -81,6 +81,14 @@ character(len=512) :: string1, string2
 ! Flag indicating whether module has been initialized
 logical :: initialized = .false.
 
+! Flag indicating whether low-order inflation test output should be generated.
+! Write minimum test data to a matlab file that can be explored with 'inflation_test.m'
+! This test should only be run with the Lorenz_63 model ... and even then it will
+! keep (over)writing the same file for each state variable. Since L63 only has 3 ...
+! Also - there is no need to test for more than 1 cycle.
+
+logical :: inflation_test = .false.
+
 !===============================================================================
 
 contains
@@ -616,7 +624,7 @@ call bayes_cov_inflate(ens_size, inf_type, prior_mean, prior_var, obs, obs_var, 
 ! Also - there is no need to test for more than 1 cycle.
 ! Intentionally putting this before the constraint test. 
 
-if ( .true. ) then
+if ( inflation_test ) then
    iunit = open_file('inflation_input.m',action='write')
    write(iunit,'(''% Explore L63 with input.inflationtest.nml'')')
    write(iunit,'(''flavor     = '',I4,'';'')') test_flavor
