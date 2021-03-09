@@ -129,7 +129,7 @@ switch (lower(flavor))
 
       %% FIRST, update the inflation mean
       % Approximate with Taylor series for likelihood term
-      new_cov_inflate = enh_linear_bayes(dist2, sigma_p_2, sigma_o_2, ...
+      new_cov_inflate = enh_linear_bayes(dist_2, sigma_p_2, sigma_o_2, ...
                                          lambda_mean, gamma_corr, ens_size, rate);
 
       %% SECOND, update the inflation variance
@@ -188,23 +188,12 @@ switch (lower(flavor))
       error('Unknown inflation algorithm choice : %s',flavor)
 end
 
-      % Make sure the update is not smaller than the lower bound
-      if new_cov_inflate < inf_lower_bound || ...
-         new_cov_inflate > inf_upper_bound || ...
-         isnan(new_cov_inflate)
-            new_cov_inflate     = inf_lower_bound; 
-            new_cov_inflate_sd  = lambda_sd;
-         return
-      end
+% Make sure the inflate satisfies constraints
+if new_cov_inflate < inf_lower_bound, new_cov_inflate = inf_lower_bound; end
+if new_cov_inflate > inf_upper_bound  new_cov_inflate = inf_upper_bound; end
 
-% Make sure the update is not smaller than the lower bound
-if new_cov_inflate < inf_lower_bound || new_cov_inflate > inf_upper_bound || isnan(new_cov_inflate)
-    new_cov_inflate     = inf_lower_bound; 
-    return
-end
-
-% Prevent the sd from going below the lower bound
-if new_cov_inflate_sd < sd_lower_bound_in,  new_cov_inflate_sd = sd_lower_bound_in; end
+% Make sure sd satisfies constraints
+if new_cov_inflate_sd < sd_lower_bound_in, new_cov_inflate_sd = sd_lower_bound_in; end
 
 
 %-------------------------------------------------------------------------------
@@ -267,21 +256,20 @@ function new_cov_inflate = enh_linear_bayes(dist_2, sigma_p_2, sigma_o_2, ...
 % d (distance between obs and ens) is drawn from Gaussian with 0 mean and
 % variance: E(d^2) = \lambda^o*\sigma_p^2 + \sigma_o^2
     
-fac1 = (1 + gamma_corr * (sqrt(lambda_mean) - 1))^2;
-fac2 = -1 / ens_size;
+fac1 = (1.0 + gamma_corr * (sqrt(lambda_mean) - 1.0))^2;
+fac2 = -1.0 / ens_size;
 
 % Compute value of theta at current lambda_mean
-if fac1 < abs(fac2), fac2 = 0; end
-    
+if fac1 < abs(fac2), fac2 = 0.0; end
 theta_bar_2 = (fac1+fac2) * sigma_p_2 + sigma_o_2;
 theta_bar   = sqrt(theta_bar_2);
 
 % The likelihood: p(d/lambda)
-like_bar = exp(- 0.5 * dist_2 / theta_bar_2) / (sqrt(2 * pi) * theta_bar);
+like_bar = exp(- 0.5 * dist_2 / theta_bar_2) / (sqrt(2.0 * pi) * theta_bar);
 
 % likelihood can't be less than or equal to zero!
-if like_bar <= 0
-    new_cov_inflate     = inf_lower_bound; 
+if like_bar <= 0.0
+    new_cov_inflate = inf_lower_bound; 
     return
 end
 
@@ -294,14 +282,14 @@ like_prime   = like_bar * deriv_theta * (dist_2 / theta_bar_2 - 1.0) / theta_bar
 
 % Make sure we don't divide by zero
 if like_prime == 0
-    new_cov_inflate     = inf_lower_bound; 
+    new_cov_inflate = lambda_mean; 
     return
 end
 like_ratio = like_bar / like_prime;
 
 % Solve a quadratic equation
 a = 1.0 - lambda_mean / beta;
-b = like_ratio - 2 * lambda_mean;
+b = like_ratio - 2.0 * lambda_mean;
 c = lambda_mean^2 - like_ratio * lambda_mean;
 
 [plus_root, minus_root] = solve_quadratic(a, b, c);
@@ -313,12 +301,14 @@ else
    new_cov_inflate = plus_root;
 end
 
-% Make sure the update is not smaller than the lower bound
-if new_cov_inflate < inf_lower_bound || new_cov_inflate > inf_upper_bound || isnan(new_cov_inflate)
-    new_cov_inflate     = inf_lower_bound; 
-    return
+% Do a final check on the sign of the updated factor
+% Sometimes the factor can be very small (almost zero) 
+% From the selection process above it can be negative
+% if the positive root is far away from it. 
+% As such, keep the current factor value
+if(new_cov_inflate <= 0.0 || isnan(new_cov_inflate))
+    new_cov_inflate = lambda_mean
 end
-
 
 %-------------------------------------------------------------------------------
 

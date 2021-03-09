@@ -643,6 +643,9 @@ if ( inflation_test ) then
    write(iunit,'(''fortran_inflate    = '',F16.10,'';'')') new_inflate
    write(iunit,'(''fortran_inflate_sd = '',F16.10,'';'')') new_inflate_sd
    call close_file(iunit)
+
+   ! inflation_test = .false. will write out this file - once.
+   inflation_test = .false.
 endif
 
 ! Make sure inflate satisfies constraints
