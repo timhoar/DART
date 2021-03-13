@@ -84,17 +84,19 @@ echo "${JOBNAME} ($JOBID) running       on $MYHOST"
 echo "${JOBNAME} ($JOBID) started   at "`date`
 echo
 
-# DARTDIR      The location of the DART tiegcm model directory
+# CENTRALDIR   Where the experiment will be run
+# ENSEMBLEDIR  The location of the initial ensemble of TIEGCM files
 # TIEGCMDIR    The location of the TIEGCM executable
 # TGCMDATA     The location of the TIEGCM support data
-# ENSEMBLEDIR  The location of the initial ensemble of TIEGCM files
-# CENTRALDIR   Where the experiment will be run
+# DARTDIR      The location of the DART tiegcm model directory
+# OBSDIR       The location of the input observation sequence files
 
-setenv     DARTDIR /glade/work/thoar/git/DART_development/models/tiegcm
+setenv  CENTRALDIR /glade/scratch/thoar/tiegcm_experiments/job_${JOBID}
+setenv ENSEMBLEDIR /glade/work/thoar/tiegcm_ensemble
 setenv   TIEGCMDIR /glade/work/thoar/git/DART_development/models/tiegcm/tiegcm
 setenv    TGCMDATA ${TIEGCMDIR}/tiegcm_res5.0_data
-setenv ENSEMBLEDIR /glade/work/thoar/tiegcm_ensemble
-setenv  CENTRALDIR /glade/scratch/thoar/tiegcm_experiments/job_${JOBID}
+setenv     DARTDIR /glade/work/thoar/git/DART_development/models/tiegcm
+setenv      OBSDIR /glade/work/thoar/git/DART_development/models/tiegcm/tiegcm
 
 mkdir -p ${CENTRALDIR}
 
@@ -149,6 +151,7 @@ ${COPY} ${DARTDIR}/work/filter                                   . || exit 1
 ${COPY} ${DARTDIR}/work/dart_to_model                            . || exit 1
 ${COPY} ${DARTDIR}/work/model_to_dart                            . || exit 1
 ${COPY} ${DARTDIR}/work/advance_time                             . || exit 1
+${COPY} ${DARTDIR}/work/fill_inflation_restart                   . || exit 1
 ${COPY} ${DARTDIR}/work/obs_sequence_tool                        . || exit 1
 ${COPY} ${DARTDIR}/work/input.nml                                . || exit 1
 ${COPY} ${DARTDIR}/shell_scripts/submit_multiple_cycles.csh      . || exit 1
@@ -182,8 +185,8 @@ sed -e "s#CENTRALDIRSTRING#$CENTRALDIR#" \
 chmod 755 assimilate.csh advance_tiegcm.csh
 
 ${COPY} ${ENSEMBLEDIR}/obs_seq.out                                . || exit 1
-${COPY} ${ENSEMBLEDIR}/tiegcm_restart_p.nc                        . || exit 1
-${COPY} ${ENSEMBLEDIR}/tiegcm_s.nc                                . || exit 1
+${LINK} ${ENSEMBLEDIR}/tiegcm_restart_p.nc                        . || exit 1
+${LINK} ${ENSEMBLEDIR}/tiegcm_s.nc                                . || exit 1
 ${COPY} ${ENSEMBLEDIR}/tiegcm.nml               tiegcm.nml.original || exit 1
 
 ${COPY} ${TIEGCMDIR}/tiegcm.exec/tiegcm2.0                  tiegcm || exit 1
