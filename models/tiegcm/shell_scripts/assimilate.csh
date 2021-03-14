@@ -118,9 +118,9 @@ set TIMESTAMP = `printf %03d%02d%02d $DOY $HOUR $MINUTE`
 
 set JAN1 = `printf %04d%02d%02d%02d%02d $YEAR 1 1 $HOUR $MINUTE`
 
-set TIME1 = `echo $JAN1 +${DOY}d-1d-1799s -g | ./advance_time`
+set   TIME1 = `echo $JAN1 +${DOY}d-1d-1799s -g | ./advance_time`
 set   MTIME = `echo $JAN1 +${DOY}d-1d       -g | ./advance_time`
-set TIME2 = `echo $JAN1 +${DOY}d-1d+1800s -g | ./advance_time`
+set   TIME2 = `echo $JAN1 +${DOY}d-1d+1800s -g | ./advance_time`
 set ADVTIME = `echo $JAN1 +${DOY}d-1d+1h    -g | ./advance_time`
 
 echo "start of assimilation window $TIME1"
@@ -205,14 +205,15 @@ endif
 # Update the inflation pointer file with the most recent file.
 # ------------------------------------------------------------------------------
 
-${MOVE} -v obs_seq.final     obs_seq.final.$TIMESTAMP
-${MOVE} -v namelist_update namelist_update.$TIMESTAMP
+${MOVE} -v     Prior_Diag.nc       Prior_Diag.$TIMESTAMP.nc
+${MOVE} -v Posterior_Diag.nc   Posterior_Diag.$TIMESTAMP.nc
+${MOVE} -v     obs_seq.final    obs_seq.final.$TIMESTAMP
+${MOVE} -v   namelist_update  namelist_update.$TIMESTAMP
 
 if ( -e prior_inflate_restart ) then
    ${MOVE} -v prior_inflate_restart prior_inflate_restart.$TIMESTAMP
    echo "prior_inflate_restart.$TIMESTAMP" >! priorinf_pointer_file.txt
 endif
-
 
 echo "$ADVTIME[2] $ADVTIME[1]" >! advance_to_time
 

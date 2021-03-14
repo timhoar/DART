@@ -291,7 +291,6 @@
    /
 
 &obs_sequence_tool_nml
-   num_input_files   = 1
    filename_seq      = 'obs_seq.input'
    filename_out      = 'obs_seq.out'
    first_obs_days    = 152610

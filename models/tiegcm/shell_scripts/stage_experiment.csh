@@ -263,16 +263,12 @@ while ( $instance <= $NUM_ENS )
          echo "ERROR: File conversion from $tierestart to $darticname failed."
          exit 2
       else
-         ${MOVE} dart_ics filter_ics
+         # Rename as expected input for filter ... 
+         ${MOVE} dart_ics ../$darticname
       endif
    endif
 
    cd ..
-
-   # Link the expected input for filter ... 
-   ln -s $rundir/filter_ics          $darticname
-   ln -s $rundir/tiegcm_s.nc         $tiesecond
-   ln -s $rundir/tiegcm_restart_p.nc $tierestart
 
    @ instance++
 
@@ -286,6 +282,10 @@ echo "Finished staging the experiment at "`date`
 cat << EndOfText >! README.txt
 
 # REQUIREMENTS: for input.nml
+#-----------------------------------------------------------------------------
+# obs_sequence_tool_nml: filename_seq               = 'obs_seq.input'
+# obs_sequence_tool_nml: filename_out               = 'obs_seq.out'
+#-----------------------------------------------------------------------------
 # model_nml            : tiegcm_restart_file_name   = 'tiegcm_restart_p.nc'
 # model_nml            : tiegcm_secondary_file_name = 'tiegcm_s.nc'
 # model_nml            : tiegcm_namelist_file_name  = 'tiegcm.nml'
