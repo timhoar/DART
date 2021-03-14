@@ -1,8 +1,6 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module mpi_utilities_mod
 
@@ -185,10 +183,9 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           sum_across_tasks
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'null_mpi_utilities_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 logical, save :: module_initialized = .false.
 
@@ -794,8 +791,3 @@ subroutine exit_all(exit_code)
 
 end subroutine exit_all
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

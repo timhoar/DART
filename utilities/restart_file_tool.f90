@@ -1,8 +1,6 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program restart_file_tool
 
@@ -33,10 +31,9 @@ use mpi_utilities_mod,    only : initialize_mpi_utilities, task_count, &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'restart_file_tool.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 integer                 :: iunit, model_size, io, member
 type(ensemble_type)     :: ens_handle
@@ -399,8 +396,3 @@ end subroutine print_temporal
 
 end program restart_file_tool
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

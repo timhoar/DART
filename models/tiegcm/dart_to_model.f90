@@ -1,8 +1,6 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 !----------------------------------------------------------------------
 
@@ -41,10 +39,9 @@ use time_manager_mod, only : time_type, get_time, get_date, set_calendar_type, &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'tiegcm/dart_to_model.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 !-----------------------------------------------------------------------
 ! namelist parameters with default values.
@@ -221,8 +218,3 @@ end subroutine write_tiegcm_time_control
 
 end program dart_to_model
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

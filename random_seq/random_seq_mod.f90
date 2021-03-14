@@ -1,8 +1,6 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module random_seq_mod
 
@@ -19,10 +17,9 @@ public :: random_seq_type, init_random_seq, random_gaussian, &
    several_random_gaussians, random_uniform, twod_gaussians
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'random_seq_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 ! Gives ability to generate unique repeatable sequences of random numbers
 ! using random congruential package. Needed to allow different assim algorithms
@@ -360,8 +357,3 @@ end function ran_gauss
 
 end module random_seq_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
