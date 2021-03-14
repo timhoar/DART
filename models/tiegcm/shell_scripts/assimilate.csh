@@ -113,16 +113,42 @@ echo "MODEL TIME read as $YEAR $DOY $HOUR $MINUTE"
 
 set TIMESTAMP = `printf %03d%02d%02d $DOY $HOUR $MINUTE`
 
+# PRESUMING WE WANT +/- 30 MINS OF THE CURRENT MODEL TIME:
 # Get the appropriate set of observations for this timeframe. 
 
-if ( -e $OBSDIR/obs_seq.$TIMESTAMP.out ) then
-  ${LINK} $OBSDIR/obs_seq.$TIMESTAMP.out obs_seq.out || exit 3
-else
-   # could run obs_sequence_tool to cut out just the obs of interest
+set JAN1 = `printf %04d%02d%02d%02d%02d $YEAR 1 1 $HOUR $MINUTE`
+
+set TIME1 = `echo $JAN1 +${DOY}d-1d-1799s -g | ./advance_time`
+set   MTIME = `echo $JAN1 +${DOY}d-1d       -g | ./advance_time`
+set TIME2 = `echo $JAN1 +${DOY}d-1d+1800s -g | ./advance_time`
+set ADVTIME = `echo $JAN1 +${DOY}d-1d+1h    -g | ./advance_time`
+
+echo "start of assimilation window $TIME1"
+echo "model time                   $MTIME"
+echo "end   of assimilation window $TIME2"
+echo "advance_to_time              $ADVTIME"
+
+set DAY1 = $TIME1[1]
+set SEC1 = $TIME1[2]
+set DAYN = $TIME2[1]
+set SECN = $TIME2[2]
+
+${COPY} input.nml input.nml.original
+
+sed -e "/ first_obs_days /c\ first_obs_days = $DAY1" \
+    -e "/ first_obs_seconds /c\ first_obs_seconds = $SEC1" \
+    -e "/ last_obs_days /c\ last_obs_days = $DAYN" \
+    -e "/ last_obs_seconds /c\ last_obs_seconds = $SECN" input.nml.original >! input.nml
+
+./obs_sequence_tool
+
+if (! -e obs_seq.out ) then
    echo "ERROR: no observations for $YEAR $DOY $HOUR $MINUTE"
-   echo "ERROR: expecting a file: $OBSDIR/obs_seq.$TIMESTAMP.out"
-#   exit 3
+   echo "ERROR: unable to create obs_seq.out"
+   exit 3
 endif
+
+${MOVE} input.nml.original input.nml
 
 # ------------------------------------------------------------------------------
 # STEP 4: [OPTIONAL] prepare for DART INFLATION 

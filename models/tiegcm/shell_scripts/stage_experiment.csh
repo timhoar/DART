@@ -96,7 +96,7 @@ setenv ENSEMBLEDIR /glade/work/thoar/tiegcm_ensemble
 setenv   TIEGCMDIR /glade/work/thoar/git/DART_development/models/tiegcm/tiegcm
 setenv    TGCMDATA ${TIEGCMDIR}/tiegcm_res5.0_data
 setenv     DARTDIR /glade/work/thoar/git/DART_development/models/tiegcm
-setenv      OBSDIR /glade/work/thoar/git/DART_development/models/tiegcm/tiegcm
+setenv      OBSDIR /glade/work/thoar/tiegcm_ensmble
 
 mkdir -p ${CENTRALDIR}
 
@@ -184,17 +184,17 @@ sed -e "s#CENTRALDIRSTRING#$CENTRALDIR#" \
 # Make these scripte executable
 chmod 755 assimilate.csh advance_tiegcm.csh
 
-${COPY} ${ENSEMBLEDIR}/obs_seq.out                                . || exit 1
+${COPY} ${OBSDIR}/obs_seq.out                         obs_seq.input || exit 1
 ${LINK} ${ENSEMBLEDIR}/tiegcm_restart_p.nc                        . || exit 1
 ${LINK} ${ENSEMBLEDIR}/tiegcm_s.nc                                . || exit 1
 ${COPY} ${ENSEMBLEDIR}/tiegcm.nml               tiegcm.nml.original || exit 1
 
-${COPY} ${TIEGCMDIR}/tiegcm.exec/tiegcm2.0                  tiegcm || exit 1
-${COPY} ${TIEGCMDIR}/tiegcm.exec/machines.ini                    . || exit 1
-${COPY} ${TIEGCMDIR}/tiegcm.exec/mpirun.command                  . || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm.exec/tiegcm2.0                   tiegcm || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm.exec/machines.ini                     . || exit 1
+${COPY} ${TIEGCMDIR}/tiegcm.exec/mpirun.command                   . || exit 1
 
-${COPY} ${TGCMDATA}/gswm*                                        . || exit 1
-${COPY} ${TGCMDATA}/wei05sc.nc                                   . || exit 1
+${COPY} ${TGCMDATA}/gswm*                                         . || exit 1
+${COPY} ${TGCMDATA}/wei05sc.nc                                    . || exit 1
 
 #-----------------------------------------------------------------------------
 # Make a unique directory for each model instance ... populate that
