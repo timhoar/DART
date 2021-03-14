@@ -1,4 +1,4 @@
-#!/bin/csh -v
+#!/bin/csh
 #
 # DART software - Copyright UCAR. This open source software is provided
 # by UCAR, "as is", without charge, subject to all terms of use at
@@ -96,7 +96,7 @@ setenv ENSEMBLEDIR /glade/work/thoar/tiegcm_ensemble
 setenv   TIEGCMDIR /glade/work/thoar/git/DART_development/models/tiegcm/tiegcm
 setenv    TGCMDATA ${TIEGCMDIR}/tiegcm_res5.0_data
 setenv     DARTDIR /glade/work/thoar/git/DART_development/models/tiegcm
-setenv      OBSDIR /glade/work/thoar/tiegcm_ensmble
+setenv      OBSDIR /glade/work/thoar/tiegcm_ensemble
 
 mkdir -p ${CENTRALDIR}
 

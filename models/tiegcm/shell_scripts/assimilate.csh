@@ -213,15 +213,28 @@ if ( -e prior_inflate_restart ) then
    echo "prior_inflate_restart.$TIMESTAMP" >! priorinf_pointer_file.txt
 endif
 
+
+echo "$ADVTIME[2] $ADVTIME[1]" >! advance_to_time
+
 # Must copy each filter_restart.nnnn to the right place, update link
 # so that 'dart_to_model' gets what it needs.
 foreach RESTART ( filter_restart.???? )
+
+   # prepend the 'advance_to_time' record to the DART posterior.
+   # That way the advance_tiegcm.csh script (specifically dart_to_model)
+   # has the information about the next stop time for the forecast.
+
+   cat advance_to_time $RESTART >! temp.file
+   ${MOVE} temp.file $RESTART
+
+   # put the DART posterior in the right directory
    set instance = $RESTART:e
    set INSTANCE_DIRECTORY = `printf "instance_%04d" $instance`
    cd $INSTANCE_DIRECTORY
    ${MOVE} -v ../$RESTART  $RESTART.$TIMESTAMP
    \unlink dart_restart
    ${LINK} $RESTART.$TIMESTAMP dart_restart
+
    cd ..
 end
 

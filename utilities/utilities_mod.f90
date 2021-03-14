@@ -459,21 +459,12 @@ contains
       if ( .not. do_output_flag) return
       if ( .not. module_details) return
 
-
       write(logfileunit,*)
-      write(logfileunit,*)'Registering module :'
-      write(logfileunit,*)trim(src)
-      write(logfileunit,*)trim(rev)
-      write(logfileunit,*)trim(rdate)
-      write(logfileunit,*)'Registration complete.'
+      write(logfileunit,*)'Registering : ',trim(src)
       write(logfileunit,*)
 
       write(     *     ,*)
-      write(     *     ,*)'Registering module :'
-      write(     *     ,*)trim(src)
-      write(     *     ,*)trim(rev)
-      write(     *     ,*)trim(rdate)
-      write(     *     ,*)'Registration complete.'
+      write(     *     ,*)'Registering : ',trim(src)
       write(     *     ,*)
 
    end subroutine register_module
