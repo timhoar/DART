@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 ! Note:  This version has a namelist item for the max number of
 ! gps observations that can be read in, but it is currently commented out.
@@ -12,11 +10,11 @@
 ! files (e.g. for the obs_diag program) might be a larger number than 100K.
 
 ! BEGIN DART PREPROCESS KIND LIST
-! TEMPERATURE,        KIND_TEMPERATURE,        COMMON_CODE
-! SPECIFIC_HUMIDITY,  KIND_SPECIFIC_HUMIDITY,  COMMON_CODE
-! PRESSURE,           KIND_PRESSURE,           COMMON_CODE
-! GPSRO_REFRACTIVITY, KIND_GPSRO
-! COSMIC_ELECTRON_DENSITY, KIND_ELECTRON_DENSITY, COMMON_CODE
+! TEMPERATURE,              KIND_TEMPERATURE,        COMMON_CODE
+! SPECIFIC_HUMIDITY,        KIND_SPECIFIC_HUMIDITY,  COMMON_CODE
+! PRESSURE,                 KIND_PRESSURE,           COMMON_CODE
+! GPSRO_REFRACTIVITY,       KIND_GPSRO
+! COSMIC_ELECTRON_DENSITY,  KIND_ELECTRON_DENSITY,   COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
 
@@ -73,10 +71,9 @@ public :: set_gpsro_ref, get_gpsro_ref, write_gpsro_ref, read_gpsro_ref, &
           get_expected_gpsro_ref, interactive_gpsro_ref
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'obs_def_gps_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 logical, save :: module_initialized = .false.
 
@@ -679,8 +676,3 @@ end module obs_def_gps_mod
 
 ! END DART PREPROCESS MODULE CODE
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

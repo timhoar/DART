@@ -1,10 +1,8 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
-#
-# DART $Id$
 #
 # Top level script to generate observations and a TRUE state.
 #
@@ -16,8 +14,8 @@
 #
 #BSUB -J tiegcm_perfect
 #BSUB -o tiegcm_perfect.%J.log
-#BSUB -P P3507xxxx
-#BSUB -q premium
+#BSUB -P P8685xxxx
+#BSUB -q small
 #BSUB -n 1
 #BSUB -W 1:00
 #BSUB -N -u ${USER}@ucar.edu
@@ -229,9 +227,4 @@ echo "These are the files in the run directory at completion:"
 ls -lrt
 
 exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

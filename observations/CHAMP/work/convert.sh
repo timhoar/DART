@@ -1,10 +1,8 @@
 #!/bin/bash
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
-#
-# DART $Id$
 #
 # runs t2o multiple times to convert multiple CHAMP files and append the 
 # resulting files to obs_seq.out (or the obs_out_file specified in 
@@ -26,15 +24,7 @@ nd=4
 for (( i = 1 ; i <= $nd; i++ ))
 do
     echo $i
-    sed -i '.tmp' 's/text_input_file.*/text_input_file = "Density_3deg_02_'$[$d1+$i-1]'.ascii"/' input.nml
-    ./text_to_obs > temp
+    sed -i '.tmp' 's#text_input_file.*#text_input_file = "../data/2002/Density_3deg_02_'$[$d1+$i-1]'.ascii"#' input.nml
+    ./CHAMP_density_text_to_obs
 done
-
-#shows how many observations are there total
-tail temp
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

@@ -1,0 +1,373 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+          "http://www.w3.org/TR/html4/strict.dtd">
+<HTML>
+<HEAD>
+<TITLE>DART observation converters from the CEDAR Archival Madrigal Database</TITLE>
+<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
+<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+</HEAD>
+<BODY>
+<A NAME="TOP"></A>
+
+<H1>PROGRAM <em class=program>TEC_to_obs</em></H1>
+
+<table border=0 summary="" cellpadding=5>
+<tr>
+    <td valign=middle>
+    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    </td>
+    <td>
+       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+          <small><small>version information for this file: <br />
+          <!-- version tag follows, do not edit -->
+          $Id$</small></small>
+       </P></td>
+</tr>
+</table>
+
+<A HREF="#DataSources">DATA SOURCES</A> /
+<A HREF="#Programs">PROGRAMS</A> /
+<A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#References">REFERENCES</A> /
+<A HREF="#Errors">ERRORS</A> /
+<A HREF="#FuturePlans">PLANS</A> /
+<A HREF="#Legalese">TERMS OF USE</A>
+
+<H1>Overview</H1>
+
+<H4>World-wide Vertical Total Electron Content ASCII File to DART Observation Converter</H4>
+
+<P>
+The World-wide GPS Receiver Network Total Electron Content (TEC) observations from the
+<a href="http://madrigal.haystack.mit.edu/">CEDAR Archival Madrigal Database</a> 
+<br />can be converted to DART observation sequence files with 
+<em class=program>TEC_text_to_obs</em>. A DART observation 'KIND' of GPS_VTEC_EXTRAP
+will be assigned to the observations.
+</P>
+<P>I am a big fan of giving credit where credit is due. Please read this quote from
+the Madrigal home page:
+<blockquote> <em class=italic>
+Use of the CEDAR Archival Madrigal Database is generally subject to the 
+CEDAR Rules-of-the-Road. Prior permission to access the data is not required. 
+However, the user is required to establish early contact with any organization 
+whose data are involved in the project to discuss the intended usage. Data are 
+often subject to limitations which are not immediately evident to new users. 
+Before they are formally submitted, draft copies of all reports and publications 
+must be sent to the contact scientist at all data-supplying organizations along 
+with an offer of co-authorship to scientists who have provided data. This offer 
+may be declined. The Database and the organizations that contributed data must 
+be acknowledged in all reports and publications, and whenever this data is 
+made available through another database. If you have any questions about 
+appropriate use of these data, contact brideout@haystack.mit.edu</em>
+</blockquote> 
+</P>
+
+<!--==================================================================-->
+
+<A NAME="DataSources"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>DATA SOURCES</H2>
+
+<P>
+The TEC can be downloaded from
+<a href="http://madrigal.haystack.mit.edu/">CEDAR Archival Madrigal Database</a> 
+after a trivial registration. It is then important to be able to navigate to the proper
+set of data. There are several methods of data download (Python, Matlab) - this document will simply outline the web interface method to download the data for a single day.
+</P>
+<OL><li>From the Madrigal home page, choose the "<em class=mono>Simple Local Data Access</em>" option.</li>
+    <li>Choose "<em class=mono>Distributed Ground Based Satellite Receivers</em>" from the instrument types.</li>
+    <li>Choose "<em class=mono>World-wide GPS Receiver Network [1998-2016]</em>"</li>
+    <li>Pick your Year, Month, and Day from the subsequent calendar choices.</li>
+    <li>after a short wait, the <em class=mono>Select File:</em> menu will appear.</li>
+    <li>If you select "<em class=mono>Print data</em>", your screen should look something like:</li>
+</OL>
+<div>
+<img src="Madrigal.png" alt="Madrigal download screenshot" />
+<hr />
+</div>
+
+<P>This was the result of the "<em class=mono>View info</em>" menu:</P>
+
+<div>
+<pre>
+Catalog/Header information for gps050124g.002
+
+Catalog information from record 0:
+
+KRECC       2001 Catalogue Record, Version 1                                    
+KINSTE      8000  World-wide GPS Receiver Network                               
+MODEXP         1  Conversion to vertical TEC                                    
+CMODEXP All Total electron content (TEC) measurements in this file are          
+CMODEXP vertical TEC, where 1 TEC unit = 1E16 electrons per square meter.       
+CMODEXP The conversion from the line-of-sight TEC values to vertical TEC        
+CMODEXP are done by assuming a slab ionosphere at 350 km.  This means that      
+CMODEXP only elevation needs to be considered in mapping line-of-sight TEC      
+CMODEXP to vertical TEC.                                                        
+CMODEXP                                                                         
+CMODEXP Processing version 4.0 - Released May 13, 2009                          
+CMODEXP   4.0 notes: New logic added to remove isolated tec data below          
+CMODEXP              the TEC distribution median                                
+CMODEXP   3.0 notes: Fixes scaling bug in version 2.0.                          
+CMODEXP   2.0 notes:                                                            
+CMODEXP   This all-python processing code includes more rigorous                
+CMODEXP   error analysis, and uses Bayesian error analysis to                   
+CMODEXP   better estimate TEC, which reduces the error.                         
+CMODEXP                                                                         
+CMODEXP More details are available from: http://www.haystack.mit.edu/           
+C                                                                               
+GGLAT1       -90 degrees. Lowest geographic latitude measured                   
+GGLAT2        90 degrees. Highest geographic latitude measured                  
+GGLON1         0 degrees. Westmost geographic longitude measured                
+GGLON2       360 degrees. Eastmost geographic longitude measured                
+IBYRE       2005 Beginning year                                                 
+IBDTE       0124 Beginning month and day                                        
+IBHME       0000 Beginning UT hour and minute                                   
+IBCSE       0000 Beginning centisecond                                          
+IEYRE       2005 Ending year                                                    
+IEDTE       0125 Ending month and day                                           
+IEHME       0000 Ending UT hour and minute                                      
+IECSE       0000 Ending centisecond                                             
+C                                                                               
+CPI      A. Coster, B. Rideout                                                  
+CPREPDAT 2009-06-17 10:17:37.828097                                             
+
+Header information from record 1:
+
+KRECH               3002 Header Record, Version 2                               
+KINST          3    8000 World-wide GPS Receiver Network                        
+KINDAT         4    3500 Minimum scalloping TEC processing                      
+C                                                                               
+IBYRT               2005 Beginning year                                         
+IBDTT               0124 Beginning month and day                                
+IBHMT               0000 Beginning UT hour and minute                           
+IBCST               0000 Beginning centisecond                                  
+IEYRT               2005 Ending year                                            
+IEDTT               0125 Ending month and day                                   
+IEHMT               0000 Ending UT hour and minute                              
+IECST               0000 Ending centisecond                                     
+LPROL         13      16 Length of prologue in data records                     
+JPAR          14       0 Number of single-valued parameters                     
+MPAR          15       3 Number of multiple-values parameters                   
+C 2D Parameters:                                                                
+KODM(1)       17     160 Geodetic latitude of measurement        1.0e-02     deg
+KODM(2)              170 Geodetic longitude of measurement       1.0e-02     deg
+KODM(3)              524 Vertically integrated electron density  1.0e-01     tec
+KODM(4)             -524 Error in Vert integ electron density    1.0e-01     tec
+CANALYST B. Rideout (brideout@haystack.mit.edu)                                 
+CANDATE  2009-06-17 10:17:37.836526 
+</pre>
+</div>
+
+<P>&nbsp;</P><!-- needed to make 'top' align correctly -->
+
+<!--==================================================================-->
+
+<A NAME="Programs"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>PROGRAMS</H2>
+
+<H3>TEC_text_to_obs.f90</H3>
+<P>
+The <em class=file>TEC_text_to_obs.f90.f90</em> file is the source code
+for the main converter program.
+<em class=program>TEC_text_to_obs</em>
+reads each text line into a character buffer
+and then reads from that buffer to parse up the data items.
+</P>
+
+<P>The data format (apparently version 2) supported by the converter is:</P>
+<table>
+<TR><TH align=left>column&nbsp;&nbsp;&nbsp;</TH><TH align=left>content</TH></TR>
+    <tr><td> 1 </td><td> YEAR   </td></tr>
+    <tr><td> 2 </td><td> MONTH  </td></tr>
+    <tr><td> 3 </td><td> DAY    </td></tr>
+    <tr><td> 4 </td><td> HOUR   </td></tr>
+    <tr><td> 5 </td><td> MINUTE </td></tr>
+    <tr><td> 6 </td><td> SECOND </td></tr>
+    <tr><td> 7 </td><td> UT1_UNIX (which DART ignores) </td></tr>
+    <tr><td> 8 </td><td> UT2_UNIX (which DART ignores) </td></tr>
+    <tr><td> 9 </td><td> RECNO    (which DART ignores) </td></tr>
+    <tr><td>10 </td><td> Geodetic latitude of measurement - Units: deg </td></tr>
+    <tr><td>11 </td><td> Geographic longitude of measurement - Units: deg </td></tr>
+    <tr><td>12 </td><td> Vertically integrated electron density - Units: tec </td></tr>
+    <tr><td>13 </td><td> Error in Vertically integrated electron density - Units: tec</td></tr>
+</table>
+<P>1 TEC unit = 1E16 electrons per square meter.
+<br />
+<br />
+Since the provided Error (column 13) does not include "error of representativeness" (the mismatch between the instrument footprint and the model resolution), an assumption of an observation error variance of 25 has been used as in
+(<a href="#References">Chartier, 2016</a>). Furthermore, a vertical location of 350km has been assigned to the observations to enable vertical localization if desired.
+The observations will be DART KIND <strong>GPS_VTEC_EXTRAP</strong>. To assimilate 
+or evaluate these observations, <strong>GPS_VTEC_EXTRAP</strong> must appear in the
+<em class=file>input.nml</em>&nbsp;<em class=code>&amp;obs_kind_nml</em>namelist section
+when running <em class=program>filter</em> or <em class=program>perfect_model_obs</em>.
+</P>
+
+<H3>obs_sequence_tool</H3>
+<P>
+The <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence/obs_sequence_tool.f90</a> may be used to combine multiple observation sequence files into a single file, etc.
+See the <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool.html</a> for details.
+</P>
+
+<H3>advance_time</H3>
+<P>
+The <a href="../../time_manager/advance_time.html">time_manager/advance_time.f90</a> may also be 
+useful when scripting to set the time ranges.
+See the <a href="../../time_manager/advance_time.html">advance_time.html</a> for details.
+</P>
+
+<H2>Compiling and Testing</H2>
+<P>
+To compile and test, go into the <em class=file>Madrigal/work</em> subdirectory and
+run the <em class=program>quickbuild.csh</em>
+script to build the converter and a couple of general purpose utilities.
+The <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool</a>
+manipulates (i.e. combines, subsets) DART observation files once they have been created.
+The default observations supported are those defined in
+<a href="../../obs_def/obs_def_upper_atm_mod.f90">DART/obs_def/obs_def_upper_atm_mod.f90</a>.
+If you need additional observation types, you will have to add the
+appropriate <em class=file>obs_def_XXX_mod.f90</em> file to the
+<em class=file>input.nml</em>&nbsp;<em class=code>&amp;preprocess_nml:input_files</em>
+variable and run <em class=program>quickbuild.csh</em> again.
+It rebuilds the table of supported observation types before
+compiling the source code.
+</P>
+
+<P>
+These instructions assume you have downloaded an ASCII file and put it 
+in the <em class=file>Madrigal/downloads</em> directory. Running
+<a href="shell_scripts/convert_day_by_day.csh">shell_scripts/convert_day_by_day.csh</a>
+will automatically converting all the files in the 
+<em class=file>downloads</em> directory to an equal number of DART observation 
+sequence files that have the YYYY_MM_DD as a suffix.
+</P>
+
+<P>&nbsp;</P><!-- needed to make 'top' align correctly -->
+
+<!--==================================================================-->
+<!--=================== DESCRIPTION OF A NAMELIST  ===================-->
+<!--==================================================================-->
+
+<A NAME="Namelist"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>NAMELIST</H2>
+<P>
+This namelist is read from the file <em class=file>input.nml</em>.
+Namelists start with an ampersand
+'&amp;' and terminate with a slash '/'.
+Character strings that contain a '/' must be
+enclosed in quotes to prevent them from
+prematurely terminating the namelist.
+</P>
+
+<div class=namelist>
+<pre>
+&amp;TEC_text_to_obs_nml
+   text_input_file  = "../downloads/gps050122g.002.txt"
+   obs_out_base     = "obs_seq.out"
+  /
+</pre>
+</div>
+
+<br />
+
+<div>
+
+<TABLE border=0 cellpadding=3 width=100% summary='TEC namelist description'>
+<THEAD align=left>
+<TR><TH>Contents    </TH>
+    <TH>Type        </TH>
+    <TH>Description </TH></TR>
+</THEAD>
+
+<TBODY valign=top>
+<TR>
+<TR>
+ <TD>text_input_file</TD>
+ <TD>character(len=256)</TD>
+ <TD>The text file containing the raw observations for each site.
+</TD></TR>
+
+<TR>
+ <TD>obs_out_base</TD>
+ <TD>character(len=256)</TD>
+ <TD>The base portion of the output observation sequence file for DART.
+     This base will be appended with a ".YYYY_MM_DD" string that contains
+     the year, month, and day of the observations in the file. Since each
+     input file is a single day, this is easy.
+</TD></TR>
+
+</TBODY>
+</TABLE>
+
+</div>
+
+<P>&nbsp;</P><!-- needed to make 'top' align correctly -->
+
+<!--==================================================================-->
+<!-- References.                                                      -->
+<!--==================================================================-->
+
+<A NAME="References"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>References</H2>
+<ul>
+<li> Chartier,&nbsp;A., T.&nbsp;Matsuo, J.&nbsp;L.&nbsp;Anderson, G.&nbsp;Lu, 
+     T.&nbsp;Hoar, N.&nbsp;Collins, A.&nbsp;Coster, C.&nbsp;Mitchell, 
+     L.&nbsp;Paxton, G.&nbsp;Bust (2016),<br />
+Ionospheric Data Assimilation and Forecasting During Storms.<br />
+<i>Journal of Geophysical Research: Space Physics</i>, <b>121</b>, 764-778,
+<a href="http://dx.doi.org/doi:10.1002/2014JA020799">10.1002/2014JA020799</a>
+</li>
+</ul>
+
+<!--==================================================================-->
+<!-- Describe the bugs.                                               -->
+<!--==================================================================-->
+
+<A NAME="KnownBugs"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>KNOWN BUGS</H2>
+<P>
+none
+</P>
+
+<!--==================================================================-->
+<!-- Describe Future Plans.                                           -->
+<!--==================================================================-->
+
+<A NAME="FuturePlans"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>FUTURE PLANS</H2>
+<P>
+none
+</P>
+
+<!--==================================================================-->
+<!-- Legalese & Metadata                                              -->
+<!--==================================================================-->
+
+<A NAME="Legalese"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>Terms of Use</H2>
+
+<P>
+DART software - Copyright 2004 - 2013 UCAR.<br />
+This open source software is provided by UCAR, "as is",<br />
+without charge, subject to all terms of use at<br />
+<a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
+http://www.image.ucar.edu/DAReS/DART/DART_download</a>
+</P>
+
+<TABLE border=0 cellpadding=0 width=100% summary="">
+<TR><TD valign=top>Contact:       </TD><TD> Tim Hoar </TD></TR>
+<TR><TD valign=top>Revision:      </TD><TD> $Revision$ </TD></TR>
+<TR><TD valign=top>Source:        </TD><TD> $URL$ </TD></TR>
+<TR><TD valign=top>Change Date:   </TD><TD> $Date$ </TD></TR>
+<TR><TD valign=top>Change&nbsp;history:&nbsp;</TD><TD> try "svn&nbsp;log" or "svn&nbsp;diff" </TD></TR>
+</TABLE>
+
+<!--==================================================================-->
+
+</BODY>
+</HTML>

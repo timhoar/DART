@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module model_mod
 
@@ -38,7 +36,7 @@ use    utilities_mod, only : register_module, error_handler,                   &
 use     obs_kind_mod, only : paramname_length,        &
                              get_raw_obs_kind_index,  &
                              get_raw_obs_kind_name,   &
-                             KIND_GEOPOTENTIAL_HEIGHT
+                             KIND_GEOMETRIC_HEIGHT
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -82,10 +80,9 @@ public :: restart_file_to_statevector, &
           get_state_time
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'gitm/model_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 character(len=256) :: string1, string2
 logical, save :: module_initialized = .false.
@@ -396,7 +393,7 @@ endif
 ! return values have already been set, just give it a more specific error
 ! code and return here.
 
-if (obs_type == KIND_GEOPOTENTIAL_HEIGHT ) then
+if (obs_type == KIND_GEOMETRIC_HEIGHT) then
    ! ok to continue.  offsets unused in this case, but
    ! set them to something > 0 to indicate its ok.
    base_offset = 1
@@ -463,7 +460,7 @@ if(ier /= 0) then
 endif
 
 ! if we're asking about height, we have the alt arrays directly.
-if (obs_type == KIND_GEOPOTENTIAL_HEIGHT) then
+if (obs_type == KIND_GEOMETRIC_HEIGHT) then
 
    ! Interpolate to the given altitude - lat/lon doesn't matter here.
    interp_val = (1 - alt_fract) * ALT(balt(1)) + alt_fract * ALT(balt(2))
@@ -3438,8 +3435,3 @@ end subroutine sortindexlist
 end module model_mod
 !===================================================================
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

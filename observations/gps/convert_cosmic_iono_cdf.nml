@@ -1,0 +1,8 @@
+&convert_cosmic_iono_nml
+   obs_levels      = -1.0
+   obs_window      = 0.5
+   input_file      = ''
+   input_file_list = 'file_list.txt'
+   output_file     = 'obs_seq.out'
+  /
+

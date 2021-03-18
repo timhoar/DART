@@ -1,8 +1,6 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 !> interface identical to WRF da_advance_cymdh, except for reading the arg line
 !> from standard input, to be more portable since iargc() is nonstandard across
@@ -72,10 +70,9 @@ use   parse_args_mod, only : get_args_from_string
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = 'advance_time.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 integer :: ccyy, mm, dd, hh, nn, ss, dday, dh, dn, ds, gday, gsec
 integer :: nargum, i
@@ -402,8 +399,3 @@ end function formatCESMdate
 
 end program advance_time
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

@@ -1,0 +1,10 @@
+Wed May 25 10:57:22 MDT 2016
+
+If you are trying to convert radio occultation observations from the COSMIC Data Analysis 
+and Archive Center (CDAAC) http://cdaac-www.cosmic.ucar.edu/cdaac/index.html
+you should explore the observations/gps converter before trying to coerce your observations
+into an ascii file that matches the format expected by CNOFS_text_to_obs.f90. 
+
+The observations/gps converters work with ionPrf and atmPrf. It may be trivial to
+extend to other satellite/data products.
+

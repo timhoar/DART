@@ -1,10 +1,8 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
-# http://www.image.ucar.edu/DAReS/DART/DART_download
-#
-# DART $Id$
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+!# http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # Script to manage the compilation of all components for this model;
 # executes a known "perfect model" experiment using an existing
@@ -23,6 +21,7 @@
 \rm -f preprocess *.o *.mod
 \rm -f ../../../obs_def/obs_def_mod.f90
 \rm -f ../../../obs_kind/obs_kind_mod.f90
+\rm -f using_mpi_for_*
 
 set MODEL = "tiegcm"
 
@@ -61,7 +60,8 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-\rm -f *.o *.mod
+\rm -f *.o *.mod Makefile
+\rm -f input.nml.*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then
   echo "Success: All single task DART programs compiled."  
@@ -110,19 +110,11 @@ echo "build number $n is mkmf_wakeup_filter"
 csh  mkmf_wakeup_filter -mpi
 make || exit $n
 
-\rm -f *.o *.mod
+\rm -f *.o *.mod Makefile
+\rm -f input.nml.*_default
 
 echo
-echo 'time to run filter here:'
-echo ' for lsf run "bsub < runme_filter"'
-echo ' for pbs run "qsub runme_filter"'
-echo ' for lam-mpi run "lamboot" once, then "runme_filter"'
-echo ' for mpich run "mpd" once, then "runme_filter"'
+echo 'filter must be run in an MPI environment.'
 
 exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 
